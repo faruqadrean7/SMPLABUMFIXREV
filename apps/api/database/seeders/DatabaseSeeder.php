@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\PaymentProviderSetting;
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\School;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -16,6 +17,20 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // 0. Default Canonical School (Tenant)
+        School::firstOrCreate(
+            ['id' => '00000000-0000-0000-0000-000000000001'],
+            [
+                'name' => 'SMP Laboratorium Universitas Negeri Malang',
+                'npsn' => '20533807',
+                'address' => 'Jl. Simpang Bogor No. T-7, Sumbersari, Kec. Lowokwaru, Kota Malang, Jawa Timur 65145',
+                'phone' => '(0341) 551312',
+                'email' => 'smplabum@gmail.com',
+                'timezone' => 'Asia/Jakarta',
+                'is_active' => true,
+            ]
+        );
+
         // 1. Roles
         $rolesData = [
             ['code' => 'super_admin', 'name' => 'Super Administrator'],

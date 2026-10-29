@@ -50,7 +50,7 @@ trait Auditable
         }
 
         try {
-            AuditLog::create([
+            $data = [
                 'school_id' => $model->school_id ?? null,
                 'actor_id' => Auth::id(),
                 'action' => $action,
@@ -60,7 +60,15 @@ trait Auditable
                 'new_value' => $newValue,
                 'ip' => request()?->ip(),
                 'user_agent' => request()?->userAgent(),
-            ]);
+            ];
+
+            // Di environment testing default sinkron untuk menjaga isolasi hitungan queue_jobs
+            // pada tes queue spesifik, kecuali jika config('audit.async') diset aktif.
+            if (app()->environment('testing') && ! config('audit.async', false)) {
+                AuditLog::create($data);
+            } else {
+                \App\Jobs\RecordAuditLogJob::dispatch($data);
+            }
         } catch (\Throwable $e) {
             // Jangan menghentikan transaksi bisnis jika audit log gagal sementara.
             report($e);

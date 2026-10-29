@@ -6,6 +6,8 @@
   "scripts": {
     "api": "cd apps/api && php artisan serve --host=127.0.0.1 --port=8000",
     "web": "cd apps/web && npm run dev",
+    "worker": "cd apps/api && php artisan queue:work --tries=3 --timeout=90",
+    "schedule": "cd apps/api && php artisan schedule:work",
     "api:setup": "cd apps/api && composer install && (test -f .env || cp .env.example .env) && php artisan key:generate && php artisan migrate --seed",
     "web:setup": "cd apps/web && npm install && (test -f .env.local || cp .env.example .env.local)",
     "setup": "npm run api:setup && npm run web:setup"

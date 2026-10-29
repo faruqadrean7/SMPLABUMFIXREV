@@ -24,15 +24,31 @@ class RequirePermission
             return $this->errorResponse('Sesi tidak valid atau telah berakhir', 'UNAUTHENTICATED', 401);
         }
 
-        // Check if user has any of the permissions, matches allowed role codes, or is super_admin
-        $hasPermission = $user->roles()
-            ->where(function ($query) use ($permissions) {
-                $query->whereIn('code', $permissions)
-                    ->orWhereHas('permissions', function ($pq) use ($permissions) {
-                        $pq->whereIn('code', $permissions);
-                    });
-            })
-            ->exists() || $user->roles()->where('code', 'super_admin')->exists();
+        // Cache role codes & permission codes per user (TTL 5 menit untuk optimasi performa N+1)
+        $cacheKey = "user_perm_cache:{$user->id}";
+        $cachedAuth = cache()->remember($cacheKey, 300, function () use ($user) {
+            $user->loadMissing('roles.permissions');
+            $roleCodes = $user->roles->pluck('code')->all();
+            $permCodes = $user->roles->flatMap->permissions->pluck('code')->unique()->all();
+
+            return [
+                'is_super_admin' => in_array('super_admin', $roleCodes, true),
+                'role_codes' => $roleCodes,
+                'permission_codes' => $permCodes,
+            ];
+        });
+
+        if ($cachedAuth['is_super_admin']) {
+            return $next($request);
+        }
+
+        $hasPermission = false;
+        foreach ($permissions as $permission) {
+            if (in_array($permission, $cachedAuth['role_codes'], true) || in_array($permission, $cachedAuth['permission_codes'], true)) {
+                $hasPermission = true;
+                break;
+            }
+        }
 
         if (! $hasPermission) {
             return $this->errorResponse('Anda tidak memiliki izin untuk mengakses resource ini', 'FORBIDDEN', 403);

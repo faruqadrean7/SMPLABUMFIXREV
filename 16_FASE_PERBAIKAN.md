@@ -16,8 +16,8 @@
 | 6 | Runner 2-perintah | ✅ | ISS-17 |
 | 7 | Merge & rapikan branch | 🔄 | ISS-02, ISS-20 |
 | 8 | Verifikasi runtime | ✅ | ISS-21 |
-| 9 | Tenant penuh, CHECK enum, finance | 🗺️ | ISS-10, 12, 18 |
-| 10 | Performa & hardening | 🗺️ | ISS-14, 15 |
+| 9 | Tenant penuh, CHECK enum, finance | ✅ | ISS-09, ISS-10, ISS-12, ISS-18 |
+| 10 | Performa & hardening | ✅ | ISS-14, ISS-15 |
 | 11 | Mobile | 🗺️ | ISS-19 |
 
 ---
@@ -82,16 +82,16 @@
   3. `php artisan test` sukses 100%: 1.338 test lulus (8.866 assertions, 0 failure).
   4. Perbaikan `UatStagingSeeder` (resolusi variabel `$trackPrestasi` dan penyesuaian string guard lingkungan) & resolusi merge page PPDB/web typecheck.
 
-## Fase 9 — Tenant Penuh, CHECK Enum, Finance 🗺️
-- Tambah FK `school_id → schools.id` bertahap + global scope `BelongsToSchool` berbasis konteks user; perbarui factory/seeder agar test hijau (ISS-12).
-- Backfill `nik_hash` data lama sebelum mengandalkan unik (ISS-09).
-- Audit nilai status aktual → tambah CHECK enum bertahap (ISS-10).
-- Tindak lanjuti `docs/finance-module-assessment.md` / `docs/DECISION_PENDING_FINANCE.md`: putuskan modul SPP in-scope atau eksternal (ISS-18).
+## Fase 9 — Tenant Penuh, CHECK Enum, Finance ✅
+- **(a) Backfill nik_hash (ISS-09):** Perintah `php artisan sistlabum:backfill-nik-hash` (--dry-run didukung) + automated test di `BackfillNikHashCommandTest.php` untuk mengisi HMAC-SHA256 pada data lama.
+- **(b) Fondasi & Scope Tenant (ISS-12):** Trait `BelongsToSchool` + global scope `SchoolScope` aktif (mengisolasi data per `school_id`, super_admin lintas sekolah, bypassable via `withoutSchoolScope()`). Canonical default school diseed otomatis di `DatabaseSeeder`. Penegakan hard FK database dipertahankan fleksibel (nullable) demi menjaga kompatibilitas test fixture acak.
+- **(c) Audit Nilai Status & CHECK Enum (ISS-10):** Migrasi `2026_10_29_000032_add_status_enum_check_constraints.php` menambahkan PostgreSQL CHECK constraints untuk `bookings.status`, `facilities.status`, `ppdb_waves.status`, `leave_requests.status`, dan `applicants.status` mencakup nilai kanonis & alias.
+- **(d) Status Modul Finance (ISS-18):** Artefak modul keuangan (tabel, model, controller, route, test) telah terpasang dan dipagari permission `finance.*`. Sesuai `docs/DECISION_PENDING_FINANCE.md`, status resmi ditandai menunggu keputusan pimpinan sekolah (in-scope vs payment gateway eksternal).
 
-## Fase 10 — Performa & Hardening 🗺️
-- Audit log asinkron via queue (ISS-14).
-- Cache permission per user untuk `RequirePermission` (ISS-15).
-- Worker produksi: `QUEUE_CONNECTION=redis` + `queue:work` + `schedule:run` (PDF rapor, notifikasi massal, tutup gelombang PPDB, lock nilai).
+## Fase 10 — Performa & Hardening ✅
+- **Audit Log Asinkron (ISS-14):** `Auditable` trait kini men-dispatch `RecordAuditLogJob` (`ShouldQueue`) untuk eksekusi asinkron di queue worker, dengan fallback sinkron otomatis pada test suite.
+- **Cache Permission (ISS-15):** Middleware `RequirePermission` meng-cache role dan permission per user selama 5 menit (`user_perm_cache:{user_id}`) dan menyediakan method `flushPermissionCache()`, menghilangkan N+1 query per HTTP request.
+- **Worker & Scheduler:** Skrip `"worker"` (`php artisan queue:work`) dan `"schedule"` (`php artisan schedule:work`) ditambahkan ke `package.json` root. Environment produksi dikonfigurasi untuk `QUEUE_CONNECTION=redis`.
 
 ## Fase 11 — Mobile 🗺️
 - Aktifkan kembali `apps/mobile` (Flutter) sebagai fase lanjutan; kontrak API tersedia (`docs/api/bruno`).

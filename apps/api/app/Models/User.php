@@ -204,6 +204,11 @@ class User extends Authenticatable
         return $this->roles->flatMap->permissions->pluck('code')->unique()->values()->all();
     }
 
+    public function flushPermissionCache(): void
+    {
+        cache()->forget("user_perm_cache:{$this->id}");
+    }
+
     public function getProfileSummaryAttribute(): ?array
     {
         return $this->getProfileSummary();

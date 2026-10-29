@@ -65,21 +65,21 @@
 ### ISS-09 — NIK terenkripsi tak bisa dicek duplikat 🔴 — FIXED
 - **Bukti:** `students.nik_enc`/`applicants.nik_enc` cast `encrypted` (non-deterministik), tanpa unique.
 - **Dampak:** Satu orang bisa daftar PPDB berkali-kali; tak bisa deteksi NIK ganda.
-- **Perbaikan:** Kolom `nik_hash` (HMAC-SHA256) + trait `HasNikBlindIndex` + partial-unique index.
+- **Perbaikan:** Kolom `nik_hash` (HMAC-SHA256) + trait `HasNikBlindIndex` + partial-unique index + perintah backfill `php artisan sistlabum:backfill-nik-hash`.
 
-### ISS-10 — Enum berupa string bebas tanpa CHECK 🟡 — FIXED (sebagian)
+### ISS-10 — Enum berupa string bebas tanpa CHECK 🟡 — FIXED
 - **Bukti:** `status`, `gender`, `exam_type`, dll string + komentar, tanpa CHECK/enum type.
 - **Dampak:** Nilai tak valid lolos di level DB.
-- **Perbaikan:** CHECK ditambah untuk `students.gender ∈ {L,P}`; CHECK enum status lain = roadmap (butuh audit nilai aktual dulu, lihat `16 §Fase 9`).
+- **Perbaikan:** CHECK ditambahkan di migrasi `000031` & `000032` untuk `students.gender ∈ {L,P}`, `bookings.status`, `facilities.status`, `ppdb_waves.status`, `leave_requests.status`, dan `applicants.status` dengan guard driver `pgsql`.
 
 ### ISS-11 — Nilai numerik tanpa batas 🟡 — FIXED
 - **Bukti:** `grades.value decimal(5,2)` dikomentari 0–100 tapi tanpa CHECK.
 - **Perbaikan:** CHECK `value 0..100`, `questions.difficulty 1..5`, `schedules.day_of_week 1..7`.
 
-### ISS-12 — Multi-tenant hanya kosmetik 🟠 — FIXED (fondasi)
+### ISS-12 — Multi-tenant hanya kosmetik 🟠 — FIXED (fondasi + scope)
 - **Bukti:** Semua tabel punya `school_id` tapi tak ada tabel `schools`, nullable, tanpa FK, tanpa global scope.
 - **Dampak:** Isolasi antar-sekolah tidak dijamin saat ekspansi multi-sekolah.
-- **Perbaikan:** Tabel `schools` + model `School` dibuat (fondasi). Penegakan FK + global scope penuh = roadmap (`16 §Fase 8`) agar 115 test tetap hijau.
+- **Perbaikan:** Tabel `schools` + model `School` dibuat (fondasi), canonical default school diseed, trait `BelongsToSchool` + global scope `SchoolScope` aktif. Penegakan hard FK database dipertahankan bertahap untuk menjaga kompatibilitas test fixture acak.
 
 ---
 
@@ -89,14 +89,14 @@
 - **Bukti:** `Auditable::updated` memakai `getDirty()` yang tak menghormati `$hidden` → `password_hash` bisa tercatat di `audit_logs.new_value`.
 - **Perbaikan:** Trait meredaksi `$hidden` + daftar sensitif (`password_hash`, `token_hash`, `nik_enc`, `nik_hash`, `fcm_token`, dll) jadi `[REDACTED]`.
 
-### ISS-14 — Audit log ditulis sinkron 🟡 — PENDING
+### ISS-14 — Audit log ditulis sinkron 🟡 — FIXED
 - **Bukti:** Event model menulis `AuditLog::create` langsung tiap aksi.
 - **Dampak:** Beban berat pada operasi massal (import Excel, seed nilai).
-- **Tindak lanjut:** Pindahkan ke queue (roadmap `16 §Fase 10`).
+- **Perbaikan:** Dipindahkan ke queue asinkron via `RecordAuditLogJob` (`ShouldQueue`).
 
-### ISS-15 — Cek permission berpotensi lambat (N+1) 🟡 — PENDING
+### ISS-15 — Cek permission berpotensi lambat (N+1) 🟡 — FIXED
 - **Bukti:** `RequirePermission` query `whereHas` relasi permissions tiap request tanpa cache.
-- **Tindak lanjut:** Cache permission per user (roadmap).
+- **Perbaikan:** Cache permission dan roles per user selama 5 menit via `user_perm_cache:{user_id}`, dengan invalidasi `flushPermissionCache()`.
 
 ---
 
