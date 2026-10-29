@@ -50,7 +50,7 @@ class UatStagingSeeder extends Seeder
         if (! app()->environment('testing')) {
             $optIn = filter_var(env('UAT_SEED_ENABLED', false), FILTER_VALIDATE_BOOLEAN);
             if (! in_array(app()->environment(), ['staging', 'local'], true) || ! $optIn) {
-                throw new \RuntimeException('UatStagingSeeder hanya boleh dijalankan di lingkungan staging dengan opt-in UAT_SEED_ENABLED=true atau lingkungan testing.');
+                throw new \RuntimeException('UatStagingSeeder hanya boleh dijalankan di lingkungan staging/local dengan opt-in UAT_SEED_ENABLED=true atau lingkungan testing.');
             }
         }
     }
@@ -258,7 +258,7 @@ class UatStagingSeeder extends Seeder
                 ]
             );
 
-            PPDBTrack::firstOrCreate(
+            $trackPrestasi = PPDBTrack::firstOrCreate(
                 ['wave_id' => $wave1->id, 'code' => 'prestasi'],
                 [
                     'name' => 'Jalur Prestasi',

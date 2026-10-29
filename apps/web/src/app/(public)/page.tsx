@@ -21,6 +21,7 @@ import {
   RotateCw,
   ChevronRight,
   Quote,
+  Sparkles,
 } from 'lucide-react';
 import {
   FlaticonMedal,

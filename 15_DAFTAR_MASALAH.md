@@ -126,6 +126,6 @@
 - **Bukti:** Mac tanpa credential helper/`gh`/SSH key; `git push` gagal.
 - **Tindak lanjut:** User setup auth (`gh auth login` / PAT), lalu push `develop` + hapus branch.
 
-### ISS-21 — Belum terverifikasi runtime 🟠 — PENDING
-- **Bukti:** Mac belum ada PHP/Composer/PostgreSQL/Redis → migrasi & test belum dijalankan.
-- **Tindak lanjut:** `php artisan migrate:fresh --seed` lalu `php artisan test` (lihat `14 §6`).
+### ISS-21 — Belum terverifikasi runtime 🟠 — FIXED
+- **Bukti:** PostgreSQL 17 + PHP 8.5 aktif; migrasi 000029–000031 berhasil di-migrate & seed di PostgreSQL (`000031` disesuaikan memakai `tsrange` yang immutable); 1.338 test di `apps/api` lulus 100% hijau (8.866 assertions); typecheck `apps/web` lulus.
+- **Perbaikan:** `tsrange` pada constraint GiST `bookings`, koreksi `$trackPrestasi` & string guard di `UatStagingSeeder`, `DB_HOST=127.0.0.1` di `phpunit.xml`.

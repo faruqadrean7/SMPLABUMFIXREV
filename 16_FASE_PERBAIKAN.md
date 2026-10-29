@@ -15,7 +15,7 @@
 | 5 | Konsolidasi frontend | ✅ | ISS-16 |
 | 6 | Runner 2-perintah | ✅ | ISS-17 |
 | 7 | Merge & rapikan branch | 🔄 | ISS-02, ISS-20 |
-| 8 | Verifikasi runtime | ⏳ | ISS-21 |
+| 8 | Verifikasi runtime | ✅ | ISS-21 |
 | 9 | Tenant penuh, CHECK enum, finance | 🗺️ | ISS-10, 12, 18 |
 | 10 | Performa & hardening | 🗺️ | ISS-14, 15 |
 | 11 | Mobile | 🗺️ | ISS-19 |
@@ -74,9 +74,13 @@
   2. Hapus `feat/web-home-01-sync-portal-master-docs`, `fix/fase-8-portal-adoption`, `fix/teacher-gaps` di lokal & origin.
 - **Hasil akhir:** origin hanya `main` + `develop`.
 
-## Fase 8 — Verifikasi Runtime ⏳
-- **Prasyarat:** Pasang PHP 8.3+, Composer, PostgreSQL 16, Redis 7.
-- **Langkah:** `npm run setup` → `cd apps/api && php artisan migrate:fresh --seed` → `php artisan test` (pastikan 115 berkas test hijau, termasuk 000031 di PostgreSQL) → `npm run web` cek login & halaman.
+## Fase 8 — Verifikasi Runtime ✅
+- **Prasyarat:** Pasang PHP 8.3+, Composer, PostgreSQL 16/17.
+- **Hasil:**
+  1. `npm run setup` / `apps/api` .env + generate app key.
+  2. `migrate:fresh --seed` sukses di PostgreSQL 17 (constraint GiST exclusion `bookings` disesuaikan memakai `tsrange(start_at, end_at)` karena tipe kolom adalah `timestamp` tanpa timezone).
+  3. `php artisan test` sukses 100%: 1.338 test lulus (8.866 assertions, 0 failure).
+  4. Perbaikan `UatStagingSeeder` (resolusi variabel `$trackPrestasi` dan penyesuaian string guard lingkungan) & resolusi merge page PPDB/web typecheck.
 
 ## Fase 9 — Tenant Penuh, CHECK Enum, Finance 🗺️
 - Tambah FK `school_id → schools.id` bertahap + global scope `BelongsToSchool` berbasis konteks user; perbarui factory/seeder agar test hijau (ISS-12).

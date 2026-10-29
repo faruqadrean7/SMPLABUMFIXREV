@@ -35,7 +35,7 @@ return new class extends Migration
           IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'no_overlapping_approved_bookings') THEN
             ALTER TABLE bookings
               ADD CONSTRAINT no_overlapping_approved_bookings
-              EXCLUDE USING gist (facility_id WITH =, tstzrange(start_at, end_at) WITH &&)
+              EXCLUDE USING gist (facility_id WITH =, tsrange(start_at, end_at) WITH &&)
               WHERE (status = 'disetujui');
           END IF;
         END $$;
