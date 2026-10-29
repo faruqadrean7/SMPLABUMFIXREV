@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
+use App\Traits\HasNikBlindIndex;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Applicant extends Model
 {
-    use Auditable, HasFactory, HasUuids;
+    use Auditable, HasFactory, HasNikBlindIndex, HasUuids;
 
     protected $fillable = [
         'wave_id',
@@ -21,6 +22,7 @@ class Applicant extends Model
         'student_id',
         'registration_no',
         'nik_enc',
+        'nik_hash',
         'full_name',
         'birth_date',
         'status',

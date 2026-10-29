@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
+use App\Traits\HasNikBlindIndex;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Student extends Model
 {
-    use Auditable, HasFactory, HasUuids, SoftDeletes;
+    use Auditable, HasFactory, HasNikBlindIndex, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'school_id',
@@ -22,6 +23,7 @@ class Student extends Model
         'nis',
         'nisn',
         'nik_enc',
+        'nik_hash',
         'full_name',
         'gender',
         'birth_place',
