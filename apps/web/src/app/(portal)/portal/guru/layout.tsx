@@ -101,7 +101,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     },
     {
       name: 'Bank Soal & CBT',
-      href: '/guru/cbt',
+      href: '/guru/ujian',
       icon: MonitorPlay,
     },
     {
