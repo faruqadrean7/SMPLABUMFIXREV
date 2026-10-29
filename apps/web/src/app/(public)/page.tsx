@@ -97,10 +97,7 @@ export default function HomePage() {
   return (
     <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col focus:outline-none">
       {/* =========================================================================
-          1. HERO SECTION & PITA KREDENSIAL (SESUAI MOCKUP ACADEMIC BOARD)
-          ========================================================================= */}
-      {/* =========================================================================
-          1. HERO SECTION & PITA KREDENSIAL (PERSIS SESUAI MOCKUP ACADEMIC BOARD)
+          1. HERO SECTION & PITA KREDENSIAL
           ========================================================================= */}
       <section
         aria-labelledby="hero-heading"
@@ -168,92 +165,6 @@ export default function HomePage() {
                 <span>{HERO_CONTENT.ctaSecondary.label}</span>
               </Link>
             </div>
-          </div>
-
-          {/* Konten Teks Hero (Mobile & Desktop) */}
-          <div className="relative z-10 px-4 sm:px-8 lg:px-12 xl:px-16 pt-8 sm:pt-12 pb-6 lg:py-16 w-full lg:w-[54%] xl:w-[50%]">
-            <div className="max-w-xl lg:max-w-[560px] space-y-5 sm:space-y-6">
-              {/* Overline / Motto Resmi */}
-              <div className="space-y-2 sm:space-y-3">
-                <p className="text-xs sm:text-sm font-semibold text-[#4A6B82] tracking-normal">
-                  {tagline}
-                </p>
-
-                {/* Headline Utama Sesuai Mockup Mobile & Desktop */}
-                <h1
-                  id="hero-heading"
-                  className="font-pub-heading text-2xl sm:text-3xl lg:text-[44px] font-bold leading-[1.22] text-[#0A3D62] tracking-tight"
-                >
-                  Sekolah Laboratorium<br className="hidden sm:inline" />{' '}
-                  Model Riset Pembelajaran<br className="hidden sm:inline" />{' '}
-                  di Bawah Naungan P2LP UM
-                </h1>
-              </div>
-
-              {/* Blok Kredensial (Sesuai Mockup Mobile: Hanya Terakreditasi A yang tampil di mobile) */}
-              <div className="flex flex-wrap items-center gap-4 sm:gap-7 py-1 sm:py-2.5">
-                {/* Blok 1: Akreditasi A dengan Flaticon Medal Emas */}
-                <div className="flex items-center gap-3">
-                  <FlaticonMedal size={44} className="shrink-0 drop-shadow-xs" />
-                  <div>
-                    <p className="text-sm sm:text-base font-bold text-[#0A3D62] leading-tight">
-                      Terakreditasi A
-                    </p>
-                    <p className="text-xs sm:text-sm text-gray-600 font-medium mt-0.5 sm:mt-1">
-                      (Unggul)
-                    </p>
-                  </div>
-                </div>
-
-                {/* Divider Pemisah Lebih Tinggi */}
-                <div className="hidden sm:block h-10 sm:h-12 w-px bg-gray-300" aria-hidden="true" />
-
-                {/* Blok 2: Sejarah & Naungan (Hanya di Tablet & Desktop agar mobile ringkas sesuai mockup) */}
-                <div className="hidden sm:block">
-                  <p className="text-sm sm:text-base font-bold text-[#0A3D62] leading-tight">
-                    Sejak 1990
-                  </p>
-                  <p className="text-xs sm:text-sm text-gray-600 font-medium leading-snug mt-1">
-                    Bertransformasi di bawah P2LP UM sejak 2009
-                  </p>
-                </div>
-              </div>
-
-              {/* Tombol Call to Action (Side-by-side di Mobile Sesuai Mockup) */}
-              <div className="pt-1 sm:pt-2 grid grid-cols-2 gap-3 w-full sm:flex sm:w-auto sm:flex-wrap sm:gap-3.5">
-                <Link
-                  href="/ppdb"
-                  className="bg-[#C89332] hover:bg-[#B57C23] text-white font-bold text-xs sm:text-base py-2.5 sm:py-3 px-3 sm:px-6 rounded-lg shadow-xs hover:shadow transition-all inline-flex items-center justify-center gap-1.5 sm:gap-2 focus:outline-none focus:ring-2 focus:ring-[#C89332] focus:ring-offset-2"
-                >
-                  <span>PPDB Online</span>
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" aria-hidden="true" />
-                </Link>
-                <Link
-                  href="/profil"
-                  className="bg-white hover:bg-gray-50 text-[#0A3D62] border border-[#0A3D62]/40 hover:border-[#0A3D62] font-semibold text-xs sm:text-base py-2.5 sm:py-3 px-3 sm:px-6 rounded-lg shadow-xs transition-colors inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-pub-gold focus:ring-offset-2"
-                >
-                  <span>Kenali Sekolah Kami</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Mobile / Tablet Image: DILUAR padding container teks! Membentang 100% selebar layar tanpa celah samping! */}
-          <div className="lg:hidden relative aspect-[4/3] sm:aspect-[16/9] w-full overflow-hidden bg-slate-100">
-            <Image
-              src="/images/hero-academic.jpg"
-              alt="Siswa SMP Laboratorium UM dalam kegiatan riset pembelajaran di laboratorium"
-              fill
-              priority
-              unoptimized
-              sizes="100vw"
-              className="object-cover object-[58%_30%]"
-            />
-            {/* Gradasi lembut di bagian atas foto menyatu dengan latar putih tombol */}
-            <div
-              className="absolute inset-x-0 top-0 h-10 sm:h-14 bg-gradient-to-b from-white via-white/40 to-transparent"
-              aria-hidden="true"
-            />
           </div>
         </div>
       </section>
