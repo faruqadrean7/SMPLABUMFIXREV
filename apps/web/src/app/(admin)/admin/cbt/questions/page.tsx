@@ -28,6 +28,8 @@ import { cbtApi } from '@/features/cbt/cbt-api';
 import { subjectsApi } from '@/features/master/subjects-api';
 import { QuestionBankItem, QuestionItem, QuestionType } from '@/types/cbt';
 import { SubjectItem } from '@/types/master';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 
 export default function QuestionBanksPage() {
   const [banks, setBanks] = useState<QuestionBankItem[]>([]);
@@ -38,6 +40,8 @@ export default function QuestionBanksPage() {
   const [isLoadingBanks, setIsLoadingBanks] = useState<boolean>(true);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
+  const [isDeletingQuestion, setIsDeletingQuestion] = useState<boolean>(false);
   const [filterType, setFilterType] = useState<string>('ALL');
 
   // Modal States
@@ -218,14 +222,25 @@ export default function QuestionBanksPage() {
     }
   };
 
-  const handleDeleteQuestion = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus butir soal ini?')) return;
+  const handleDeleteQuestion = (id: string) => {
+    setQuestionToDelete(id);
+  };
+
+  const handleConfirmDeleteQuestion = async () => {
+    if (!questionToDelete) return;
+    setIsDeletingQuestion(true);
     try {
-      await cbtApi.deleteQuestion(id);
+      await cbtApi.deleteQuestion(questionToDelete);
       setFeedbackMsg({ type: 'success', text: 'Butir soal berhasil dihapus.' });
+      toast.success('Butir soal berhasil dihapus.');
+      setQuestionToDelete(null);
       fetchQuestions(selectedBankId);
     } catch (err: any) {
-      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menghapus butir soal.' });
+      const errMsg = err?.message || 'Gagal menghapus butir soal.';
+      setFeedbackMsg({ type: 'error', text: errMsg });
+      toast.error(errMsg);
+    } finally {
+      setIsDeletingQuestion(false);
     }
   };
 
@@ -840,6 +855,19 @@ export default function QuestionBanksPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Soal */}
+      <ConfirmDialog
+        isOpen={!!questionToDelete}
+        onClose={() => setQuestionToDelete(null)}
+        onConfirm={handleConfirmDeleteQuestion}
+        title="Hapus Butir Soal"
+        description="Apakah Anda yakin ingin menghapus butir soal ini dari bank soal?"
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isDeletingQuestion}
+      />
     </div>
   );
 }

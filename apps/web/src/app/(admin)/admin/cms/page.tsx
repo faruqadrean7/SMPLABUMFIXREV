@@ -36,6 +36,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FileUpload } from '@/components/ui/file-upload';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { cmsApi } from '@/features/cms/cms-api';
 import {
   SiteProfile,
@@ -61,6 +62,20 @@ export default function CmsAdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    itemLabel?: string;
+    onConfirm: () => Promise<void>;
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: async () => {},
+    isLoading: false,
+  });
 
   // =========================================================================
   // TAB 1: SITE PROFILE STATE (ADM-CMS-01)
@@ -440,15 +455,22 @@ export default function CmsAdminPage() {
     }
   };
 
-  const handleDeletePost = async (id: string, title: string) => {
-    if (!window.confirm(`Yakin ingin menghapus berita "${title}"?`)) return;
-    try {
-      await cmsApi.deletePost(id);
-      setSuccessMessage('Berita berhasil dihapus.');
-      fetchData();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Gagal menghapus berita.');
-    }
+  const handleDeletePost = (id: string, title: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Berita',
+      description: 'Apakah Anda yakin ingin menghapus berita ini? Tindakan ini tidak dapat dibatalkan.',
+      itemLabel: title,
+      onConfirm: async () => {
+        try {
+          await cmsApi.deletePost(id);
+          setSuccessMessage('Berita berhasil dihapus.');
+          fetchData();
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Gagal menghapus berita.');
+        }
+      },
+    });
   };
 
   // =========================================================================
@@ -477,15 +499,22 @@ export default function CmsAdminPage() {
     }
   };
 
-  const handleDeleteEvent = async (id: string, title: string) => {
-    if (!window.confirm(`Yakin ingin menghapus agenda "${title}"?`)) return;
-    try {
-      await cmsApi.deleteEvent(id);
-      setSuccessMessage('Agenda berhasil dihapus.');
-      fetchData();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Gagal menghapus agenda.');
-    }
+  const handleDeleteEvent = (id: string, title: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Agenda',
+      description: 'Apakah Anda yakin ingin menghapus agenda kegiatan ini?',
+      itemLabel: title,
+      onConfirm: async () => {
+        try {
+          await cmsApi.deleteEvent(id);
+          setSuccessMessage('Agenda berhasil dihapus.');
+          fetchData();
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Gagal menghapus agenda.');
+        }
+      },
+    });
   };
 
   // =========================================================================
@@ -513,15 +542,22 @@ export default function CmsAdminPage() {
     }
   };
 
-  const handleDeleteDownload = async (id: string, title: string) => {
-    if (!window.confirm(`Yakin ingin menghapus unduhan "${title}"?`)) return;
-    try {
-      await cmsApi.deleteDownload(id);
-      setSuccessMessage('Dokumen unduhan berhasil dihapus.');
-      fetchData();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Gagal menghapus dokumen.');
-    }
+  const handleDeleteDownload = (id: string, title: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Dokumen Unduhan',
+      description: 'Apakah Anda yakin ingin menghapus dokumen unduhan ini?',
+      itemLabel: title,
+      onConfirm: async () => {
+        try {
+          await cmsApi.deleteDownload(id);
+          setSuccessMessage('Dokumen unduhan berhasil dihapus.');
+          fetchData();
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Gagal menghapus dokumen.');
+        }
+      },
+    });
   };
 
   // =========================================================================
@@ -544,15 +580,22 @@ export default function CmsAdminPage() {
     }
   };
 
-  const handleDeleteAlbum = async (id: string, title: string) => {
-    if (!window.confirm(`Yakin ingin menghapus album "${title}"?`)) return;
-    try {
-      await cmsApi.deleteAlbum(id);
-      setSuccessMessage('Album berhasil dihapus.');
-      fetchData();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Gagal menghapus album.');
-    }
+  const handleDeleteAlbum = (id: string, title: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Album',
+      description: 'Apakah Anda yakin ingin menghapus album ini beserta seluruh media di dalamnya?',
+      itemLabel: title,
+      onConfirm: async () => {
+        try {
+          await cmsApi.deleteAlbum(id);
+          setSuccessMessage('Album berhasil dihapus.');
+          fetchData();
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Gagal menghapus album.');
+        }
+      },
+    });
   };
 
   // =========================================================================
@@ -622,21 +665,27 @@ export default function CmsAdminPage() {
     }
   };
 
-  const handleDeleteMediaItem = async (mediaId: string, caption?: string | null) => {
+  const handleDeleteMediaItem = (mediaId: string, caption?: string | null) => {
     const label = caption ? `"${caption}"` : 'foto ini';
-    if (!window.confirm(`Yakin ingin menghapus ${label} dari album?`)) return;
-
-    try {
-      await cmsApi.deleteMediaItem(mediaId);
-      setSuccessMessage('Foto berhasil dihapus dari album.');
-      if (selectedAlbum) {
-        await fetchAlbumDetail(selectedAlbum.id);
-        fetchData();
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menghapus foto dari album.';
-      setError(msg);
-    }
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Foto dari Album',
+      description: `Apakah Anda yakin ingin menghapus ${label} dari album?`,
+      itemLabel: label,
+      onConfirm: async () => {
+        try {
+          await cmsApi.deleteMediaItem(mediaId);
+          setSuccessMessage('Foto berhasil dihapus dari album.');
+          if (selectedAlbum) {
+            await fetchAlbumDetail(selectedAlbum.id);
+            fetchData();
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Gagal menghapus foto dari album.';
+          setError(msg);
+        }
+      },
+    });
   };
 
   return (
@@ -2064,6 +2113,28 @@ export default function CmsAdminPage() {
           )}
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus CMS */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={async () => {
+          setDeleteConfirm((prev) => ({ ...prev, isLoading: true }));
+          try {
+            await deleteConfirm.onConfirm();
+            setDeleteConfirm((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+          } catch {
+            setDeleteConfirm((prev) => ({ ...prev, isLoading: false }));
+          }
+        }}
+        title={deleteConfirm.title}
+        description={deleteConfirm.description}
+        affectedItemName={deleteConfirm.itemLabel}
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={deleteConfirm.isLoading}
+      />
     </div>
   );
 }

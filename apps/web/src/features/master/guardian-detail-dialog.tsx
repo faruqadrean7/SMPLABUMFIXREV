@@ -8,6 +8,7 @@ import { studentsApi } from '@/features/master/students-api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import {
   X,
   Users,
@@ -41,6 +42,7 @@ export function GuardianDetailDialog({
   const [relationship, setRelationship] = useState<'ayah' | 'ibu' | 'wali'>('wali');
   const [isPrimary, setIsPrimary] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [studentToDetach, setStudentToDetach] = useState<{ id: string; name: string } | null>(null);
 
   // Ambil detail lengkap wali terkini (termasuk relasi siswa & kelas)
   const { data: detailedGuardian, refetch } = useQuery({
@@ -346,13 +348,7 @@ export function GuardianDetailDialog({
                         size="sm"
                         disabled={detachMutation.isPending}
                         onClick={() => {
-                          if (
-                            window.confirm(
-                              `Putuskan hubungan perwalian dengan siswa "${st.full_name}"?`
-                            )
-                          ) {
-                            detachMutation.mutate(st.id);
-                          }
+                          setStudentToDetach({ id: st.id, name: st.full_name });
                         }}
                         className="h-7 w-7 p-0 text-slate-400 hover:text-status-danger"
                         title="Putuskan Hubungan"
@@ -378,6 +374,24 @@ export function GuardianDetailDialog({
           </Button>
         </div>
       </div>
+
+      {/* Dialog Konfirmasi Putuskan Hubungan Perwalian */}
+      <ConfirmDialog
+        isOpen={!!studentToDetach}
+        onClose={() => setStudentToDetach(null)}
+        onConfirm={async () => {
+          if (!studentToDetach) return;
+          detachMutation.mutate(studentToDetach.id);
+          setStudentToDetach(null);
+        }}
+        title="Putuskan Hubungan Perwalian"
+        description="Apakah Anda yakin ingin memutuskan hubungan perwalian dengan siswa ini?"
+        affectedItemName={studentToDetach?.name}
+        confirmLabel="Ya, Putuskan"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={detachMutation.isPending}
+      />
     </div>
   );
 }

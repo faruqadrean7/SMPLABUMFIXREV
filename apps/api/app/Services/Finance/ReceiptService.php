@@ -17,7 +17,7 @@ class ReceiptService
             return 'Nol Rupiah';
         }
 
-        return trim(preg_replace('/\s+/', ' ', $this->convertNumberToWords($nominal))) . ' Rupiah';
+        return trim(preg_replace('/\s+/', ' ', $this->convertNumberToWords($nominal))).' Rupiah';
     }
 
     protected function convertNumberToWords(int $nominal): string
@@ -28,29 +28,29 @@ class ReceiptService
 
         $angka = [
             '', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima',
-            'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'
+            'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas',
         ];
 
         if ($nominal < 12) {
-            return ' ' . $angka[$nominal];
+            return ' '.$angka[$nominal];
         } elseif ($nominal < 20) {
-            return $this->convertNumberToWords($nominal - 10) . ' Belas';
+            return $this->convertNumberToWords($nominal - 10).' Belas';
         } elseif ($nominal < 100) {
-            return $this->convertNumberToWords((int) ($nominal / 10)) . ' Puluh' . $this->convertNumberToWords($nominal % 10);
+            return $this->convertNumberToWords((int) ($nominal / 10)).' Puluh'.$this->convertNumberToWords($nominal % 10);
         } elseif ($nominal < 200) {
-            return ' Seratus' . $this->convertNumberToWords($nominal - 100);
+            return ' Seratus'.$this->convertNumberToWords($nominal - 100);
         } elseif ($nominal < 1000) {
-            return $this->convertNumberToWords((int) ($nominal / 100)) . ' Ratus' . $this->convertNumberToWords($nominal % 100);
+            return $this->convertNumberToWords((int) ($nominal / 100)).' Ratus'.$this->convertNumberToWords($nominal % 100);
         } elseif ($nominal < 2000) {
-            return ' Seribu' . $this->convertNumberToWords($nominal - 1000);
+            return ' Seribu'.$this->convertNumberToWords($nominal - 1000);
         } elseif ($nominal < 1000000) {
-            return $this->convertNumberToWords((int) ($nominal / 1000)) . ' Ribu' . $this->convertNumberToWords($nominal % 1000);
+            return $this->convertNumberToWords((int) ($nominal / 1000)).' Ribu'.$this->convertNumberToWords($nominal % 1000);
         } elseif ($nominal < 1000000000) {
-            return $this->convertNumberToWords((int) ($nominal / 1000000)) . ' Juta' . $this->convertNumberToWords($nominal % 1000000);
+            return $this->convertNumberToWords((int) ($nominal / 1000000)).' Juta'.$this->convertNumberToWords($nominal % 1000000);
         } elseif ($nominal < 1000000000000) {
-            return $this->convertNumberToWords((int) ($nominal / 1000000000)) . ' Miliar' . $this->convertNumberToWords($nominal % 1000000000);
+            return $this->convertNumberToWords((int) ($nominal / 1000000000)).' Miliar'.$this->convertNumberToWords($nominal % 1000000000);
         } else {
-            return $this->convertNumberToWords((int) ($nominal / 1000000000000)) . ' Triliun' . $this->convertNumberToWords($nominal % 1000000000000);
+            return $this->convertNumberToWords((int) ($nominal / 1000000000000)).' Triliun'.$this->convertNumberToWords($nominal % 1000000000000);
         }
     }
 
@@ -66,7 +66,7 @@ class ReceiptService
 
         // Cari nomor kuitansi terakhir di bulan dan tahun yang sama
         $lastReceipt = DB::table('payments')
-            ->where('receipt_number', 'like', $prefix . '%')
+            ->where('receipt_number', 'like', $prefix.'%')
             ->orderBy('receipt_number', 'desc')
             ->value('receipt_number');
 
@@ -78,7 +78,7 @@ class ReceiptService
             $nextSequence = '0001';
         }
 
-        return $prefix . $nextSequence;
+        return $prefix.$nextSequence;
     }
 
     /**

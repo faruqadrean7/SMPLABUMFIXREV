@@ -29,7 +29,7 @@ class FeeTypeController extends Controller
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('code', 'ilike', "%{$search}%");
+                    ->orWhere('code', 'ilike', "%{$search}%");
             });
         }
 
@@ -68,6 +68,7 @@ class FeeTypeController extends Controller
     public function show(string $id): JsonResponse
     {
         $feeType = FeeType::findOrFail($id);
+
         return $this->successResponse($feeType);
     }
 
@@ -76,7 +77,7 @@ class FeeTypeController extends Controller
         $feeType = FeeType::findOrFail($id);
 
         $validated = $request->validate([
-            'code' => ['sometimes', 'string', 'max:50', 'unique:fee_types,code,' . $feeType->id],
+            'code' => ['sometimes', 'string', 'max:50', 'unique:fee_types,code,'.$feeType->id],
             'name' => ['sometimes', 'string', 'max:150'],
             'category' => ['sometimes', 'in:spp,gedung,seragam,kegiatan,lainnya'],
             'default_amount' => ['sometimes', 'integer', 'min:0'],

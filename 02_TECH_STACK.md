@@ -5,11 +5,11 @@ Keputusan di bawah **mengikat** untuk AI agent dan developer. Mengubahnya harus 
 ## 1. Ringkasan Stack
 | Lapisan | Pilihan | Alasan |
 |---|---|---|
-| Backend API | **NestJS (TypeScript)** | Modular, cocok domain besar, validasi & OpenAPI bawaan |
+| Backend API | **Laravel 11 (PHP 8.2)** *(Implementasi Aktual)* / NestJS *(Desain Awal)* | Ekosistem matang, Eloquent ORM, Sanctum, modular, validasi ketat & OpenAPI |
 | Database | **PostgreSQL 16** | Relasional kuat, JSONB, full-text search |
-| ORM | **Prisma** | Migrasi jelas, tipe aman |
-| Cache/Queue | **Redis 7 + BullMQ** | Sesi CBT, antrean PDF/notifikasi |
-| Realtime | **WebSocket (Socket.IO)** untuk monitor CBT, fallback SSE | Live monitor |
+| ORM | **Eloquent ORM** (Laravel) / Prisma (NestJS) | Relasi kaya, migrasi terstruktur, model scoped |
+| Cache/Queue | **Redis 7 + Laravel Queue / BullMQ** | Sesi CBT, antrean PDF/notifikasi |
+| Realtime | **WebSocket (Socket.IO/Reverb)** untuk monitor CBT, fallback SSE | Live monitor |
 | Storage | **S3-compatible (MinIO/Cloudflare R2)** | Berkas, materi, foto |
 | Website publik + PPDB | **Next.js 14+ (App Router, SSR/ISR)** | SEO, cepat |
 | Sistem Admin | **Next.js (App Router, CSR dominan)** atau Vite + React | Dashboard kaya interaksi |
@@ -21,16 +21,16 @@ Keputusan di bawah **mengikat** untuk AI agent dan developer. Mengubahnya harus 
 | HTTP mobile | **Retrofit + OkHttp** + Interceptor token | Refresh token otomatis |
 | Push | **Firebase Cloud Messaging** | Standar |
 | WhatsApp/Email | Provider via **adapter interface** | Mudah ganti vendor |
-| PDF | **Playwright/Puppeteer (HTML→PDF)** di worker | Layout rapor fleksibel |
-| QR | `qrcode` lib; verifikasi via URL bertanda tangan | Tanda tangan e-progress report |
-| Excel | `exceljs` | Import/export |
-| Testing | Jest + Supertest (BE), Vitest + Playwright (Web), JUnit + Compose Test (Mobile) | |
+| PDF | **Playwright/Puppeteer (HTML→PDF)** di worker / Snappy PDF | Layout rapor fleksibel |
+| QR | `qrcode` lib / BaconQrCode; verifikasi via URL bertanda tangan | Tanda tangan e-progress report |
+| Excel | `exceljs` / Laravel Excel (`Maatwebsite`) | Import/export |
+| Testing | PHPUnit / Pest (BE Laravel), Vitest + Playwright (Web), JUnit + Compose Test (Mobile) | |
 | CI/CD | **GitHub Actions** | Lint, test, build, deploy |
 | Kontainer | **Docker + docker-compose** (dev), Docker/K8s atau VPS (prod) | |
 | Reverse proxy | **Nginx / Caddy** + HTTPS (Let's Encrypt) | |
-| Observability | **Pino** log, **Sentry** error, **Prometheus/Grafana** (P1), Uptime check | |
+| Observability | **Monolog/Pino** log, **Sentry** error, **Prometheus/Grafana** (P1), Uptime check | |
 
-> Alternatif backend: Laravel 11 + MySQL/PostgreSQL bila tim lebih mahir PHP. Jika dipilih, semua konvensi API/ID/dokumen tetap berlaku.
+> **Catatan Implementasi Aktual**: Repositori backend `apps/api` secara resmi diimplementasikan menggunakan **Laravel 11 (PHP 8.2)** dengan database **PostgreSQL 16**, cache **Redis 7**, dan otentikasi token **Laravel Sanctum**. Seluruh konvensi nama tabel, route URL, ID fitur, dan skema respons API tetap mengikat sesuai PRD.
 
 ## 2. Struktur Repository
 Dua pendekatan; pilih **A** (rekomendasi).
@@ -39,7 +39,7 @@ Dua pendekatan; pilih **A** (rekomendasi).
 ```
 school-portal/                  # monorepo (pnpm + turborepo / unified workspace)
 ├─ apps/
-│  ├─ api/                      # Backend REST API (Laravel / NestJS)
+│  ├─ api/                      # Backend REST API (Laravel 11 / PHP 8.2)
 │  ├─ web/                      # Next.js Web Portal Terpadu (Publik, PPDB, Admin, Guru, Siswa, Ortu)
 │  └─ mobile/                   # Android Native (Kotlin 2.x + Jetpack Compose)
 ├─ packages/
@@ -55,29 +55,31 @@ school-portal/                  # monorepo (pnpm + turborepo / unified workspace
 ### B. Repo terpisah penuh (api, web, admin, mobile)
 Dipakai bila tim berbeda dan rilis tidak boleh saling terkait. Kontrak tetap lewat OpenAPI.
 
-## 3. Struktur Backend (NestJS)
+## 3. Struktur Backend (Laravel 11 — Implementasi Aktual)
 ```
-apps/api/src/
-├─ main.ts
-├─ app.module.ts
-├─ common/                # guards, interceptors, filters, decorators, pipes, utils
-├─ config/                # env schema (zod), konfigurasi
-├─ infra/                 # prisma, redis, storage, queue, mailer, whatsapp, fcm
-└─ modules/
-   ├─ auth/ users/ roles/ audit/
-   ├─ master/ cms/ ppdb/ guest/
-   ├─ academic/ cbt/ student-affairs/ counseling/
-   ├─ facility/ library/ public-relations/
-   ├─ notification/ report/ file/
-   └─ <modul>/
-       ├─ <modul>.controller.ts
-       ├─ <modul>.service.ts
-       ├─ <modul>.repository.ts
-       ├─ dto/            # request/response + validasi
-       ├─ policies/       # aturan akses (permission)
-       └─ tests/
+apps/api/
+├─ app/
+│  ├─ Http/
+│  │  ├─ Controllers/Api/V1/    # Controller API per modul domain (Auth, Master, Academic, Cbt, Teacher, dsb)
+│  │  ├─ Middleware/            # RequirePermission, BypassThrottle, ForceJsonResponse
+│  │  └─ Requests/              # FormRequest validasi ketat
+│  ├─ Models/                   # Model Eloquent (User, Student, Teacher, Exam, Invoice, dsb)
+│  ├─ Services/                 # Logika bisnis terisolasi (AuthService, PostService, dsb)
+│  └─ Traits/                   # ApiResponse standar ({data, meta} / {error})
+├─ routes/
+│  ├─ api.php                   # Loader utama modular prefix v1
+│  └─ api/                      # 15 berkas rute modular (auth, portal, master, academic, cbt, dsb)
+├─ database/
+│  ├─ migrations/               # Skema tabel PostgreSQL
+│  ├─ seeders/                  # Seeder RBAC & simulasi sistem
+│  └─ factories/                # Model factories untuk testing
+└─ tests/
+   ├─ Feature/                  # Pengujian fungsional, RBAC, dan adversarial security
+   └─ Unit/                     # Pengujian unit logika bisnis
 ```
-Aturan: controller tipis, logika di service, akses data di repository, tidak ada query langsung di controller.
+*Aturan*: Controller tipis, validasi di FormRequest / DTO, akses data melalui Eloquent Model / Repository, tidak ada query raw tanpa parameter binding.
+
+*(Catatan Arsitektur: Pola modular NestJS tetap dapat diadaptasi jika tim bermigrasi ke TypeScript backend).*
 
 ## 4. Struktur Frontend (web & admin)
 ```
@@ -148,11 +150,12 @@ Setiap keputusan teknis penting dicatat di `docs/adr/NNNN-judul.md` dengan forma
 
 | ADR | Keputusan | Status |
 |---|---|---|
-| 0001 | Backend NestJS + PostgreSQL | Diterima |
+| 0001 | Backend Laravel 11 (PHP 8.2) + PostgreSQL 16 (menggantikan draf awal NestJS) | Diterima |
 | 0002 | API REST + OpenAPI sebagai kontrak | Diterima |
 | 0003 | Monorepo web/admin/api, mobile terpisah | Diterima |
 | 0004 | CBT memakai Redis untuk jawaban sementara | Diterima |
 | 0005 | PDF dibuat di worker (queue) | Diterima |
 
 ## Changelog
+- 1.1 (2026-10-27): Sinkronisasi stack backend resmi ke Laravel 11 (PHP 8.2) + PostgreSQL 16 + Redis 7 sesuai implementasi aktual repositori `apps/api` (Fase 5 GOV-01).
 - 1.0: Draf awal.

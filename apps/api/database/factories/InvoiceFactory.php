@@ -22,10 +22,10 @@ class InvoiceFactory extends Factory
 
         return [
             'id' => (string) Str::uuid(),
-            'invoice_number' => 'INV/' . $year . '/' . $month . '/' . strtoupper(fake()->unique()->bothify('####??')),
+            'invoice_number' => 'INV/'.$year.'/'.$month.'/'.strtoupper(fake()->unique()->bothify('####??')),
             'student_id' => Student::factory(),
             'academic_year_id' => null,
-            'period' => $year . '-' . $month,
+            'period' => $year.'-'.$month,
             'due_date' => now()->addDays(14)->toDateString(),
             'total_amount' => $amount,
             'paid_amount' => 0,

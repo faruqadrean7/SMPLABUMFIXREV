@@ -28,6 +28,8 @@ import { ErrorState } from '@/components/shared/error-state';
 import { financeApi, formatRupiah } from '@/features/finance/finance-api';
 import { classesApi } from '@/features/master/classes-api';
 import { SchoolClassItem } from '@/types/master';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { Payment, PaymentStatus, OfficialReceipt } from '@/types/finance';
 
 export default function PaymentsAdminPage() {
@@ -59,6 +61,10 @@ export default function PaymentsAdminPage() {
   // Proof Modal
   const [proofUrl, setProofUrl] = useState<string | null>(null);
 
+  // Verification Dialog
+  const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -86,30 +92,40 @@ export default function PaymentsAdminPage() {
     loadData();
   }, [loadData]);
 
-  const handleVerify = async (paymentId: string) => {
-    if (!window.confirm('Terima slip pembayaran ini? Status tagihan akan dihitung ulang dan kuitansi resmi diterbitkan.')) return;
+  const handleVerify = (paymentId: string) => {
+    setVerifyingPaymentId(paymentId);
+  };
+
+  const handleConfirmVerify = async () => {
+    if (!verifyingPaymentId) return;
+    setIsVerifying(true);
     try {
-      await financeApi.verifyPayment(paymentId);
+      await financeApi.verifyPayment(verifyingPaymentId);
+      toast.success('Slip pembayaran berhasil diverifikasi. Kuitansi resmi telah diterbitkan.');
+      setVerifyingPaymentId(null);
       await loadData();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal memverifikasi slip pembayaran.');
+      toast.error(err instanceof Error ? err.message : 'Gagal memverifikasi slip pembayaran.');
+    } finally {
+      setIsVerifying(false);
     }
   };
 
   const handleConfirmReject = async () => {
     if (!rejectingPayment) return;
     if (!rejectionReason.trim()) {
-      alert('Alasan penolakan wajib diisi.');
+      toast.warning('Alasan penolakan wajib diisi.');
       return;
     }
     setIsRejecting(true);
     try {
       await financeApi.rejectPayment(rejectingPayment.id, rejectionReason);
+      toast.success('Slip pembayaran telah ditolak.');
       setRejectingPayment(null);
       setRejectionReason('');
       await loadData();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal menolak slip pembayaran.');
+      toast.error(err instanceof Error ? err.message : 'Gagal menolak slip pembayaran.');
     } finally {
       setIsRejecting(false);
     }
@@ -118,17 +134,18 @@ export default function PaymentsAdminPage() {
   const handleConfirmVoid = async () => {
     if (!voidingPayment) return;
     if (!voidReason.trim()) {
-      alert('Alasan pembatalan (void) kuitansi wajib diisi.');
+      toast.warning('Alasan pembatalan (void) kuitansi wajib diisi.');
       return;
     }
     setIsVoiding(true);
     try {
       await financeApi.voidPayment(voidingPayment.id, voidReason);
+      toast.success('Kuitansi berhasil dibatalkan (void).');
       setVoidingPayment(null);
       setVoidReason('');
       await loadData();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal membatalkan kuitansi (void).');
+      toast.error(err instanceof Error ? err.message : 'Gagal membatalkan kuitansi (void).');
     } finally {
       setIsVoiding(false);
     }
@@ -140,7 +157,7 @@ export default function PaymentsAdminPage() {
       const receipt = await financeApi.getPaymentReceipt(paymentId);
       setReceiptData(receipt);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal memuat kuitansi resmi.');
+      toast.error(err instanceof Error ? err.message : 'Gagal memuat kuitansi resmi.');
     } finally {
       setIsLoadingReceipt(false);
     }
@@ -638,6 +655,19 @@ export default function PaymentsAdminPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Terima Slip Pembayaran */}
+      <ConfirmDialog
+        isOpen={!!verifyingPaymentId}
+        onClose={() => setVerifyingPaymentId(null)}
+        onConfirm={handleConfirmVerify}
+        title="Terima Slip Pembayaran"
+        description="Terima slip pembayaran ini? Status tagihan siswa akan otomatis dihitung ulang dan kuitansi resmi akan diterbitkan."
+        confirmLabel="Ya, Verifikasi"
+        cancelLabel="Batal"
+        variant="primary"
+        isLoading={isVerifying}
+      />
     </div>
   );
 }

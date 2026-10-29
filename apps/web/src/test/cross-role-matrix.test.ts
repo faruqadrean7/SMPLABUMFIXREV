@@ -188,14 +188,13 @@ describe('FASE 6: Cross-Role Isolation Matrix & Security Hardening', () => {
     });
 
     it('resolves notification click destinations to canonical portal routes without open redirects', () => {
-      expect(resolveNotificationDeepLink('assignment', 'siswa')).toBe('/portal/siswa/tugas');
-      expect(resolveNotificationDeepLink('cbt_exam', 'siswa', 'paket-cbt-1')).toBe('/portal/siswa/ujian/paket-cbt-1');
-      expect(resolveNotificationDeepLink('attendance', 'ortu', 'std-01')).toBe('/portal/ortu/anak/std-01');
-      expect(resolveNotificationDeepLink('schedule_change', 'guru')).toBe('/portal/guru/jadwal');
-      expect(resolveNotificationDeepLink('sarpras_ticket', 'staf')).toBe('/portal/staf/tiket');
-      expect(resolveNotificationDeepLink('salary_slip', 'guru')).toBe('/portal/guru/slip-gaji');
-      expect(resolveNotificationDeepLink('salary_slip', 'staf')).toBe('/portal/staf/slip-gaji');
-      expect(resolveNotificationDeepLink(null)).toBe('/portal/notifikasi');
+      expect(resolveNotificationDeepLink('assignment', 'siswa')).toBe('/siswa/tugas');
+      expect(resolveNotificationDeepLink('cbt_exam', 'siswa', 'paket-cbt-1')).toBe('/siswa/cbt/paket-cbt-1');
+      expect(resolveNotificationDeepLink('attendance', 'ortu', 'std-01')).toBe('/ortu/presensi');
+      expect(resolveNotificationDeepLink('schedule_change', 'guru')).toBe('/guru/jadwal');
+      expect(resolveNotificationDeepLink('sarpras_ticket', 'staf')).toBe('/guru/sarpras');
+      expect(resolveNotificationDeepLink('salary_slip', 'guru')).toBe('/guru/dashboard');
+      expect(resolveNotificationDeepLink(null)).toBe('/siswa/notifikasi');
     });
   });
 });

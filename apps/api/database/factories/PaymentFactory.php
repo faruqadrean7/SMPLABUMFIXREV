@@ -24,7 +24,7 @@ class PaymentFactory extends Factory
             'invoice_id' => Invoice::factory(),
             'amount' => $amount,
             'channel' => fake()->randomElement(['Bank Jatim', 'BCA', 'Mandiri', 'BSI']),
-            'external_reference' => 'TRX-' . Str::upper(Str::random(10)),
+            'external_reference' => 'TRX-'.Str::upper(Str::random(10)),
             'payment_date' => now()->toDateString(),
             'proof_file_id' => null,
             'status' => 'menunggu_verifikasi',

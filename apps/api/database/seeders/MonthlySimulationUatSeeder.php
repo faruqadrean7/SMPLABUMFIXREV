@@ -106,7 +106,7 @@ class MonthlySimulationUatSeeder extends Seeder
 
         $hashedPassword = Hash::make($password);
 
-        DB::transaction(function () use ($scale, $password, $hashedPassword) {
+        DB::transaction(function () use ($scale, $hashedPassword) {
             // Base RBAC roles & permissions
             (new DatabaseSeeder)->run();
 

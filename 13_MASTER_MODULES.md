@@ -26,7 +26,8 @@ Sistem dibagi menjadi **14 modul fungsional terpadu**. Tabel di bawah menyajikan
 | 14 | **NTF/SYS** | Notifikasi & Sistem | Menyediakan infrastruktur push notification, WhatsApp gateway, antrean job, storage berkas bertanda tangan, dan scheduler. | **P0** | AUTH | 5 | 0 | 4 | 4 | **13** |
 | **TOTAL** | | | | | | **75** | **25** | **59** | **44** | **203** |
 
-*Catatan: Pengelompokan fitur Admin SET (Pengaturan) dimasukkan ke dalam SYS (dan AUTH untuk hak akses user); ADM-DASH dikelompokkan ke RPT.*
+*Catatan 1: Pengelompokan fitur Admin SET (Pengaturan) dimasukkan ke dalam SYS (dan AUTH untuk hak akses user); ADM-DASH dikelompokkan ke RPT.*  
+*Catatan 2: Modul Keuangan (FIN) telah terbangun fondasi kodenya (5 tabel, 6 controller REST API, antarmuka Admin & Portal Siswa, serta feature test), namun operasional produksinya berstatus **Menunggu Keputusan Sekolah (Pending Decision)** sesuai ketetapan tata kelola `AGENTS.md §8` dan dirangkum dalam `docs/DECISION_PENDING_FINANCE.md`.*
 
 ---
 
@@ -194,7 +195,7 @@ Beberapa area kebijakan operasional sekolah berikut berstatus **[Menunggu Keputu
 
 | No | Topik Keputusan | Status Kebijakan | Dampak Ketergantungan Modul | Batasan Implementasi v1 |
 |:--:|:---|:---:|:---|:---|
-| 1 | **Modul Keuangan & SPP** | Menunggu Keputusan Sekolah | Memblokir integrasi gateway pembayaran tagihan | v1 hanya menampilkan string teks catatan status bebas tanggungan pada profil siswa. |
+| 1 | **Modul Keuangan & SPP (FIN)** | Menunggu Keputusan Sekolah | Memblokir aktivasi gateway pembayaran & tagihan live di produksi | Fondasi kode telah terbangun (5 tabel, API, admin UI, portal siswa); aktivasi live menunggu keputusan pimpinan sekolah sesuai `docs/DECISION_PENDING_FINANCE.md`. |
 | 2 | **Sinkronisasi Dapodik / e-Rapor Kemdikbud** | Menunggu Keputusan Sekolah | Memblokir integrasi web-service / sinkronisasi otomatis kementerian | v1 hanya menyediakan fungsionalitas impor/ekspor spreadsheet Excel terstruktur. |
 | 3 | **Pembiayaan Outing / Study Trip** | Menunggu Keputusan Sekolah | Memblokir buku kas kegiatan dan pencatatan iuran siswa | v1 hanya menyediakan kolom teks non-finansial pada lembar persetujuan orang tua. |
 | 4 | **Chat Real-time Interaktif Ortu-Guru** | Menunggu Keputusan Sekolah | Memblokir fitur socket messaging dua arah | v1 mengalihkan komunikasi langsung melalui deep-link WhatsApp resmi atau tiket permohonan konseling. |
@@ -232,4 +233,5 @@ Beberapa area kebijakan operasional sekolah berikut berstatus **[Menunggu Keputu
 ---
 
 ## Changelog
+- **1.1 (2026-10-27)**: Penyelarasan status Modul Keuangan (FIN) yang kodenya telah terbangun namun operasional produksinya menunggu keputusan resmi sekolah sesuai `AGENTS.md §8` (Fase 5 GOV-01 / `docs/DECISION_PENDING_FINANCE.md`).
 - **1.0 (2026-10-08)**: Dokumen Master Daftar Modul resmi diterbitkan. Penyelarasan 14 modul, 203 fitur terhitung riil, graf dependensi bebas siklus, dan dokumentasi pemetaan ID lama ke ID baru.

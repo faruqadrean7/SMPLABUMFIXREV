@@ -133,7 +133,15 @@ class MeFinanceController extends Controller
      */
     public function getReceipt(Request $request, string $id): JsonResponse
     {
-        $payment = Payment::findOrFail($id);
+        $payment = Payment::find($id);
+
+        if (! $payment) {
+            return $this->errorResponse(
+                'Data pembayaran tidak ditemukan.',
+                'NOT_FOUND',
+                404
+            );
+        }
 
         if (! Gate::allows('view', $payment)) {
             return $this->errorResponse(

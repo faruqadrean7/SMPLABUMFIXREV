@@ -20,6 +20,7 @@ use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\QuestionBank;
 use App\Models\ReportCard;
+use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\StaffAttendance;
 use App\Models\Student;
@@ -143,7 +144,7 @@ class MonthlySimulationSeederFeatureTest extends TestCase
         $this->app['env'] = 'production';
         config(['app.env' => 'production']);
 
-        $seeder = new MonthlySimulationUatSeeder();
+        $seeder = new MonthlySimulationUatSeeder;
         $seeder->run();
     }
 
@@ -231,8 +232,8 @@ class MonthlySimulationSeederFeatureTest extends TestCase
         $this->seed(MonthlySimulationUatSeeder::class);
 
         // 2. Buat data manual non-seeder pada tanggal di luar jendela (mis. 2026-09-01)
-        $schedule = \App\Models\Schedule::firstOrFail();
-        $teacher = \App\Models\Teacher::firstOrFail();
+        $schedule = Schedule::firstOrFail();
+        $teacher = Teacher::firstOrFail();
 
         $manualJournal = Journal::create([
             'schedule_id' => $schedule->id,

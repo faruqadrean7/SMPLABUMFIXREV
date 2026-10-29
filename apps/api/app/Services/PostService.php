@@ -384,7 +384,7 @@ class PostService
             'coverFile',
         ])->where(function ($query) use ($slugOrId) {
             $query->where('slug', $slugOrId);
-            if (\Illuminate\Support\Str::isUuid($slugOrId)) {
+            if (Str::isUuid($slugOrId)) {
                 $query->orWhere('id', $slugOrId);
             }
         })->firstOrFail();

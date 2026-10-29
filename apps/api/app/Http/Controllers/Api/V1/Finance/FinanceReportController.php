@@ -113,7 +113,7 @@ class FinanceReportController extends Controller
             return response()->streamDownload(function () use ($payments) {
                 $handle = fopen('php://output', 'w');
                 // UTF-8 BOM untuk kompatibilitas Excel
-                fputs($handle, "\xEF\xBB\xBF");
+                fwrite($handle, "\xEF\xBB\xBF");
                 fputcsv($handle, [
                     'No Kuitansi',
                     'No Invoice',

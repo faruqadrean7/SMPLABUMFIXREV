@@ -34,6 +34,8 @@ class StudentController extends Controller
             $students = $this->studentService->listStudents($request);
 
             return $this->paginatedResponse($students);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -49,6 +51,8 @@ class StudentController extends Controller
     {
         try {
             return $this->studentService->exportStudents($request);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -175,6 +179,8 @@ class StudentController extends Controller
             return $this->successResponse(['message' => 'Data siswa berhasil dihapus']);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Siswa tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 

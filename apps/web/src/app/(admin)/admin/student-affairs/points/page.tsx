@@ -28,6 +28,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { pointsApi } from '@/features/student-affairs/points-api';
 import { studentsApi } from '@/features/master/students-api';
 import { classesApi } from '@/features/master/classes-api';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import {
   PointType,
   PointThreshold,
@@ -61,6 +63,19 @@ export default function StudentPointsAdminPage() {
   const [summaryModalStudentId, setSummaryModalStudentId] = useState<string | null>(null);
   const [studentSummary, setStudentSummary] = useState<StudentPointsSummary | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState<boolean>(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => Promise<void>;
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: async () => {},
+    isLoading: false,
+  });
 
   // Form State: Catat Poin
   const [recordStudentId, setRecordStudentId] = useState<string>('');
@@ -189,15 +204,24 @@ export default function StudentPointsAdminPage() {
     }
   };
 
-  const handleDeleteType = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus jenis poin ini?')) return;
-    try {
-      await pointsApi.deletePointType(id);
-      setSuccessMessage('Jenis poin berhasil dihapus.');
-      fetchData();
-    } catch (err: any) {
-      setError(err?.message || 'Gagal menghapus jenis poin.');
-    }
+  const handleDeleteType = (id: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Jenis Poin',
+      description: 'Apakah Anda yakin ingin menghapus jenis poin ini? Riwayat poin siswa terdahulu tidak akan terpengaruh.',
+      onConfirm: async () => {
+        try {
+          await pointsApi.deletePointType(id);
+          setSuccessMessage('Jenis poin berhasil dihapus.');
+          toast.success('Jenis poin berhasil dihapus.');
+          fetchData();
+        } catch (err: any) {
+          const errMsg = err?.message || 'Gagal menghapus jenis poin.';
+          setError(errMsg);
+          toast.error(errMsg);
+        }
+      },
+    });
   };
 
   const handleCreateThresholdSubmit = async (e: React.FormEvent) => {
@@ -227,26 +251,44 @@ export default function StudentPointsAdminPage() {
     }
   };
 
-  const handleDeleteThreshold = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus aturan ambang sanksi ini?')) return;
-    try {
-      await pointsApi.deletePointThreshold(id);
-      setSuccessMessage('Ambang batas sanksi berhasil dihapus.');
-      fetchData();
-    } catch (err: any) {
-      setError(err?.message || 'Gagal menghapus ambang sanksi.');
-    }
+  const handleDeleteThreshold = (id: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Aturan Ambang Sanksi',
+      description: 'Apakah Anda yakin ingin menghapus aturan ambang batas sanksi ini?',
+      onConfirm: async () => {
+        try {
+          await pointsApi.deletePointThreshold(id);
+          setSuccessMessage('Ambang batas sanksi berhasil dihapus.');
+          toast.success('Ambang batas sanksi berhasil dihapus.');
+          fetchData();
+        } catch (err: any) {
+          const errMsg = err?.message || 'Gagal menghapus ambang sanksi.';
+          setError(errMsg);
+          toast.error(errMsg);
+        }
+      },
+    });
   };
 
-  const handleDeletePointRecord = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin membatalkan/menghapus catatan poin ini?')) return;
-    try {
-      await pointsApi.deleteStudentPoint(id);
-      setSuccessMessage('Catatan poin siswa berhasil dibatalkan.');
-      fetchData();
-    } catch (err: any) {
-      setError(err?.message || 'Gagal menghapus catatan poin.');
-    }
+  const handleDeletePointRecord = (id: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Batalkan Catatan Poin Siswa',
+      description: 'Apakah Anda yakin ingin membatalkan atau menghapus catatan poin siswa ini?',
+      onConfirm: async () => {
+        try {
+          await pointsApi.deleteStudentPoint(id);
+          setSuccessMessage('Catatan poin siswa berhasil dibatalkan.');
+          toast.success('Catatan poin siswa berhasil dibatalkan.');
+          fetchData();
+        } catch (err: any) {
+          const errMsg = err?.message || 'Gagal menghapus catatan poin.';
+          setError(errMsg);
+          toast.error(errMsg);
+        }
+      },
+    });
   };
 
   const handleOpenStudentSummary = async (studentId: string) => {
@@ -1129,6 +1171,27 @@ export default function StudentPointsAdminPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Jenis Poin / Ambang / Catatan */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={async () => {
+          setDeleteConfirm((prev) => ({ ...prev, isLoading: true }));
+          try {
+            await deleteConfirm.onConfirm();
+            setDeleteConfirm((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+          } catch {
+            setDeleteConfirm((prev) => ({ ...prev, isLoading: false }));
+          }
+        }}
+        title={deleteConfirm.title}
+        description={deleteConfirm.description}
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={deleteConfirm.isLoading}
+      />
     </div>
   );
 }

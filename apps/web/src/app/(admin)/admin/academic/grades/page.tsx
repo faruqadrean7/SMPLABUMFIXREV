@@ -43,6 +43,8 @@ import { classesApi } from '@/features/master/classes-api';
 import { subjectsApi } from '@/features/master/subjects-api';
 import { academicYearsApi } from '@/features/master/academic-years-api';
 import { GradeComponentDialog, GradePeriodLockDialog } from '@/features/academic/grades';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { ApiClientError } from '@/lib/api/errors';
 
 export default function GradebookAdminPage() {
@@ -88,6 +90,8 @@ export default function GradebookAdminPage() {
   const [isLockDialogOpen, setIsLockDialogOpen] = useState<boolean>(false);
   const [activeLockPeriod, setActiveLockPeriod] = useState<GradePeriodItem | null>(null);
   const [isPasteHelpOpen, setIsPasteHelpOpen] = useState<boolean>(false);
+  const [componentToDelete, setComponentToDelete] = useState<string | null>(null);
+  const [isDeletingComponent, setIsDeletingComponent] = useState<boolean>(false);
 
   // Initial Master Data Loading
   useEffect(() => {
@@ -350,18 +354,27 @@ export default function GradebookAdminPage() {
   };
 
   // Component deletion handler
-  const handleDeleteComponent = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus komponen penilaian ini?')) return;
+  const handleDeleteComponent = (id: string) => {
+    setComponentToDelete(id);
+  };
+
+  const handleConfirmDeleteComponent = async () => {
+    if (!componentToDelete) return;
+    setIsDeletingComponent(true);
     try {
-      await academicApi.deleteGradeComponent(id);
+      await academicApi.deleteGradeComponent(componentToDelete);
+      toast.success('Komponen penilaian berhasil dihapus.');
+      setComponentToDelete(null);
       await fetchComponents();
       await fetchMatrix();
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
-        alert(err.message);
+        toast.error(err.message);
       } else {
-        alert('Gagal menghapus komponen penilaian.');
+        toast.error('Gagal menghapus komponen penilaian.');
       }
+    } finally {
+      setIsDeletingComponent(false);
     }
   };
 
@@ -1176,6 +1189,19 @@ export default function GradebookAdminPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Komponen Penilaian */}
+      <ConfirmDialog
+        isOpen={!!componentToDelete}
+        onClose={() => setComponentToDelete(null)}
+        onConfirm={handleConfirmDeleteComponent}
+        title="Hapus Komponen Penilaian"
+        description="Apakah Anda yakin ingin menghapus komponen penilaian ini? Seluruh nilai siswa yang tersimpan pada komponen ini akan ikut terhapus."
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isDeletingComponent}
+      />
     </div>
   );
 }

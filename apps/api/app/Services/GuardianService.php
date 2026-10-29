@@ -10,6 +10,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class GuardianService
@@ -386,7 +387,7 @@ class GuardianService
                 'actor_id' => $actorId,
                 'action' => $action,
                 'entity' => $entity,
-                'entity_id' => ($entityId && \Illuminate\Support\Str::isUuid($entityId)) ? $entityId : null,
+                'entity_id' => ($entityId && Str::isUuid($entityId)) ? $entityId : null,
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
                 'ip' => $request->ip(),

@@ -32,6 +32,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { competitionsApi } from '@/features/student-affairs/competitions-api';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import {
   CompetitionItem,
   CompetitionEntryItem,
@@ -79,6 +81,20 @@ export default function CompetitionsAndAchievementsPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    affectedItemName?: string;
+    onConfirm: () => Promise<void>;
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: async () => {},
+    isLoading: false,
+  });
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -251,16 +267,25 @@ export default function CompetitionsAndAchievementsPage() {
     }
   };
 
-  const handleDeleteCompetition = async (id: string, name: string) => {
-    if (!confirm(`Hapus kompetisi "${name}" beserta data delegasinya?`)) return;
-    try {
-      await competitionsApi.deleteCompetition(id);
-      setSuccessMessage(`Kompetisi "${name}" berhasil dihapus.`);
-      fetchData();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menghapus kompetisi';
-      setError(msg);
-    }
+  const handleDeleteCompetition = (id: string, name: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Kompetisi',
+      description: 'Apakah Anda yakin ingin menghapus kompetisi ini beserta data delegasinya?',
+      affectedItemName: name,
+      onConfirm: async () => {
+        try {
+          await competitionsApi.deleteCompetition(id);
+          setSuccessMessage(`Kompetisi "${name}" berhasil dihapus.`);
+          toast.success(`Kompetisi "${name}" berhasil dihapus.`);
+          fetchData();
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Gagal menghapus kompetisi';
+          setError(msg);
+          toast.error(msg);
+        }
+      },
+    });
   };
 
   // Handlers: Delegasi
@@ -308,20 +333,28 @@ export default function CompetitionsAndAchievementsPage() {
     }
   };
 
-  const handleDeleteEntry = async (id: string) => {
-    if (!confirm('Hapus siswa dari daftar delegasi kompetisi ini?')) return;
-    try {
-      await competitionsApi.deleteEntry(id);
-      setSuccessMessage('Delegasi siswa berhasil dihapus.');
-      if (selectedCompForEntries) {
-        const res = await competitionsApi.getEntries(selectedCompForEntries.id);
-        setEntries(res.data || []);
-      }
-      fetchData();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menghapus delegasi';
-      setError(msg);
-    }
+  const handleDeleteEntry = (id: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Delegasi Siswa',
+      description: 'Apakah Anda yakin ingin menghapus siswa ini dari daftar delegasi kompetisi?',
+      onConfirm: async () => {
+        try {
+          await competitionsApi.deleteEntry(id);
+          setSuccessMessage('Delegasi siswa berhasil dihapus.');
+          toast.success('Delegasi siswa berhasil dihapus.');
+          if (selectedCompForEntries) {
+            const res = await competitionsApi.getEntries(selectedCompForEntries.id);
+            setEntries(res.data || []);
+          }
+          fetchData();
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Gagal menghapus delegasi';
+          setError(msg);
+          toast.error(msg);
+        }
+      },
+    });
   };
 
   // Handlers: Prestasi
@@ -366,16 +399,25 @@ export default function CompetitionsAndAchievementsPage() {
     }
   };
 
-  const handleDeleteAchievement = async (id: string, title: string) => {
-    if (!confirm(`Hapus data prestasi "${title}"? Poin apresiasi terkait akan disesuaikan.`)) return;
-    try {
-      await competitionsApi.deleteAchievement(id);
-      setSuccessMessage(`Prestasi "${title}" berhasil dihapus.`);
-      fetchData();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menghapus prestasi';
-      setError(msg);
-    }
+  const handleDeleteAchievement = (id: string, title: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Prestasi Siswa',
+      description: `Apakah Anda yakin ingin menghapus data prestasi "${title}"? Poin apresiasi terkait akan disesuaikan.`,
+      affectedItemName: title,
+      onConfirm: async () => {
+        try {
+          await competitionsApi.deleteAchievement(id);
+          setSuccessMessage(`Prestasi "${title}" berhasil dihapus.`);
+          toast.success(`Prestasi "${title}" berhasil dihapus.`);
+          fetchData();
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Gagal menghapus prestasi';
+          setError(msg);
+          toast.error(msg);
+        }
+      },
+    });
   };
 
   // Handlers: Verifikasi Prestasi
@@ -1704,6 +1746,28 @@ export default function CompetitionsAndAchievementsPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Lomba / Delegasi / Prestasi */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={async () => {
+          setDeleteConfirm((prev) => ({ ...prev, isLoading: true }));
+          try {
+            await deleteConfirm.onConfirm();
+            setDeleteConfirm((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+          } catch {
+            setDeleteConfirm((prev) => ({ ...prev, isLoading: false }));
+          }
+        }}
+        title={deleteConfirm.title}
+        description={deleteConfirm.description}
+        affectedItemName={deleteConfirm.affectedItemName}
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={deleteConfirm.isLoading}
+      />
     </div>
   );
 }

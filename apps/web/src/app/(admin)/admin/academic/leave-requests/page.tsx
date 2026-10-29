@@ -16,6 +16,7 @@ import {
 } from '@/types/academic';
 import { SchoolClassItem } from '@/types/master';
 import { DataTable, ColumnDef } from '@/components/shared/data-table';
+import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -148,7 +149,7 @@ export default function LeaveRequestsPage() {
         window.open(res.url, '_blank', 'noopener,noreferrer');
       }
     } catch {
-      alert('Gagal memuat tautan berkas lampiran atau berkas telah kedaluwarsa.');
+      toast.error('Gagal memuat tautan berkas lampiran atau berkas telah kedaluwarsa.');
     }
   };
 

@@ -262,6 +262,9 @@ describe('INT-04: CMS Admin Edit News Posts (ADM-CMS-02 & BE-CMS-02)', () => {
     const deleteButtons = screen.getAllByTitle(/Hapus berita/i);
     fireEvent.click(deleteButtons[1]);
 
+    const confirmBtn = screen.getByRole('button', { name: /Ya, Hapus/i });
+    fireEvent.click(confirmBtn);
+
     await waitFor(() => {
       expect(deleteSpy).toHaveBeenCalledWith('post-102');
     });

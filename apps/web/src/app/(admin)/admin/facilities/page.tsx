@@ -40,6 +40,8 @@ import {
   AvailabilityResult,
 } from '@/features/sarpras/types';
 import { useAuth } from '@/providers/auth-provider';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 
 export default function FacilitiesAndBookingsPage() {
   const { user } = useAuth();
@@ -51,6 +53,10 @@ export default function FacilitiesAndBookingsPage() {
   const [facilities, setFacilities] = useState<FacilityItem[]>([]);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [summary, setSummary] = useState<BookingSummary | null>(null);
+  const [facilityToDelete, setFacilityToDelete] = useState<FacilityItem | null>(null);
+  const [isDeletingFacility, setIsDeletingFacility] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState<string | null>(null);
+  const [isCancellingBooking, setIsCancellingBooking] = useState(false);
 
   const [isLoadingFacilities, setIsLoadingFacilities] = useState(false);
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
@@ -305,11 +311,17 @@ export default function FacilitiesAndBookingsPage() {
   // =========================================================================
   // ACTIONS: BATALKAN PEMINJAMAN
   // =========================================================================
-  const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm('Apakah Anda yakin ingin membatalkan pengajuan peminjaman ini?')) return;
+  const handleCancelBooking = (bookingId: string) => {
+    setBookingToCancel(bookingId);
+  };
 
+  const handleConfirmCancelBooking = async () => {
+    if (!bookingToCancel) return;
+    setIsCancellingBooking(true);
     try {
-      await facilitiesApi.cancelBooking(bookingId);
+      await facilitiesApi.cancelBooking(bookingToCancel);
+      toast.success('Peminjaman fasilitas berhasil dibatalkan.');
+      setBookingToCancel(null);
       fetchBookings();
       fetchSummary();
       if (isDetailModalOpen) {
@@ -317,7 +329,9 @@ export default function FacilitiesAndBookingsPage() {
         setSelectedBooking(null);
       }
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal membatalkan peminjaman.');
+      toast.error(err instanceof Error ? err.message : 'Gagal membatalkan peminjaman.');
+    } finally {
+      setIsCancellingBooking(false);
     }
   };
 
@@ -392,14 +406,23 @@ export default function FacilitiesAndBookingsPage() {
     }
   };
 
-  const handleDeleteFacility = async (fac: FacilityItem) => {
-    if (!confirm(`Hapus fasilitas "${fac.name}"? Data yang memiliki riwayat booking aktif tidak dapat dihapus.`)) return;
+  const handleDeleteFacility = (fac: FacilityItem) => {
+    setFacilityToDelete(fac);
+  };
+
+  const handleConfirmDeleteFacility = async () => {
+    if (!facilityToDelete) return;
+    setIsDeletingFacility(true);
     try {
-      await facilitiesApi.deleteFacility(fac.id);
+      await facilitiesApi.deleteFacility(facilityToDelete.id);
+      toast.success(`Fasilitas "${facilityToDelete.name}" berhasil dihapus.`);
+      setFacilityToDelete(null);
       fetchFacilities();
       fetchSummary();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal menghapus fasilitas.');
+      toast.error(err instanceof Error ? err.message : 'Gagal menghapus fasilitas.');
+    } finally {
+      setIsDeletingFacility(false);
     }
   };
 
@@ -1509,6 +1532,33 @@ export default function FacilitiesAndBookingsPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Fasilitas */}
+      <ConfirmDialog
+        isOpen={!!facilityToDelete}
+        onClose={() => setFacilityToDelete(null)}
+        onConfirm={handleConfirmDeleteFacility}
+        title="Hapus Fasilitas"
+        description="Apakah Anda yakin ingin menghapus data fasilitas ini? Fasilitas yang memiliki riwayat booking aktif tidak dapat dihapus."
+        affectedItemName={facilityToDelete?.name}
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isDeletingFacility}
+      />
+
+      {/* Dialog Konfirmasi Batalkan Peminjaman */}
+      <ConfirmDialog
+        isOpen={!!bookingToCancel}
+        onClose={() => setBookingToCancel(null)}
+        onConfirm={handleConfirmCancelBooking}
+        title="Batalkan Peminjaman Fasilitas"
+        description="Apakah Anda yakin ingin membatalkan pengajuan peminjaman fasilitas ini?"
+        confirmLabel="Ya, Batalkan"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isCancellingBooking}
+      />
     </div>
   );
 }

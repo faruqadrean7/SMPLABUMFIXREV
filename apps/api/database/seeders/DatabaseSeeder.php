@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\PaymentProviderSetting;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -381,7 +382,7 @@ class DatabaseSeeder extends Seeder
         }
 
         // 4. Default Payment Provider Setting
-        \App\Models\PaymentProviderSetting::firstOrCreate(
+        PaymentProviderSetting::firstOrCreate(
             ['name' => 'Bank Jatim Virtual Account'],
             [
                 'instructions' => "1. Buka aplikasi m-Banking Bank Jatim atau ATM terdekat.\n2. Pilih menu Transfer / Pembayaran > Virtual Account.\n3. Masukkan nomor Virtual Account (VA) yang tertera pada faktur tagihan ananda.\n4. Periksa kecocokan nama siswa dan nominal tagihan.\n5. Selesaikan transaksi dan simpan struk / bukti transfer.\n6. Unggah foto slip pembayaran dan masukkan nomor referensi transaksi.",

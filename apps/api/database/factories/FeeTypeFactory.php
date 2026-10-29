@@ -21,7 +21,7 @@ class FeeTypeFactory extends Factory
         return [
             'id' => (string) Str::uuid(),
             'code' => strtoupper(fake()->unique()->bothify('FEE-###??')),
-            'name' => 'Biaya ' . fake()->words(2, true),
+            'name' => 'Biaya '.fake()->words(2, true),
             'category' => $category,
             'default_amount' => fake()->randomElement([250000, 350000, 500000, 1000000, 1500000]),
             'is_recurring' => $category === 'spp',

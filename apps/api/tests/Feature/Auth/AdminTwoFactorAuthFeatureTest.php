@@ -2,12 +2,13 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Models\AuditLog;
+use App\Http\Controllers\Api\V1\AdminAuthController;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\TwoFactorAuthService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
@@ -46,7 +47,7 @@ class AdminTwoFactorAuthFeatureTest extends TestCase
     {
         parent::setUp();
 
-        \Illuminate\Support\Facades\Cache::flush();
+        Cache::flush();
 
         $this->twoFactorService = app(TwoFactorAuthService::class);
 
@@ -426,11 +427,11 @@ class AdminTwoFactorAuthFeatureTest extends TestCase
      */
     public function test_batch5b_mandatory_2fa_for_all_admin_shell_roles(): void
     {
-        $adminRoles = \App\Http\Controllers\Api\V1\AdminAuthController::ADMIN_ROLES;
+        $adminRoles = AdminAuthController::ADMIN_ROLES;
 
         foreach ($adminRoles as $roleCode) {
-            \Illuminate\Support\Facades\RateLimiter::clear('admin_login_attempts:'.sha1(strtolower("user_{$roleCode}").'|127.0.0.1'));
-            \Illuminate\Support\Facades\RateLimiter::clear('admin_login_ip_attempts:127.0.0.1');
+            RateLimiter::clear('admin_login_attempts:'.sha1(strtolower("user_{$roleCode}").'|127.0.0.1'));
+            RateLimiter::clear('admin_login_ip_attempts:127.0.0.1');
 
             $role = Role::firstOrCreate(['code' => $roleCode], ['name' => ucfirst($roleCode), 'is_system' => true]);
             $user = User::create([

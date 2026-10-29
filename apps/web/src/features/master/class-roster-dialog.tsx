@@ -8,6 +8,7 @@ import { studentsApi } from '@/features/master/students-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import {
   X,
   Users,
@@ -36,6 +37,7 @@ export function ClassRosterDialog({ isOpen, onClose, selectedClass }: ClassRoste
   const [searchCandidate, setSearchCandidate] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [addError, setAddError] = useState<string | null>(null);
+  const [studentToRemove, setStudentToRemove] = useState<{ id: string; name: string } | null>(null);
 
   // 1. Query Anggota Kelas Eksisting
   const {
@@ -291,11 +293,7 @@ export function ClassRosterDialog({ isOpen, onClose, selectedClass }: ClassRoste
                       title="Keluarkan siswa dari rombel"
                       disabled={removeMutation.isPending}
                       onClick={() => {
-                        if (
-                          confirm(`Keluarkan ${st.full_name} dari rombel ${selectedClass.name}?`)
-                        ) {
-                          removeMutation.mutate(st.id);
-                        }
+                        setStudentToRemove({ id: st.id, name: st.full_name });
                       }}
                     >
                       <UserMinus className="h-3.5 w-3.5" />
@@ -450,6 +448,24 @@ export function ClassRosterDialog({ isOpen, onClose, selectedClass }: ClassRoste
           </Button>
         </div>
       </div>
+
+      {/* Dialog Konfirmasi Keluarkan Siswa dari Rombel */}
+      <ConfirmDialog
+        isOpen={!!studentToRemove}
+        onClose={() => setStudentToRemove(null)}
+        onConfirm={async () => {
+          if (!studentToRemove) return;
+          removeMutation.mutate(studentToRemove.id);
+          setStudentToRemove(null);
+        }}
+        title="Keluarkan Siswa dari Rombel"
+        description={`Apakah Anda yakin ingin mengeluarkan siswa dari rombel ${selectedClass?.name}?`}
+        affectedItemName={studentToRemove?.name}
+        confirmLabel="Ya, Keluarkan"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={removeMutation.isPending}
+      />
     </div>
   );
 }

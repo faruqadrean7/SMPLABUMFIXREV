@@ -47,6 +47,8 @@ import {
   AlumniItem,
 } from '@/features/public-relations/types';
 import { useAuth } from '@/providers/auth-provider';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 
 export default function PublicRelationsAdminPage() {
   const { user } = useAuth();
@@ -58,6 +60,22 @@ export default function PublicRelationsAdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [prConfirm, setPrConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    affectedItemName?: string;
+    confirmLabel?: string;
+    variant?: 'danger' | 'primary' | 'warning';
+    onConfirm: () => Promise<void>;
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: async () => {},
+    isLoading: false,
+  });
 
   // =========================================================================
   // TAB 1: GUESTS STATE
@@ -214,7 +232,7 @@ export default function PublicRelationsAdminPage() {
   const handleRegisterGuestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestForm.full_name || !guestForm.phone || !guestForm.purpose) {
-      alert('Nama lengkap, nomor telepon, dan keperluan wajib diisi.');
+      toast.warning('Nama lengkap, nomor telepon, dan keperluan wajib diisi.');
       return;
     }
 
@@ -222,26 +240,36 @@ export default function PublicRelationsAdminPage() {
       setIsSubmittingGuest(true);
       await publicRelationsApi.registerGuestPublic(guestForm);
       setSuccessMessage(`Kunjungan tamu ${guestForm.full_name} berhasil didaftarkan.`);
+      toast.success(`Kunjungan tamu ${guestForm.full_name} berhasil didaftarkan.`);
       setIsRegisterGuestModalOpen(false);
       setGuestForm({ full_name: '', institution: '', phone: '', purpose: '' });
       fetchGuests();
     } catch (err: any) {
-      alert(err?.response?.data?.error?.message || err?.message || 'Gagal mendaftarkan tamu');
+      toast.error(err?.response?.data?.error?.message || err?.message || 'Gagal mendaftarkan tamu');
     } finally {
       setIsSubmittingGuest(false);
     }
   };
 
-  const handleCheckoutGuest = async (guest: GuestItem) => {
-    if (!confirm(`Konfirmasi checkout untuk tamu: ${guest.full_name}?`)) return;
-
-    try {
-      await publicRelationsApi.checkoutGuest(guest.id);
-      setSuccessMessage(`Tamu ${guest.full_name} berhasil dicatat checkout.`);
-      fetchGuests();
-    } catch (err: any) {
-      alert(err?.response?.data?.error?.message || err?.message || 'Gagal mencatat checkout tamu');
-    }
+  const handleCheckoutGuest = (guest: GuestItem) => {
+    setPrConfirm({
+      isOpen: true,
+      title: 'Konfirmasi Checkout Tamu',
+      description: `Apakah Anda yakin ingin mencatat kepulangan/checkout untuk tamu ini?`,
+      affectedItemName: guest.full_name,
+      confirmLabel: 'Ya, Checkout',
+      variant: 'primary',
+      onConfirm: async () => {
+        try {
+          await publicRelationsApi.checkoutGuest(guest.id);
+          setSuccessMessage(`Tamu ${guest.full_name} berhasil dicatat checkout.`);
+          toast.success(`Tamu ${guest.full_name} berhasil dicatat checkout.`);
+          fetchGuests();
+        } catch (err: any) {
+          toast.error(err?.response?.data?.error?.message || err?.message || 'Gagal mencatat checkout tamu');
+        }
+      },
+    });
   };
 
   const handleViewSignature = async (guest: GuestItem) => {
@@ -251,7 +279,7 @@ export default function PublicRelationsAdminPage() {
       setSelectedGuestForSignature(res.data);
       setIsSignatureModalOpen(true);
     } catch (err: any) {
-      alert(err?.response?.data?.error?.message || err?.message || 'Tanda tangan digital belum tersedia atau akses ditolak');
+      toast.error(err?.response?.data?.error?.message || err?.message || 'Tanda tangan digital belum tersedia atau akses ditolak');
     } finally {
       setIsLoadingSignature(false);
     }
@@ -274,7 +302,7 @@ export default function PublicRelationsAdminPage() {
     e.preventDefault();
     if (!selectedComplaint) return;
     if (!statusUpdateForm.response_text.trim()) {
-      alert('Catatan tindak lanjut atau alasan perubahan status wajib diisi.');
+      toast.warning('Catatan tindak lanjut atau alasan perubahan status wajib diisi.');
       return;
     }
 
@@ -282,11 +310,12 @@ export default function PublicRelationsAdminPage() {
       setIsSubmittingComplaintStatus(true);
       const res = await publicRelationsApi.updateComplaintStatus(selectedComplaint.id, statusUpdateForm);
       setSuccessMessage(`Status pengaduan ${selectedComplaint.ticket_code} berhasil diperbarui.`);
+      toast.success(`Status pengaduan ${selectedComplaint.ticket_code} berhasil diperbarui.`);
       setSelectedComplaint(res.data);
       setIsComplaintModalOpen(false);
       fetchComplaints();
     } catch (err: any) {
-      alert(err?.response?.data?.error?.message || err?.message || 'Gagal memperbarui status pengaduan');
+      toast.error(err?.response?.data?.error?.message || err?.message || 'Gagal memperbarui status pengaduan');
     } finally {
       setIsSubmittingComplaintStatus(false);
     }
@@ -333,7 +362,7 @@ export default function PublicRelationsAdminPage() {
   const handlePartnershipSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!partnershipForm.partner_name || !partnershipForm.scope || !partnershipForm.valid_from || !partnershipForm.valid_until) {
-      alert('Nama mitra, ruang lingkup, dan rentang tanggal MoU wajib diisi.');
+      toast.warning('Nama mitra, ruang lingkup, dan rentang tanggal MoU wajib diisi.');
       return;
     }
 
@@ -342,29 +371,40 @@ export default function PublicRelationsAdminPage() {
       if (editingPartnershipId) {
         await publicRelationsApi.updatePartnership(editingPartnershipId, partnershipForm);
         setSuccessMessage(`Kemitraan ${partnershipForm.partner_name} berhasil diperbarui.`);
+        toast.success(`Kemitraan ${partnershipForm.partner_name} berhasil diperbarui.`);
       } else {
         await publicRelationsApi.createPartnership(partnershipForm);
         setSuccessMessage(`Kemitraan ${partnershipForm.partner_name} berhasil ditambahkan.`);
+        toast.success(`Kemitraan ${partnershipForm.partner_name} berhasil ditambahkan.`);
       }
       setIsPartnershipModalOpen(false);
       fetchPartnerships();
     } catch (err: any) {
-      alert(err?.response?.data?.error?.message || err?.message || 'Gagal menyimpan data kemitraan');
+      toast.error(err?.response?.data?.error?.message || err?.message || 'Gagal menyimpan data kemitraan');
     } finally {
       setIsSubmittingPartnership(false);
     }
   };
 
-  const handleDeletePartnership = async (item: PartnershipItem) => {
-    if (!confirm(`Hapus kemitraan dengan ${item.partner_name}?`)) return;
-
-    try {
-      await publicRelationsApi.deletePartnership(item.id);
-      setSuccessMessage(`Kemitraan dengan ${item.partner_name} berhasil dihapus.`);
-      fetchPartnerships();
-    } catch (err: any) {
-      alert(err?.response?.data?.error?.message || err?.message || 'Gagal menghapus kemitraan');
-    }
+  const handleDeletePartnership = (item: PartnershipItem) => {
+    setPrConfirm({
+      isOpen: true,
+      title: 'Hapus Kemitraan',
+      description: `Apakah Anda yakin ingin menghapus data kemitraan ini?`,
+      affectedItemName: item.partner_name,
+      confirmLabel: 'Ya, Hapus',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await publicRelationsApi.deletePartnership(item.id);
+          setSuccessMessage(`Kemitraan dengan ${item.partner_name} berhasil dihapus.`);
+          toast.success(`Kemitraan dengan ${item.partner_name} berhasil dihapus.`);
+          fetchPartnerships();
+        } catch (err: any) {
+          toast.error(err?.response?.data?.error?.message || err?.message || 'Gagal menghapus kemitraan');
+        }
+      },
+    });
   };
 
   // =========================================================================
@@ -1550,6 +1590,28 @@ export default function PublicRelationsAdminPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hubungan Masyarakat */}
+      <ConfirmDialog
+        isOpen={prConfirm.isOpen}
+        onClose={() => setPrConfirm((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={async () => {
+          setPrConfirm((prev) => ({ ...prev, isLoading: true }));
+          try {
+            await prConfirm.onConfirm();
+            setPrConfirm((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+          } catch {
+            setPrConfirm((prev) => ({ ...prev, isLoading: false }));
+          }
+        }}
+        title={prConfirm.title}
+        description={prConfirm.description}
+        affectedItemName={prConfirm.affectedItemName}
+        confirmLabel={prConfirm.confirmLabel || 'Konfirmasi'}
+        cancelLabel="Batal"
+        variant={prConfirm.variant || 'primary'}
+        isLoading={prConfirm.isLoading}
+      />
     </div>
   );
 }

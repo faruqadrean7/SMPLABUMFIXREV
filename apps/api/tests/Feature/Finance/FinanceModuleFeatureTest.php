@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\AcademicYear;
 use App\Models\FeeType;
+use App\Models\GradeLevel;
 use App\Models\Guardian;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -29,19 +31,31 @@ class FinanceModuleFeatureTest extends TestCase
     use RefreshDatabase;
 
     protected User $superAdmin;
+
     protected User $bendahara;
+
     protected User $guru;
+
     protected User $guardianUserA;
+
     protected User $guardianUserB;
+
     protected User $studentUserA;
+
     protected User $studentUserB;
 
     protected Guardian $guardianA;
+
     protected Guardian $guardianB;
+
     protected Student $studentA;
+
     protected Student $studentB;
+
     protected SchoolClass $class7A;
+
     protected FeeType $feeTypeSpp;
+
     protected PaymentProviderSetting $providerSetting;
 
     protected function setUp(): void
@@ -123,7 +137,7 @@ class FinanceModuleFeatureTest extends TestCase
         $this->studentUserB->roles()->sync([$roleStudent->id]);
 
         // 3. Kelas, Tahun Ajaran & Jenjang
-        $academicYear = \App\Models\AcademicYear::create([
+        $academicYear = AcademicYear::create([
             'id' => (string) Str::uuid(),
             'name' => '2026/2027',
             'start_date' => '2026-07-01',
@@ -131,7 +145,7 @@ class FinanceModuleFeatureTest extends TestCase
             'is_active' => true,
         ]);
 
-        $gradeLevel = \App\Models\GradeLevel::create([
+        $gradeLevel = GradeLevel::create([
             'id' => (string) Str::uuid(),
             'name' => 'Kelas 7',
             'sort_order' => 7,

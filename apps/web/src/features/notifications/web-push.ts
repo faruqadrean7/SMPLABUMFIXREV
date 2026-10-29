@@ -280,36 +280,40 @@ export function resolveNotificationDeepLink(
   role?: PortalRoleTopic | string | null,
   resourceId?: string | null
 ): string {
-  if (!topic) return '/portal/notifikasi';
+  // Portal kini aplikasi terpisah (apps/portal). Origin portal via env;
+  // rute mengikuti struktur apps/portal (/siswa, /ortu, /guru), tanpa prefiks /portal.
+  const B = process.env.NEXT_PUBLIC_PORTAL_URL || '';
+  const inbox = role === 'ortu' || role === 'guru' ? `${B}/${role}/notifikasi` : `${B}/siswa/notifikasi`;
+  if (!topic) return inbox;
 
   switch (topic) {
     case 'assignment':
-      return '/portal/siswa/tugas';
+      return `${B}/siswa/tugas`;
     case 'cbt_exam':
-      return resourceId ? `/portal/siswa/ujian/${resourceId}` : '/portal/siswa/cbt';
+      return resourceId ? `${B}/siswa/cbt/${resourceId}` : `${B}/siswa/cbt`;
     case 'grade':
-      return '/portal/siswa/nilai';
+      return `${B}/siswa/nilai`;
     case 'teaching_material':
-      return '/portal/siswa';
+      return `${B}/siswa/tugas`;
     case 'attendance':
-      return resourceId ? `/portal/ortu/anak/${resourceId}` : '/portal/ortu';
+      return `${B}/ortu/presensi`;
     case 'report_card':
-      return resourceId ? `/portal/ortu/anak/${resourceId}` : '/portal/ortu';
+      return `${B}/ortu/nilai`;
     case 'character_note':
-      return resourceId ? `/portal/ortu/anak/${resourceId}` : '/portal/ortu';
+      return `${B}/ortu/nilai`;
     case 'early_warning':
-      return role === 'ortu' ? (resourceId ? `/portal/ortu/anak/${resourceId}` : '/portal/ortu') : '/admin/counseling';
+      return role === 'ortu' ? `${B}/ortu/dashboard` : '/admin/counseling';
     case 'schedule_change':
-      return '/portal/guru/jadwal';
+      return `${B}/guru/jadwal`;
     case 'leave_request':
-      return role === 'guru' ? '/portal/guru/izin-cuti' : '/portal/staf/izin-cuti';
+      return `${B}/guru/perizinan`;
     case 'salary_slip':
-      return role === 'guru' ? '/portal/guru/slip-gaji' : '/portal/staf/slip-gaji';
+      return `${B}/guru/dashboard`;
     case 'sarpras_ticket':
-      return '/portal/staf/tiket';
+      return `${B}/guru/sarpras`;
     case 'announcement':
     default:
-      return '/portal/notifikasi';
+      return inbox;
   }
 }
 

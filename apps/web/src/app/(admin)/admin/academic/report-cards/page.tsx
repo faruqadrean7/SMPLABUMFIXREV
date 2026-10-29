@@ -15,6 +15,8 @@ import { academicApi } from '@/features/academic/academic-api';
 import { academicYearsApi } from '@/features/master/academic-years-api';
 import { classesApi } from '@/features/master/classes-api';
 import { ReportCardModal, ReportTemplateDialog } from '@/features/academic/report-cards';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -71,6 +73,17 @@ export default function ReportCardsAdminPage() {
 
   // Mass Actions Execution
   const [isProcessingMassAction, setIsProcessingMassAction] = useState<boolean>(false);
+  const [massConfirm, setMassConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: async () => {},
+  });
   const [massActionFeedback, setMassActionFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -146,101 +159,98 @@ export default function ReportCardsAdminPage() {
   }, [fetchClassStatus]);
 
   // Mass Actions Handlers
-  const handleGenerateClassReports = async () => {
+  const handleGenerateClassReports = () => {
     if (!selectedClassId || !selectedSemesterId) return;
-    if (
-      !confirm(
-        'Generate seluruh e-rapor semester untuk kelas ini? Snapshot nilai & capaian kompetensi akan dihitung otomatis.'
-      )
-    ) {
-      return;
-    }
-
-    setIsProcessingMassAction(true);
-    setMassActionFeedback(null);
-    try {
-      await academicApi.generateReportCards({
-        class_id: selectedClassId,
-        semester_id: selectedSemesterId,
-        status: 'draft',
-      });
-      setMassActionFeedback({
-        type: 'success',
-        message: 'Berhasil men-generate seluruh e-rapor semester rombel.',
-      });
-      await fetchClassStatus();
-    } catch (err: any) {
-      setMassActionFeedback({
-        type: 'error',
-        message:
-          err.response?.data?.message ||
-          'Gagal men-generate e-rapor semester rombel. Silakan periksa kembali data nilai.',
-      });
-    } finally {
-      setIsProcessingMassAction(false);
-    }
+    setMassConfirm({
+      isOpen: true,
+      title: 'Generate E-Rapor Semester Massal',
+      description: 'Generate seluruh e-rapor semester untuk kelas ini? Snapshot nilai & capaian kompetensi akan dihitung otomatis.',
+      onConfirm: async () => {
+        setIsProcessingMassAction(true);
+        setMassActionFeedback(null);
+        try {
+          await academicApi.generateReportCards({
+            class_id: selectedClassId,
+            semester_id: selectedSemesterId,
+            status: 'draft',
+          });
+          const successMsg = 'Berhasil men-generate seluruh e-rapor semester rombel.';
+          setMassActionFeedback({ type: 'success', message: successMsg });
+          toast.success(successMsg);
+          await fetchClassStatus();
+        } catch (err: any) {
+          const errMsg = err.response?.data?.message || 'Gagal men-generate e-rapor semester rombel. Silakan periksa kembali data nilai.';
+          setMassActionFeedback({ type: 'error', message: errMsg });
+          toast.error(errMsg);
+        } finally {
+          setIsProcessingMassAction(false);
+        }
+      },
+    });
   };
 
-  const handleBulkLock = async (isLocked: boolean) => {
+  const handleBulkLock = (isLocked: boolean) => {
     if (!selectedClassId || !selectedSemesterId) return;
     const actionName = isLocked ? 'mengunci' : 'membuka kunci';
-    if (!confirm(`Apakah Anda yakin ingin ${actionName} seluruh e-rapor semester pada rombel ini?`)) {
-      return;
-    }
-
-    setIsProcessingMassAction(true);
-    setMassActionFeedback(null);
-    try {
-      const res = await academicApi.bulkLockReportCards({
-        class_id: selectedClassId,
-        semester_id: selectedSemesterId,
-        is_locked: isLocked,
-        reason: isLocked ? 'Penguncian nilai akhir semester oleh kurikulum' : 'Pembukaan kunci oleh kurikulum',
-      });
-      setMassActionFeedback({
-        type: 'success',
-        message: `Berhasil ${actionName} ${res.count} e-rapor semester.`,
-      });
-      await fetchClassStatus();
-    } catch (err: any) {
-      setMassActionFeedback({
-        type: 'error',
-        message: err.response?.data?.message || `Gagal ${actionName} e-rapor semester rombel.`,
-      });
-    } finally {
-      setIsProcessingMassAction(false);
-    }
+    setMassConfirm({
+      isOpen: true,
+      title: `Konfirmasi ${actionName.charAt(0).toUpperCase() + actionName.slice(1)} E-Rapor`,
+      description: `Apakah Anda yakin ingin ${actionName} seluruh e-rapor semester pada rombel ini?`,
+      onConfirm: async () => {
+        setIsProcessingMassAction(true);
+        setMassActionFeedback(null);
+        try {
+          const res = await academicApi.bulkLockReportCards({
+            class_id: selectedClassId,
+            semester_id: selectedSemesterId,
+            is_locked: isLocked,
+            reason: isLocked ? 'Penguncian nilai akhir semester oleh kurikulum' : 'Pembukaan kunci oleh kurikulum',
+          });
+          const successMsg = `Berhasil ${actionName} ${res.count} e-rapor semester.`;
+          setMassActionFeedback({ type: 'success', message: successMsg });
+          toast.success(successMsg);
+          await fetchClassStatus();
+        } catch (err: any) {
+          const errMsg = err.response?.data?.message || `Gagal ${actionName} e-rapor semester rombel.`;
+          setMassActionFeedback({ type: 'error', message: errMsg });
+          toast.error(errMsg);
+        } finally {
+          setIsProcessingMassAction(false);
+        }
+      },
+    });
   };
 
-  const handleBulkApprove = async (statusToSet: 'disetujui' | 'terbit') => {
+  const handleBulkApprove = (statusToSet: 'disetujui' | 'terbit') => {
     if (!selectedClassId || !selectedSemesterId) return;
     const actionLabel = statusToSet === 'disetujui' ? 'mengesahkan (ACC)' : 'menerbitkan';
-    if (!confirm(`Apakah Anda yakin ingin ${actionLabel} seluruh e-rapor semester pada rombel ini?`)) {
-      return;
-    }
-
-    setIsProcessingMassAction(true);
-    setMassActionFeedback(null);
-    try {
-      const res = await academicApi.bulkApproveReportCards({
-        class_id: selectedClassId,
-        semester_id: selectedSemesterId,
-        status: statusToSet,
-        note: `Pengesahan massal status ${statusToSet} semester.`,
-      });
-      setMassActionFeedback({
-        type: 'success',
-        message: `Berhasil ${actionLabel} ${res.count} e-rapor semester.`,
-      });
-      await fetchClassStatus();
-    } catch (err: any) {
-      setMassActionFeedback({
-        type: 'error',
-        message: err.response?.data?.message || `Gagal ${actionLabel} e-rapor semester rombel.`,
-      });
-    } finally {
-      setIsProcessingMassAction(false);
-    }
+    setMassConfirm({
+      isOpen: true,
+      title: `Konfirmasi ${actionLabel.charAt(0).toUpperCase() + actionLabel.slice(1)} E-Rapor`,
+      description: `Apakah Anda yakin ingin ${actionLabel} seluruh e-rapor semester pada rombel ini?`,
+      onConfirm: async () => {
+        setIsProcessingMassAction(true);
+        setMassActionFeedback(null);
+        try {
+          const res = await academicApi.bulkApproveReportCards({
+            class_id: selectedClassId,
+            semester_id: selectedSemesterId,
+            status: statusToSet,
+            note: `Pengesahan massal status ${statusToSet} semester.`,
+          });
+          const successMsg = `Berhasil ${actionLabel} ${res.count} e-rapor semester.`;
+          setMassActionFeedback({ type: 'success', message: successMsg });
+          toast.success(successMsg);
+          await fetchClassStatus();
+        } catch (err: any) {
+          const errMsg = err.response?.data?.message || `Gagal ${actionLabel} e-rapor semester rombel.`;
+          setMassActionFeedback({ type: 'error', message: errMsg });
+          toast.error(errMsg);
+        } finally {
+          setIsProcessingMassAction(false);
+        }
+      },
+    });
   };
 
   // Preview or View Single Report
@@ -254,7 +264,7 @@ export default function ReportCardsAdminPage() {
         const fullReport = await academicApi.getReportCard(row.report.id);
         setSelectedReportForModal(fullReport);
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Gagal memuat detail e-rapor.');
+        toast.error(err.response?.data?.message || 'Gagal memuat detail e-rapor.');
       }
     } else {
       // Preview on-the-fly
@@ -262,7 +272,7 @@ export default function ReportCardsAdminPage() {
         const snapshot = await academicApi.previewReportCard(row.student.id, selectedSemesterId);
         setPreviewSnapshotForModal(snapshot);
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Gagal memuat pratinjau snapshot e-rapor.');
+        toast.error(err.response?.data?.message || 'Gagal memuat pratinjau snapshot e-rapor.');
       }
     }
   };
@@ -277,7 +287,7 @@ export default function ReportCardsAdminPage() {
       setIsReportModalOpen(false);
       await fetchClassStatus();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal generate e-rapor.');
+      toast.error(err.response?.data?.message || 'Gagal generate e-rapor.');
     }
   };
 
@@ -758,6 +768,22 @@ export default function ReportCardsAdminPage() {
       <ReportTemplateDialog
         isOpen={isTemplateDialogOpen}
         onClose={() => setIsTemplateDialogOpen(false)}
+      />
+
+      {/* Dialog Konfirmasi Aksi Massal E-Rapor */}
+      <ConfirmDialog
+        isOpen={massConfirm.isOpen}
+        onClose={() => setMassConfirm((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={async () => {
+          await massConfirm.onConfirm();
+          setMassConfirm((prev) => ({ ...prev, isOpen: false }));
+        }}
+        title={massConfirm.title}
+        description={massConfirm.description}
+        confirmLabel="Ya, Lanjutkan"
+        cancelLabel="Batal"
+        variant="primary"
+        isLoading={isProcessingMassAction}
       />
     </div>
   );

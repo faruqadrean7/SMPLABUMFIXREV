@@ -34,6 +34,8 @@ import { academicApi } from '@/features/academic/academic-api';
 import { classesApi } from '@/features/master/classes-api';
 import { subjectsApi } from '@/features/master/subjects-api';
 import { ApiClientError } from '@/lib/api/errors';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MaterialDialog } from '@/features/academic/teaching-materials';
@@ -70,6 +72,7 @@ export default function LmsAssignmentsPage() {
   // Delete state
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteType, setDeleteType] = useState<'assignment' | 'material' | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; type: 'assignment' | 'material' } | null>(null);
 
   // Initial load master data
   useEffect(() => {
@@ -152,24 +155,30 @@ export default function LmsAssignmentsPage() {
     setIsMaterialDialogOpen(true);
   };
 
-  const handleDelete = async (id: string, type: 'assignment' | 'material') => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus ${type === 'assignment' ? 'tugas' : 'materi'} ini?`)) {
-      return;
-    }
+  const handleDelete = (id: string, type: 'assignment' | 'material') => {
+    setItemToDelete({ id, type });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete) return;
+    const { id, type } = itemToDelete;
     try {
       setDeletingId(id);
       setDeleteType(type);
       if (type === 'assignment') {
         await academicApi.deleteAssignment(id);
+        toast.success('Tugas berhasil dihapus.');
       } else {
         await academicApi.deleteMaterial(id);
+        toast.success('Materi ajar berhasil dihapus.');
       }
+      setItemToDelete(null);
       fetchData();
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
-        alert(err.message);
+        toast.error(err.message);
       } else {
-        alert('Gagal menghapus data.');
+        toast.error('Gagal menghapus data.');
       }
     } finally {
       setDeletingId(null);
@@ -649,6 +658,19 @@ export default function LmsAssignmentsPage() {
         subjects={subjects}
         defaultClassId={selectedClassId}
         defaultSubjectId={selectedSubjectId}
+      />
+
+      {/* Dialog Konfirmasi Hapus Tugas / Materi */}
+      <ConfirmDialog
+        isOpen={!!itemToDelete}
+        onClose={() => setItemToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title={itemToDelete?.type === 'assignment' ? 'Hapus Tugas' : 'Hapus Materi Pembelajaran'}
+        description={`Apakah Anda yakin ingin menghapus ${itemToDelete?.type === 'assignment' ? 'tugas' : 'materi'} ini? Tindakan ini tidak dapat dibatalkan.`}
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={!!deletingId}
       />
     </div>
   );

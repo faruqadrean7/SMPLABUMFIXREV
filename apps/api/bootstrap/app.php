@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\BypassThrottle;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -30,7 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => RequirePermission::class,
         ];
         if (env('TEST_DISABLE_RATE_LIMIT', false) || env('DISABLE_RATE_LIMITING', false)) {
-            $aliases['throttle'] = \App\Http\Middleware\BypassThrottle::class;
+            $aliases['throttle'] = BypassThrottle::class;
         }
         $middleware->alias($aliases);
     })

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\Api\V1\AdminAuthController;
 use App\Models\Applicant;
 use App\Models\AuditLog;
 use App\Models\Device;
@@ -78,7 +79,7 @@ class AuthService
 
         // BATCH 4B (GAP-SEC-02): Akun dengan akses shell admin DITOLAK di endpoint portal civitas
         $userRoleCodes = $user->roles->pluck('code')->all();
-        $hasAdminShellRole = ! empty(array_intersect($userRoleCodes, \App\Http\Controllers\Api\V1\AdminAuthController::ADMIN_ROLES));
+        $hasAdminShellRole = ! empty(array_intersect($userRoleCodes, AdminAuthController::ADMIN_ROLES));
 
         if ($hasAdminShellRole) {
             $this->logAudit($user->id, 'auth.login_failed', 'User', $user->id, null, [

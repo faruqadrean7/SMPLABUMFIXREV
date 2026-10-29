@@ -49,16 +49,27 @@ class Batch5EIntegratedSimulationTest extends TestCase
     use RefreshDatabase;
 
     protected User $superAdmin;
+
     protected User $guruUser;
+
     protected Teacher $guru;
+
     protected User $studentUser;
+
     protected Student $student;
+
     protected SchoolClass $class7A;
+
     protected SchoolClass $class7B;
+
     protected AcademicYear $academicYear;
+
     protected Semester $semester1;
+
     protected Subject $mapelMtk;
+
     protected TeachingAssignment $assignment;
+
     protected GradeLevel $grade7;
 
     protected function setUp(): void
@@ -366,9 +377,9 @@ class Batch5EIntegratedSimulationTest extends TestCase
                 'schedule_id' => $schedule->id,
                 'teacher_id' => $this->guru->id,
                 'session_date' => $currentDate->format('Y-m-d'),
-                'topic' => "Materi Matematika Pertemuan Ke-" . ($day + 1),
+                'topic' => 'Materi Matematika Pertemuan Ke-'.($day + 1),
                 'method' => 'Discovery Learning',
-                'notes' => "Pembahasan topik dan latihan mandiri hari ke-" . ($day + 1),
+                'notes' => 'Pembahasan topik dan latihan mandiri hari ke-'.($day + 1),
             ]);
 
             // Presensi siswa: hadir
@@ -520,8 +531,8 @@ class Batch5EIntegratedSimulationTest extends TestCase
                 'wave_id' => $wave->id,
                 'track_id' => $assignedTrack->id,
                 'user_id' => $user->id,
-                'registration_no' => sprintf("REG-2026-%04d", $i),
-                'nik_enc' => sprintf("357900000000%04d", $i),
+                'registration_no' => sprintf('REG-2026-%04d', $i),
+                'nik_enc' => sprintf('357900000000%04d', $i),
                 'full_name' => "Calon Siswa Ke-{$i}",
                 'birth_date' => Carbon::create(2013, 1, 1)->addMonths($i)->format('Y-m-d'),
                 'status' => 'verified',

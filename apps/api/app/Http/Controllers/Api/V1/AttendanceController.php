@@ -31,6 +31,8 @@ class AttendanceController extends Controller
             $paginator = $this->service->listAttendances($request->validated(), $request);
 
             return $this->paginatedResponse($paginator);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -92,6 +94,8 @@ class AttendanceController extends Controller
             $recap = $this->service->getAttendanceRecap($request->validated(), $request);
 
             return $this->successResponse($recap);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 

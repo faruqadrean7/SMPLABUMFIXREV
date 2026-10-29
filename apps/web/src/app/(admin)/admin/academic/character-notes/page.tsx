@@ -45,6 +45,8 @@ import { academicApi } from '@/features/academic/academic-api';
 import { classesApi } from '@/features/master/classes-api';
 import { academicYearsApi } from '@/features/master/academic-years-api';
 import { CharacterNoteDialog } from '@/features/academic/character-notes';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { ApiClientError } from '@/lib/api/errors';
 
 export default function CharacterNotesPage() {
@@ -86,6 +88,8 @@ export default function CharacterNotesPage() {
   const [isSavingBatch, setIsSavingBatch] = useState<boolean>(false);
   const [batchSuccessMessage, setBatchSuccessMessage] = useState<string | null>(null);
   const [batchErrorMessage, setBatchErrorMessage] = useState<string | null>(null);
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
+  const [isDeletingNote, setIsDeletingNote] = useState<boolean>(false);
 
   // Initial Master Data Loading
   useEffect(() => {
@@ -233,19 +237,27 @@ export default function CharacterNotesPage() {
   };
 
   // Delete Character Note
-  const handleDeleteNote = async (noteId: string) => {
+  const handleDeleteNote = (noteId: string) => {
     if (isPeriodLocked) return;
-    if (!confirm('Apakah Anda yakin ingin menghapus catatan karakter siswa ini?')) return;
+    setNoteToDelete(noteId);
+  };
 
+  const handleConfirmDeleteNote = async () => {
+    if (!noteToDelete) return;
+    setIsDeletingNote(true);
     try {
-      await academicApi.deleteCharacterNote(noteId);
+      await academicApi.deleteCharacterNote(noteToDelete);
+      toast.success('Catatan karakter siswa berhasil dihapus.');
+      setNoteToDelete(null);
       await fetchClassMatrix();
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
-        alert(err.message);
+        toast.error(err.message);
       } else {
-        alert('Gagal menghapus catatan karakter.');
+        toast.error('Gagal menghapus catatan karakter.');
       }
+    } finally {
+      setIsDeletingNote(false);
     }
   };
 
@@ -923,6 +935,19 @@ export default function CharacterNotesPage() {
         period={currentPeriod}
         existingNote={selectedExistingNote}
         isLocked={isPeriodLocked}
+      />
+
+      {/* Dialog Konfirmasi Hapus Catatan Karakter */}
+      <ConfirmDialog
+        isOpen={!!noteToDelete}
+        onClose={() => setNoteToDelete(null)}
+        onConfirm={handleConfirmDeleteNote}
+        title="Hapus Catatan Karakter"
+        description="Apakah Anda yakin ingin menghapus catatan karakter siswa ini? Data yang dihapus tidak dapat dipulihkan."
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isDeletingNote}
       />
     </div>
   );

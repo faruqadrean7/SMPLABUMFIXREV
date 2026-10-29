@@ -30,7 +30,7 @@ class InvoiceGeneratorService
 
         // Ambil semua invoice bulan ini yang berawalan prefix
         $existing = DB::table('invoices')
-            ->where('invoice_number', 'like', $prefix . '%')
+            ->where('invoice_number', 'like', $prefix.'%')
             ->pluck('invoice_number');
 
         $maxSeq = 0;
@@ -47,7 +47,7 @@ class InvoiceGeneratorService
 
         $seq = $maxSeq + 1;
         do {
-            $candidate = $prefix . str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+            $candidate = $prefix.str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
             $exists = DB::table('invoices')->where('invoice_number', $candidate)->exists();
             if (! $exists) {
                 return $candidate;
@@ -76,7 +76,7 @@ class InvoiceGeneratorService
         $targetType = $params['target_type'] ?? 'class';
         $classId = $params['class_id'] ?? null;
         $academicYearId = $params['academic_year_id'] ?? null;
-        $notes = $params['notes'] ?? ("Tagihan massal: " . $feeType->name . " periode " . $period);
+        $notes = $params['notes'] ?? ('Tagihan massal: '.$feeType->name.' periode '.$period);
 
         // Ambil target siswa
         $studentsQuery = Student::query();
@@ -123,6 +123,7 @@ class InvoiceGeneratorService
 
                 if ($alreadyExists) {
                     $skippedCount++;
+
                     continue;
                 }
 
@@ -145,7 +146,7 @@ class InvoiceGeneratorService
                 InvoiceItem::create([
                     'invoice_id' => $invoice->id,
                     'fee_type_id' => $feeType->id,
-                    'description' => $feeType->name . ' - Periode ' . $period,
+                    'description' => $feeType->name.' - Periode '.$period,
                     'amount' => $amount,
                     'discount' => 0,
                 ]);
@@ -171,8 +172,8 @@ class InvoiceGeneratorService
                     Notification::create([
                         'user_id' => $student->user->id,
                         'notif_type' => 'finance_invoice',
-                        'title' => 'Tagihan Baru: ' . $feeType->name,
-                        'body' => "Tagihan sebesar Rp " . number_format($amount, 0, ',', '.') . " periode {$period} telah diterbitkan dengan jatuh tempo {$dueDate}.",
+                        'title' => 'Tagihan Baru: '.$feeType->name,
+                        'body' => 'Tagihan sebesar Rp '.number_format($amount, 0, ',', '.')." periode {$period} telah diterbitkan dengan jatuh tempo {$dueDate}.",
                         'data' => [
                             'invoice_id' => $invoice->id,
                             'invoice_number' => $invoice->invoice_number,
@@ -188,8 +189,8 @@ class InvoiceGeneratorService
                         Notification::create([
                             'user_id' => $guardian->user->id,
                             'notif_type' => 'finance_invoice',
-                            'title' => 'Tagihan Baru: ' . $feeType->name . ' (' . $student->full_name . ')',
-                            'body' => "Tagihan biaya {$feeType->name} untuk putra/putri Anda {$student->full_name} sebesar Rp " . number_format($amount, 0, ',', '.') . " telah diterbitkan. Jatuh tempo: {$dueDate}.",
+                            'title' => 'Tagihan Baru: '.$feeType->name.' ('.$student->full_name.')',
+                            'body' => "Tagihan biaya {$feeType->name} untuk putra/putri Anda {$student->full_name} sebesar Rp ".number_format($amount, 0, ',', '.')." telah diterbitkan. Jatuh tempo: {$dueDate}.",
                             'data' => [
                                 'invoice_id' => $invoice->id,
                                 'invoice_number' => $invoice->invoice_number,

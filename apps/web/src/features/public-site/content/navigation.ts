@@ -1,3 +1,4 @@
+const PORTAL_BASE = process.env.NEXT_PUBLIC_PORTAL_URL || '';
 import { NavItem, QuickLinkItem, ContactInfo } from '../types';
 
 /**
@@ -55,8 +56,8 @@ export const FOOTER_QUICK_LINKS: QuickLinkItem[] = [
  */
 export const FOOTER_PORTAL_LINKS: QuickLinkItem[] = [
   { label: 'Masuk Portal Akademik', href: '/masuk' },
-  { label: 'Portal Siswa', href: '/portal/siswa' },
-  { label: 'Portal Guru & Staf', href: '/portal/guru' },
-  { label: 'Portal Orang Tua', href: '/portal/ortu' },
+  { label: 'Portal Siswa', href: `${PORTAL_BASE}/siswa` },
+  { label: 'Portal Guru & Staf', href: `${PORTAL_BASE}/guru` },
+  { label: 'Portal Orang Tua', href: `${PORTAL_BASE}/ortu` },
   { label: 'Informasi PPDB Online', href: '/ppdb' },
 ];

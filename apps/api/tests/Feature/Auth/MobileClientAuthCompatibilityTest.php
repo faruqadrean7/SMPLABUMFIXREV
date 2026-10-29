@@ -15,8 +15,11 @@ class MobileClientAuthCompatibilityTest extends TestCase
     use RefreshDatabase;
 
     protected User $studentUser;
+
     protected User $teacherUser;
+
     protected User $guardianUser;
+
     protected User $adminUser;
 
     protected function setUp(): void

@@ -28,6 +28,7 @@ import { classesApi } from '@/features/master/classes-api';
 import { academicYearsApi } from '@/features/master/academic-years-api';
 import { SchoolClassItem, AcademicYearItem } from '@/types/master';
 import { Invoice, InvoiceStatus, FeeType } from '@/types/finance';
+import { toast } from '@/components/ui/toast';
 
 export default function InvoicesAdminPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -145,7 +146,7 @@ export default function InvoicesAdminPage() {
       setCancelNotes('');
       await loadData();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal membatalkan tagihan.');
+      toast.error(err instanceof Error ? err.message : 'Gagal membatalkan tagihan.');
     } finally {
       setIsCancelling(false);
     }

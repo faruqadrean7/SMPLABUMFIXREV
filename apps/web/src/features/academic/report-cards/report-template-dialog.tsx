@@ -9,6 +9,8 @@ import { SubjectItem } from '@/types/master';
 import { academicApi } from '../academic-api';
 import { subjectsApi } from '@/features/master/subjects-api';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import {
   X,
   Plus,
@@ -32,6 +34,8 @@ export function ReportTemplateDialog({ isOpen, onClose }: ReportTemplateDialogPr
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [templateToDelete, setTemplateToDelete] = useState<string | null>(null);
+  const [isDeletingTemplate, setIsDeletingTemplate] = useState(false);
 
   // Form states
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
@@ -97,17 +101,22 @@ export function ReportTemplateDialog({ isOpen, onClose }: ReportTemplateDialogPr
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus template deskripsi capaian ini?')) {
-      return;
-    }
+  const handleDelete = (id: string) => {
+    setTemplateToDelete(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!templateToDelete) return;
+    setIsDeletingTemplate(true);
     try {
-      await academicApi.deleteReportDescriptionTemplate(id);
-      setTemplates((prev) => prev.filter((t) => t.id !== id));
-      setSuccessMessage('Template berhasil dihapus.');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      await academicApi.deleteReportDescriptionTemplate(templateToDelete);
+      setTemplates((prev) => prev.filter((t) => t.id !== templateToDelete));
+      toast.success('Template berhasil dihapus.');
+      setTemplateToDelete(null);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Gagal menghapus template deskripsi.');
+      toast.error(err.response?.data?.message || 'Gagal menghapus template deskripsi.');
+    } finally {
+      setIsDeletingTemplate(false);
     }
   };
 
@@ -308,6 +317,19 @@ export function ReportTemplateDialog({ isOpen, onClose }: ReportTemplateDialogPr
           </Button>
         </div>
       </div>
+
+      {/* Dialog Konfirmasi Hapus Template */}
+      <ConfirmDialog
+        isOpen={!!templateToDelete}
+        onClose={() => setTemplateToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="Hapus Template Deskripsi"
+        description="Apakah Anda yakin ingin menghapus template deskripsi capaian kompetensi ini?"
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isDeletingTemplate}
+      />
     </div>
   );
 }

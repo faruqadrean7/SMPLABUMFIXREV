@@ -47,12 +47,12 @@ class InvoiceController extends Controller
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('invoice_number', 'ilike', "%{$search}%")
-                  ->orWhere('va_number', 'ilike', "%{$search}%")
-                  ->orWhereHas('student', function ($sq) use ($search) {
-                      $sq->where('full_name', 'ilike', "%{$search}%")
-                         ->orWhere('nis', 'ilike', "%{$search}%")
-                         ->orWhere('nisn', 'ilike', "%{$search}%");
-                  });
+                    ->orWhere('va_number', 'ilike', "%{$search}%")
+                    ->orWhereHas('student', function ($sq) use ($search) {
+                        $sq->where('full_name', 'ilike', "%{$search}%")
+                            ->orWhere('nis', 'ilike', "%{$search}%")
+                            ->orWhere('nisn', 'ilike', "%{$search}%");
+                    });
             });
         }
 

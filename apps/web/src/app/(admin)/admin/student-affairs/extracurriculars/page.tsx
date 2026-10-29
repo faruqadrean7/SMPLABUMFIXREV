@@ -34,6 +34,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { extracurricularApi } from '@/features/student-affairs/extracurricular-api';
 import { teachersApi } from '@/features/master/teachers-api';
 import { studentsApi } from '@/features/master/students-api';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import {
   ExtracurricularItem,
   ExtracurricularMemberItem,
@@ -102,6 +104,21 @@ export default function ExtracurricularAdminPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    affectedItemName?: string;
+    confirmLabel?: string;
+    onConfirm: () => Promise<void>;
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: async () => {},
+    isLoading: false,
+  });
 
   // Modals State
   const [isEkskulModalOpen, setIsEkskulModalOpen] = useState<boolean>(false);
@@ -323,18 +340,26 @@ export default function ExtracurricularAdminPage() {
     }
   };
 
-  const handleDeleteEkskul = async (id: string, name: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus ekstrakurikuler "${name}"?`)) return;
-
-    setError(null);
-    try {
-      await extracurricularApi.deleteExtracurricular(id);
-      setSuccessMessage(`Ekstrakurikuler "${name}" berhasil dihapus.`);
-      fetchData();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menghapus ekstrakurikuler';
-      setError(msg);
-    }
+  const handleDeleteEkskul = (id: string, name: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Ekstrakurikuler',
+      description: `Apakah Anda yakin ingin menghapus ekstrakurikuler "${name}"?`,
+      affectedItemName: name,
+      onConfirm: async () => {
+        setError(null);
+        try {
+          await extracurricularApi.deleteExtracurricular(id);
+          setSuccessMessage(`Ekstrakurikuler "${name}" berhasil dihapus.`);
+          toast.success(`Ekstrakurikuler "${name}" berhasil dihapus.`);
+          fetchData();
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Gagal menghapus ekstrakurikuler';
+          setError(msg);
+          toast.error(msg);
+        }
+      },
+    });
   };
 
   // Member Action Handlers
@@ -403,19 +428,28 @@ export default function ExtracurricularAdminPage() {
     }
   };
 
-  const handleRemoveMember = async (memberId: string, studentName: string) => {
-    if (!confirm(`Keluarkan siswa "${studentName}" dari ekstrakurikuler ini?`)) return;
-
-    setError(null);
-    try {
-      await extracurricularApi.removeMember(memberId);
-      setSuccessMessage(`Siswa "${studentName}" berhasil dikeluarkan.`);
-      fetchMembers(selectedEkskulId);
-      fetchData();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal mengeluarkan anggota';
-      setError(msg);
-    }
+  const handleRemoveMember = (memberId: string, studentName: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Keluarkan Anggota Ekstrakurikuler',
+      description: `Apakah Anda yakin ingin mengeluarkan siswa "${studentName}" dari ekstrakurikuler ini?`,
+      affectedItemName: studentName,
+      confirmLabel: 'Ya, Keluarkan',
+      onConfirm: async () => {
+        setError(null);
+        try {
+          await extracurricularApi.removeMember(memberId);
+          setSuccessMessage(`Siswa "${studentName}" berhasil dikeluarkan.`);
+          toast.success(`Siswa "${studentName}" berhasil dikeluarkan.`);
+          fetchMembers(selectedEkskulId);
+          fetchData();
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Gagal mengeluarkan anggota';
+          setError(msg);
+          toast.error(msg);
+        }
+      },
+    });
   };
 
   // Journal Action Handlers
@@ -459,16 +493,24 @@ export default function ExtracurricularAdminPage() {
     }
   };
 
-  const handleDeleteJournal = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus jurnal kegiatan ini?')) return;
-    try {
-      await extracurricularApi.deleteJournal(id);
-      setSuccessMessage('Jurnal kegiatan berhasil dihapus.');
-      fetchJournals(selectedEkskulId);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menghapus jurnal';
-      setError(msg);
-    }
+  const handleDeleteJournal = (id: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Jurnal Pertemuan',
+      description: 'Apakah Anda yakin ingin menghapus jurnal kegiatan ini? Data presensi terkait akan ikut terhapus.',
+      onConfirm: async () => {
+        try {
+          await extracurricularApi.deleteJournal(id);
+          setSuccessMessage('Jurnal kegiatan berhasil dihapus.');
+          toast.success('Jurnal kegiatan berhasil dihapus.');
+          fetchJournals(selectedEkskulId);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Gagal menghapus jurnal';
+          setError(msg);
+          toast.error(msg);
+        }
+      },
+    });
   };
 
   // Document Action Handlers
@@ -504,16 +546,25 @@ export default function ExtracurricularAdminPage() {
     }
   };
 
-  const handleDeleteDoc = async (id: string, title: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus dokumen "${title}"?`)) return;
-    try {
-      await extracurricularApi.deleteDocument(id);
-      setSuccessMessage('Dokumen kegiatan berhasil dihapus.');
-      fetchDocuments(selectedEkskulId);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menghapus dokumen';
-      setError(msg);
-    }
+  const handleDeleteDoc = (id: string, title: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Dokumen Kegiatan',
+      description: `Apakah Anda yakin ingin menghapus dokumen "${title}"?`,
+      affectedItemName: title,
+      onConfirm: async () => {
+        try {
+          await extracurricularApi.deleteDocument(id);
+          setSuccessMessage('Dokumen kegiatan berhasil dihapus.');
+          toast.success('Dokumen kegiatan berhasil dihapus.');
+          fetchDocuments(selectedEkskulId);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Gagal menghapus dokumen';
+          setError(msg);
+          toast.error(msg);
+        }
+      },
+    });
   };
 
   // Selected Ekskul Info
@@ -1861,6 +1912,28 @@ export default function ExtracurricularAdminPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Ekstrakurikuler / Anggota / Jurnal / Dokumen */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={async () => {
+          setDeleteConfirm((prev) => ({ ...prev, isLoading: true }));
+          try {
+            await deleteConfirm.onConfirm();
+            setDeleteConfirm((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+          } catch {
+            setDeleteConfirm((prev) => ({ ...prev, isLoading: false }));
+          }
+        }}
+        title={deleteConfirm.title}
+        description={deleteConfirm.description}
+        affectedItemName={deleteConfirm.affectedItemName}
+        confirmLabel={deleteConfirm.confirmLabel || 'Ya, Lanjutkan'}
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={deleteConfirm.isLoading}
+      />
     </div>
   );
 }

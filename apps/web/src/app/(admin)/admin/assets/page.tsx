@@ -46,6 +46,8 @@ import {
 import { ticketsApi } from '@/features/sarpras/tickets-api';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/rbac/evaluator';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 
 export default function AssetsAndInventoryPage() {
   const { user } = useAuth();
@@ -62,6 +64,8 @@ export default function AssetsAndInventoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [assetToDelete, setAssetToDelete] = useState<AssetItem | null>(null);
+  const [isDeletingAsset, setIsDeletingAsset] = useState(false);
 
   // =========================================================================
   // FILTER & PENCARIAN ASET
@@ -290,18 +294,25 @@ export default function AssetsAndInventoryPage() {
   };
 
   // 2. Hapus Aset
-  const handleDeleteAsset = async (asset: AssetItem) => {
-    if (!window.confirm(`Yakin ingin menghapus aset "${asset.name}" (${asset.asset_code})?`)) {
-      return;
-    }
+  const handleDeleteAsset = (asset: AssetItem) => {
+    setAssetToDelete(asset);
+  };
 
+  const handleConfirmDeleteAsset = async () => {
+    if (!assetToDelete) return;
+    setIsDeletingAsset(true);
     try {
-      await assetsApi.deleteAsset(asset.id);
-      setSuccessMessage(`Aset ${asset.asset_code} berhasil dihapus.`);
+      await assetsApi.deleteAsset(assetToDelete.id);
+      setSuccessMessage(`Aset ${assetToDelete.asset_code} berhasil dihapus.`);
+      toast.success(`Aset ${assetToDelete.asset_code} berhasil dihapus.`);
+      setAssetToDelete(null);
       loadData();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal menghapus aset.';
       setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsDeletingAsset(false);
     }
   };
 
@@ -1590,6 +1601,20 @@ export default function AssetsAndInventoryPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Aset */}
+      <ConfirmDialog
+        isOpen={!!assetToDelete}
+        onClose={() => setAssetToDelete(null)}
+        onConfirm={handleConfirmDeleteAsset}
+        title="Hapus Aset"
+        description="Apakah Anda yakin ingin menghapus data aset ini? Tindakan ini tidak dapat dibatalkan."
+        affectedItemName={assetToDelete ? `${assetToDelete.name} (${assetToDelete.asset_code})` : undefined}
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isDeletingAsset}
+      />
     </div>
   );
 }

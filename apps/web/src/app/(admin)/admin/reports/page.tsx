@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/toast';
 import {
   FileBarChart,
   Download,
@@ -145,7 +146,7 @@ export default function ReportsCenterPage() {
       reportsApi.triggerBlobDownload(blob, filename);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal mengunduh berkas laporan CSV.';
-      alert(msg);
+      toast.error(msg);
     } finally {
       setExporting(false);
     }

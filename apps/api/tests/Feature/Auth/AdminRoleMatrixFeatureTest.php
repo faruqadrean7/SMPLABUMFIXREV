@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Http\Controllers\Api\V1\AdminAuthController;
 use App\Models\Role;
 use App\Models\User;
+use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
@@ -118,7 +119,7 @@ class AdminRoleMatrixFeatureTest extends TestCase
     public function test_batch5c_all_roles_in_database_and_unknown_roles_adhere_to_strict_security(): void
     {
         if (Role::count() === 0) {
-            (new \Database\Seeders\DatabaseSeeder())->run();
+            (new DatabaseSeeder)->run();
         }
 
         $allRoles = Role::all();

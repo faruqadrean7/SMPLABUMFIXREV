@@ -34,11 +34,11 @@ class PaymentController extends Controller
         }
 
         if ($request->filled('channel')) {
-            $query->where('channel', 'ilike', "%" . $request->input('channel') . "%");
+            $query->where('channel', 'ilike', '%'.$request->input('channel').'%');
         }
 
         if ($request->filled('external_reference')) {
-            $query->where('external_reference', 'ilike', "%" . $request->input('external_reference') . "%");
+            $query->where('external_reference', 'ilike', '%'.$request->input('external_reference').'%');
         }
 
         if ($request->filled('date')) {
@@ -60,15 +60,15 @@ class PaymentController extends Controller
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('receipt_number', 'ilike', "%{$search}%")
-                  ->orWhere('external_reference', 'ilike', "%{$search}%")
-                  ->orWhere('channel', 'ilike', "%{$search}%")
-                  ->orWhereHas('invoice', function ($iq) use ($search) {
-                      $iq->where('invoice_number', 'ilike', "%{$search}%")
-                         ->orWhereHas('student', function ($sq) use ($search) {
-                             $sq->where('full_name', 'ilike', "%{$search}%")
-                                ->orWhere('nis', 'ilike', "%{$search}%");
-                         });
-                  });
+                    ->orWhere('external_reference', 'ilike', "%{$search}%")
+                    ->orWhere('channel', 'ilike', "%{$search}%")
+                    ->orWhereHas('invoice', function ($iq) use ($search) {
+                        $iq->where('invoice_number', 'ilike', "%{$search}%")
+                            ->orWhereHas('student', function ($sq) use ($search) {
+                                $sq->where('full_name', 'ilike', "%{$search}%")
+                                    ->orWhere('nis', 'ilike', "%{$search}%");
+                            });
+                    });
             });
         }
 

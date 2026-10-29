@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { TeacherItem, TeacherSalarySlipItem } from '@/types/master';
 import { teachersApi } from '@/features/master/teachers-api';
 import { TeacherSalarySlipDialog } from '@/features/master/teacher-salary-slip-dialog';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
@@ -45,6 +47,7 @@ export function TeacherDetailDialog({
   const [slipSuccessMessage, setSlipSuccessMessage] = useState<string | null>(null);
   const [slipErrorMessage, setSlipErrorMessage] = useState<string | null>(null);
   const [deletingSlipId, setDeletingSlipId] = useState<string | null>(null);
+  const [slipToDelete, setSlipToDelete] = useState<string | null>(null);
 
   // Initialize or fetch salary slips
   useEffect(() => {
@@ -106,18 +109,21 @@ export function TeacherDetailDialog({
     setTimeout(() => setSlipSuccessMessage(null), 5000);
   };
 
-  const handleDeleteSlip = async (slipId: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus dokumen slip gaji ini?')) return;
+  const handleDeleteSlip = (slipId: string) => {
+    setSlipToDelete(slipId);
+  };
 
+  const handleConfirmDeleteSlip = async () => {
+    if (!slipToDelete) return;
     try {
-      setDeletingSlipId(slipId);
-      await teachersApi.deleteSalarySlip(teacher.id, slipId);
-      setSalarySlips((prev) => prev.filter((s) => s.id !== slipId));
-      setSlipSuccessMessage('Slip gaji berhasil dihapus.');
-      setTimeout(() => setSlipSuccessMessage(null), 4000);
+      setDeletingSlipId(slipToDelete);
+      await teachersApi.deleteSalarySlip(teacher.id, slipToDelete);
+      setSalarySlips((prev) => prev.filter((s) => s.id !== slipToDelete));
+      toast.success('Slip gaji berhasil dihapus.');
+      setSlipToDelete(null);
     } catch (err: any) {
-      setSlipErrorMessage(err?.response?.data?.message || 'Gagal menghapus slip gaji.');
-      setTimeout(() => setSlipErrorMessage(null), 5000);
+      const errMsg = err?.response?.data?.message || 'Gagal menghapus slip gaji.';
+      toast.error(errMsg);
     } finally {
       setDeletingSlipId(null);
     }
@@ -538,6 +544,19 @@ export function TeacherDetailDialog({
         onClose={() => setIsUploadDialogOpen(false)}
         teacher={teacher}
         onSuccess={handleSalarySlipUploaded}
+      />
+
+      {/* Dialog Konfirmasi Hapus Slip Gaji */}
+      <ConfirmDialog
+        isOpen={!!slipToDelete}
+        onClose={() => setSlipToDelete(null)}
+        onConfirm={handleConfirmDeleteSlip}
+        title="Hapus Slip Gaji"
+        description="Apakah Anda yakin ingin menghapus dokumen slip gaji ini? Dokumen yang telah dihapus tidak dapat dipulihkan."
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={!!deletingSlipId}
       />
     </>
   );

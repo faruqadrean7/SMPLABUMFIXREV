@@ -16,6 +16,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import {
   School,
@@ -160,6 +162,7 @@ export default function ApplicantDashboardPage() {
 
   // Re-registration & Receipt States (GAP-PPDB-02 & BE-PPDB-08/09)
   const [isReRegisterModalOpen, setIsReRegisterModalOpen] = useState(false);
+  const [showFinalSubmitConfirm, setShowFinalSubmitConfirm] = useState(false);
   const [reRegisterNotes, setReRegisterNotes] = useState('');
   const [agreedToRules, setAgreedToRules] = useState(false);
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
@@ -2651,11 +2654,7 @@ export default function ApplicantDashboardPage() {
                 <Button
                   size="sm"
                   disabled={submitApplicationMutation.isPending}
-                  onClick={() => {
-                    if (confirm('Kirim formulir pendaftaran ini secara resmi? Setelah disubmit data akan dikunci untuk verifikasi berkas oleh panitia.')) {
-                      submitApplicationMutation.mutate();
-                    }
-                  }}
+                  onClick={() => setShowFinalSubmitConfirm(true)}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
                 >
                   {submitApplicationMutation.isPending ? (
@@ -2760,6 +2759,22 @@ export default function ApplicantDashboardPage() {
             </div>
           </div>
         )}
+
+        {/* Dialog Konfirmasi Submit Final PPDB */}
+        <ConfirmDialog
+          isOpen={showFinalSubmitConfirm}
+          onClose={() => setShowFinalSubmitConfirm(false)}
+          onConfirm={() => {
+            setShowFinalSubmitConfirm(false);
+            submitApplicationMutation.mutate();
+          }}
+          title="Submit Final Pendaftaran PPDB"
+          description="Kirim formulir pendaftaran ini secara resmi? Setelah disubmit, seluruh data dan berkas akan dikunci untuk verifikasi berkas oleh panitia."
+          confirmLabel="Ya, Kirim Formulir"
+          cancelLabel="Periksa Kembali"
+          variant="primary"
+          isLoading={submitApplicationMutation.isPending}
+        />
       </main>
     </div>
   );

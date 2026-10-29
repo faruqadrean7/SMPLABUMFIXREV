@@ -10,6 +10,7 @@ import {
   TeachingMaterialDetailDialog,
 } from '@/features/academic/teaching-materials';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import {
   TeachingMaterialItem,
   TeachingMaterialType,
@@ -132,7 +133,7 @@ export default function TeachingMaterialsPage() {
         window.open(res.url, '_blank', 'noopener,noreferrer');
       }
     } catch {
-      alert('Gagal mengambil tautan unduhan dokumen.');
+      toast.error('Gagal mengambil tautan unduhan dokumen.');
     } finally {
       setDownloadingId(null);
     }

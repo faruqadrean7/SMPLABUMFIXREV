@@ -9,8 +9,8 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
 class LoginTest extends TestCase
@@ -25,7 +25,7 @@ class LoginTest extends TestCase
     {
         parent::setUp();
 
-        \Illuminate\Support\Facades\Cache::flush();
+        Cache::flush();
 
         // Create basic roles and permissions for portal user
         $this->adminRole = Role::create([

@@ -90,8 +90,8 @@ class FinanceService
                 Notification::create([
                     'user_id' => $student->user->id,
                     'notif_type' => 'finance_invoice',
-                    'title' => 'Tagihan Baru: ' . $invoice->invoice_number,
-                    'body' => "Tagihan sebesar Rp " . number_format($totalAmount, 0, ',', '.') . " telah diterbitkan. Jatuh tempo: {$invoice->due_date->format('Y-m-d')}.",
+                    'title' => 'Tagihan Baru: '.$invoice->invoice_number,
+                    'body' => 'Tagihan sebesar Rp '.number_format($totalAmount, 0, ',', '.')." telah diterbitkan. Jatuh tempo: {$invoice->due_date->format('Y-m-d')}.",
                     'data' => [
                         'invoice_id' => $invoice->id,
                         'invoice_number' => $invoice->invoice_number,
@@ -105,8 +105,8 @@ class FinanceService
                     Notification::create([
                         'user_id' => $guardian->user->id,
                         'notif_type' => 'finance_invoice',
-                        'title' => 'Tagihan Baru untuk ' . $student->full_name,
-                        'body' => "Tagihan sebesar Rp " . number_format($totalAmount, 0, ',', '.') . " untuk {$student->full_name} telah diterbitkan. Jatuh tempo: {$invoice->due_date->format('Y-m-d')}.",
+                        'title' => 'Tagihan Baru untuk '.$student->full_name,
+                        'body' => 'Tagihan sebesar Rp '.number_format($totalAmount, 0, ',', '.')." untuk {$student->full_name} telah diterbitkan. Jatuh tempo: {$invoice->due_date->format('Y-m-d')}.",
                         'data' => [
                             'invoice_id' => $invoice->id,
                             'invoice_number' => $invoice->invoice_number,
@@ -135,7 +135,7 @@ class FinanceService
         $oldStatus = $invoice->status;
         $invoice->update([
             'status' => 'dibatalkan',
-            'notes' => trim(($invoice->notes ?? '') . " [Dibatalkan oleh {$actor->name}: {$reason}]"),
+            'notes' => trim(($invoice->notes ?? '')." [Dibatalkan oleh {$actor->name}: {$reason}]"),
         ]);
 
         $this->auditLogService->record(
@@ -173,7 +173,7 @@ class FinanceService
         if ($amount > $remaining) {
             throw ValidationException::withMessages([
                 'amount' => [
-                    "Jumlah pembayaran (Rp " . number_format($amount, 0, ',', '.') . ") melebihi sisa tagihan (Rp " . number_format($remaining, 0, ',', '.') . ")."
+                    'Jumlah pembayaran (Rp '.number_format($amount, 0, ',', '.').') melebihi sisa tagihan (Rp '.number_format($remaining, 0, ',', '.').').',
                 ],
             ]);
         }
@@ -406,7 +406,7 @@ class FinanceService
                     'user_id' => $payment->submittedBy->id,
                     'notif_type' => 'finance_payment',
                     'title' => "Pembayaran Ditolak: Tagihan {$payment->invoice?->invoice_number}",
-                    'body' => "Pengajuan pembayaran sebesar Rp " . number_format($payment->amount, 0, ',', '.') . " ditolak oleh bendahara. Alasan: {$reason}",
+                    'body' => 'Pengajuan pembayaran sebesar Rp '.number_format($payment->amount, 0, ',', '.')." ditolak oleh bendahara. Alasan: {$reason}",
                     'data' => [
                         'payment_id' => $payment->id,
                         'invoice_id' => $payment->invoice_id,

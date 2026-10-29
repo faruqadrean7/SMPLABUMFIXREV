@@ -5,6 +5,7 @@ namespace App\Traits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 trait ApiResponse
 {
@@ -71,5 +72,25 @@ trait ApiResponse
     protected function notFoundResponse(string $message = 'Data tidak ditemukan.'): JsonResponse
     {
         return $this->errorResponse($message, 'NOT_FOUND', 404);
+    }
+
+    /**
+     * BE-01: Seragamkan penanganan HttpException ke status & error code kanonis
+     * Memastikan 401, 403, 404, 422 tidak tersamarkan menjadi 500 INTERNAL_ERROR.
+     */
+    protected function handleHttpException(HttpExceptionInterface $e): JsonResponse
+    {
+        $status = $e->getStatusCode();
+        $code = $e->getHeaders()['X-Error-Code'] ?? match ($status) {
+            400 => 'BAD_REQUEST',
+            401 => 'UNAUTHENTICATED',
+            403 => 'FORBIDDEN',
+            404 => 'NOT_FOUND',
+            409 => 'CONFLICT',
+            422 => 'UNPROCESSABLE_ENTITY',
+            default => $status >= 500 ? 'INTERNAL_ERROR' : 'HTTP_ERROR',
+        };
+
+        return $this->errorResponse($e->getMessage() ?: 'Terjadi kesalahan permintaan.', $code, $status);
     }
 }

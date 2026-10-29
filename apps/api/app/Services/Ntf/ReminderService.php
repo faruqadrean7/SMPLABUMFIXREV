@@ -396,6 +396,7 @@ class ReminderService
 
         if ($exists) {
             Log::debug("Skipping duplicate reminder: {$eventType}/{$eventId}/{$recipientId}/{$milestone}");
+
             return null;
         }
 

@@ -51,6 +51,7 @@ export default function LiveCbtMonitorPage() {
   const [actionType, setActionType] = useState<'unlock' | 'force_submit' | 'extra_time' | 'reset' | null>(null);
   const [extraMinutes, setExtraMinutes] = useState<number>(15);
   const [actionReason, setActionReason] = useState<string>('');
+  const [isSubmittingAction, setIsSubmittingAction] = useState<boolean>(false);
 
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -114,6 +115,7 @@ export default function LiveCbtMonitorPage() {
   const handleProctorAction = async () => {
     if (!activeSession || !actionType) return;
 
+    setIsSubmittingAction(true);
     try {
       await cbtApi.manageSession(
         activeSession.session_id,
@@ -130,6 +132,8 @@ export default function LiveCbtMonitorPage() {
       fetchMonitor(selectedExamId);
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menjalankan aksi proctor.' });
+    } finally {
+      setIsSubmittingAction(false);
     }
   };
 
@@ -511,10 +515,11 @@ export default function LiveCbtMonitorPage() {
               </Button>
               <Button
                 size="sm"
+                disabled={isSubmittingAction}
                 onClick={handleProctorAction}
                 className="bg-blue-600 hover:bg-blue-500 text-white text-xs"
               >
-                Terapkan Aksi
+                {isSubmittingAction ? 'Menerapkan...' : 'Terapkan Aksi'}
               </Button>
             </div>
           </div>

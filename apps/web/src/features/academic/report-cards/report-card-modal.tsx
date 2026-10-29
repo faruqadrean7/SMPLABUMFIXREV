@@ -10,6 +10,7 @@ import {
 } from '@/types/academic';
 import { academicApi } from '../academic-api';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/toast';
 import {
   Award,
   CheckCircle2,
@@ -154,7 +155,7 @@ export function ReportCardModal({
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err: any) {
-      alert('Gagal mengunduh berkas PDF e-rapor semester.');
+      toast.error('Gagal mengunduh berkas PDF e-rapor semester.');
     } finally {
       setIsDownloadingPdf(false);
     }

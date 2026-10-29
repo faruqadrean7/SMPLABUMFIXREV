@@ -22,6 +22,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/rbac/evaluator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/toast';
 import {
   UserCheck,
   Calendar,
@@ -347,7 +348,7 @@ export default function AcademicAttendancePage() {
                 if (journals.length > 0) {
                   handleOpenAttendanceForm(journals[0]);
                 } else {
-                  alert('Belum ada sesi jurnal KBM yang tersedia untuk diinput presensi.');
+                  toast.warning('Belum ada sesi jurnal KBM yang tersedia untuk diinput presensi.');
                 }
               }}
               className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-9"

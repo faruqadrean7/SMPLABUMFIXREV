@@ -16,6 +16,8 @@ import { academicApi } from '@/features/academic/academic-api';
 import { academicYearsApi } from '@/features/master/academic-years-api';
 import { classesApi } from '@/features/master/classes-api';
 import { ProgressReportModal } from '@/features/academic/progress-reports';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -77,6 +79,17 @@ export default function ProgressReportsAdminPage() {
   // Mass Actions Execution
   const [isProcessingMassAction, setIsProcessingMassAction] =
     useState<boolean>(false);
+  const [massConfirm, setMassConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: async () => {},
+  });
   const [massActionFeedback, setMassActionFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -177,40 +190,37 @@ export default function ProgressReportsAdminPage() {
   }, [fetchClassStatus]);
 
   // Handle Mass Actions
-  const handleGenerateClassReports = async () => {
+  const handleGenerateClassReports = () => {
     if (!selectedClassId || !selectedPeriodId) return;
-    const confirmGen = window.confirm(
-      'Generate E-Progress Report bulanan untuk seluruh siswa di kelas ini yang belum berstatus disetujui/terbit?'
-    );
-    if (!confirmGen) return;
-
-    setIsProcessingMassAction(true);
-    setMassActionFeedback(null);
-    try {
-      await academicApi.generateProgressReports({
-        class_id: selectedClassId,
-        period_id: selectedPeriodId,
-        status: 'menunggu_acc',
-      });
-      setMassActionFeedback({
-        type: 'success',
-        message:
-          'Berhasil mengompilasi dan mengenerate snapshot E-Progress Report untuk seluruh siswa kelas!',
-      });
-      fetchClassStatus();
-    } catch (err: any) {
-      setMassActionFeedback({
-        type: 'error',
-        message:
-          err.response?.data?.message ||
-          'Gagal men-generate rapor massal kelas. Periksa kelengkapan nilai.',
-      });
-    } finally {
-      setIsProcessingMassAction(false);
-    }
+    setMassConfirm({
+      isOpen: true,
+      title: 'Generate E-Progress Report Massal',
+      description: 'Generate E-Progress Report bulanan untuk seluruh siswa di kelas ini yang belum berstatus disetujui/terbit?',
+      onConfirm: async () => {
+        setIsProcessingMassAction(true);
+        setMassActionFeedback(null);
+        try {
+          await academicApi.generateProgressReports({
+            class_id: selectedClassId,
+            period_id: selectedPeriodId,
+            status: 'menunggu_acc',
+          });
+          const successMsg = 'Berhasil mengompilasi dan mengenerate snapshot E-Progress Report untuk seluruh siswa kelas!';
+          setMassActionFeedback({ type: 'success', message: successMsg });
+          toast.success(successMsg);
+          fetchClassStatus();
+        } catch (err: any) {
+          const errMsg = err.response?.data?.message || 'Gagal men-generate rapor massal kelas. Periksa kelengkapan nilai.';
+          setMassActionFeedback({ type: 'error', message: errMsg });
+          toast.error(errMsg);
+        } finally {
+          setIsProcessingMassAction(false);
+        }
+      },
+    });
   };
 
-  const handleBulkApprove = async (
+  const handleBulkApprove = (
     targetStatus: 'disetujui' | 'terbit' | 'draft' | 'menunggu_acc'
   ) => {
     if (!selectedClassId || !selectedPeriodId) return;
@@ -223,32 +233,32 @@ export default function ProgressReportsAdminPage() {
         ? 'Mengajukan seluruh draf ke antrean ACC Kepala Sekolah'
         : 'Mengembalikan seluruh rapor kelas ke draf';
 
-    const confirmApprove = window.confirm(`Apakah Anda yakin ingin ${actionLabel}?`);
-    if (!confirmApprove) return;
-
-    setIsProcessingMassAction(true);
-    setMassActionFeedback(null);
-    try {
-      const res = await academicApi.bulkApproveProgressReports({
-        class_id: selectedClassId,
-        period_id: selectedPeriodId,
-        status: targetStatus,
-      });
-      setMassActionFeedback({
-        type: 'success',
-        message: `Berhasil memproses ${res.count} rapor ke status ${PROGRESS_REPORT_STATUS_LABELS[targetStatus]}.`,
-      });
-      fetchClassStatus();
-    } catch (err: any) {
-      setMassActionFeedback({
-        type: 'error',
-        message:
-          err.response?.data?.message ||
-          'Gagal memproses persetujuan massal. Pastikan akun memiliki wewenang Kepala Sekolah / Admin.',
-      });
-    } finally {
-      setIsProcessingMassAction(false);
-    }
+    setMassConfirm({
+      isOpen: true,
+      title: 'Konfirmasi Aksi Massal E-Progress Report',
+      description: `Apakah Anda yakin ingin ${actionLabel}?`,
+      onConfirm: async () => {
+        setIsProcessingMassAction(true);
+        setMassActionFeedback(null);
+        try {
+          const res = await academicApi.bulkApproveProgressReports({
+            class_id: selectedClassId,
+            period_id: selectedPeriodId,
+            status: targetStatus,
+          });
+          const successMsg = `Berhasil memproses ${res.count} rapor ke status ${PROGRESS_REPORT_STATUS_LABELS[targetStatus]}.`;
+          setMassActionFeedback({ type: 'success', message: successMsg });
+          toast.success(successMsg);
+          fetchClassStatus();
+        } catch (err: any) {
+          const errMsg = err.response?.data?.message || 'Gagal memproses persetujuan massal. Pastikan akun memiliki wewenang Kepala Sekolah / Admin.';
+          setMassActionFeedback({ type: 'error', message: errMsg });
+          toast.error(errMsg);
+        } finally {
+          setIsProcessingMassAction(false);
+        }
+      },
+    });
   };
 
   // Handle Single Student Preview / Detail
@@ -261,7 +271,7 @@ export default function ProgressReportsAdminPage() {
         setPreviewSnapshotForModal(null);
         setIsModalOpen(true);
       } catch (err) {
-        alert('Gagal memuat detail e-progress report siswa.');
+        toast.error('Gagal memuat detail e-progress report siswa.');
       }
     } else {
       // Load preview on-the-fly
@@ -276,7 +286,7 @@ export default function ProgressReportsAdminPage() {
         setPreviewSnapshotForModal(preview);
         setIsModalOpen(true);
       } catch (err: any) {
-        alert(
+        toast.error(
           err.response?.data?.message ||
             'Gagal menghasilkan pratinjau rapor siswa. Pastikan siswa memiliki data nilai/karakter.'
         );
@@ -294,9 +304,10 @@ export default function ProgressReportsAdminPage() {
         period_id: selectedPeriodId,
         status: 'menunggu_acc',
       });
+      toast.success('E-Progress report siswa berhasil di-generate.');
       fetchClassStatus();
     } catch (err: any) {
-      alert(
+      toast.error(
         err.response?.data?.message ||
           'Gagal men-generate e-progress report siswa.'
       );
@@ -866,6 +877,22 @@ export default function ProgressReportsAdminPage() {
             setIsModalOpen(false);
           }
         }}
+      />
+
+      {/* Dialog Konfirmasi Aksi Massal */}
+      <ConfirmDialog
+        isOpen={massConfirm.isOpen}
+        onClose={() => setMassConfirm((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={async () => {
+          await massConfirm.onConfirm();
+          setMassConfirm((prev) => ({ ...prev, isOpen: false }));
+        }}
+        title={massConfirm.title}
+        description={massConfirm.description}
+        confirmLabel="Ya, Lanjutkan"
+        cancelLabel="Batal"
+        variant="primary"
+        isLoading={isProcessingMassAction}
       />
     </div>
   );

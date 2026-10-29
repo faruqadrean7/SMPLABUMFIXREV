@@ -8,6 +8,7 @@ import {
 } from '@/types/academic';
 import { academicApi } from '../academic-api';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/toast';
 import {
   X,
   BookOpen,
@@ -67,7 +68,7 @@ export function TeachingMaterialDetailDialog({
         window.open(res.url, '_blank', 'noopener,noreferrer');
       }
     } catch {
-      alert('Gagal mengambil tautan unduhan dokumen.');
+      toast.error('Gagal mengambil tautan unduhan dokumen.');
     } finally {
       setDownloadingId(null);
     }

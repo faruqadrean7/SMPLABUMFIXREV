@@ -22,6 +22,8 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { financeApi, formatRupiah } from '@/features/finance/finance-api';
 import { FeeType, FeeCategory } from '@/types/finance';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 
 export default function FeeTypesPage() {
   const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
@@ -33,6 +35,8 @@ export default function FeeTypesPage() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<FeeType | null>(null);
+  const [feeTypeToDelete, setFeeTypeToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingFeeType, setIsDeletingFeeType] = useState(false);
   const [formData, setFormData] = useState<{
     code: string;
     name: string;
@@ -97,13 +101,22 @@ export default function FeeTypesPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Yakin ingin menghapus jenis biaya "${name}"?`)) return;
+  const handleDelete = (id: string, name: string) => {
+    setFeeTypeToDelete({ id, name });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!feeTypeToDelete) return;
+    setIsDeletingFeeType(true);
     try {
-      await financeApi.deleteFeeType(id);
+      await financeApi.deleteFeeType(feeTypeToDelete.id);
+      toast.success(`Jenis biaya "${feeTypeToDelete.name}" berhasil dihapus.`);
+      setFeeTypeToDelete(null);
       await loadData();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal menghapus jenis biaya.');
+      toast.error(err instanceof Error ? err.message : 'Gagal menghapus jenis biaya.');
+    } finally {
+      setIsDeletingFeeType(false);
     }
   };
 
@@ -423,6 +436,20 @@ export default function FeeTypesPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Jenis Biaya */}
+      <ConfirmDialog
+        isOpen={!!feeTypeToDelete}
+        onClose={() => setFeeTypeToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="Hapus Jenis Biaya"
+        description="Apakah Anda yakin ingin menghapus jenis biaya ini? Biaya yang sudah digunakan pada tagihan historis tidak akan terpengaruh."
+        affectedItemName={feeTypeToDelete?.name}
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isDeletingFeeType}
+      />
     </div>
   );
 }

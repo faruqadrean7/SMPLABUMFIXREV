@@ -11,9 +11,9 @@ flowchart LR
     P[Nginx/Caddy + HTTPS + WAF/rate limit]
   end
   subgraph Backend
-    API[NestJS REST API]
+    API[Laravel 11 REST API (apps/api)]
     WS[WebSocket Gateway]
-    WK[Worker BullMQ]
+    WK[Queue Worker (Laravel / Redis)]
   end
   subgraph Data
     DB[(PostgreSQL)]
@@ -43,7 +43,7 @@ flowchart LR
 
 ## 2. Prinsip Arsitektur
 1. **API-first:** semua klien hanya lewat API; tidak ada akses DB langsung dari klien.
-2. **Modular monolith:** satu deployable NestJS dengan modul terpisah rapi; boleh dipecah jadi service belakangan (misal CBT).
+2. **Modular monolith:** satu deployable backend modular (Laravel 11 `apps/api` dengan isolasi modul di `routes/api/*.php` dan controller sub-domain terfokus); siap diskalakan horizontal atau dipecah menjadi microservices di masa mendatang.
 3. **Stateless API:** sesi di token dan Redis, siap horizontal scaling.
 4. **Async untuk pekerjaan berat:** PDF, import, notifikasi massal, analisis soal → queue.
 5. **Kontrak tunggal:** OpenAPI dihasilkan dari kode, klien TS/Dart digenerate.
@@ -153,4 +153,5 @@ Aturan: migrasi DB dijalankan sebelum rilis aplikasi, kompatibel mundur satu ver
 Tabel utama memiliki `school_id`. Pada v1 nilainya tunggal; query selalu memfilter lewat konteks tenant sehingga bisa dikembangkan ke multi-sekolah tanpa refactor besar.
 
 ## Changelog
+- 1.1 (2026-10-27): Sinkronisasi arsitektur backend ke Laravel 11 (`apps/api`) modular monolith sesuai implementasi aktual repositori (Fase 5 GOV-01).
 - 1.0: Draf awal.

@@ -23,7 +23,7 @@ class InvoiceItemFactory extends Factory
             'id' => (string) Str::uuid(),
             'invoice_id' => Invoice::factory(),
             'fee_type_id' => FeeType::factory(),
-            'description' => 'Pembayaran ' . fake()->words(2, true),
+            'description' => 'Pembayaran '.fake()->words(2, true),
             'amount' => $amount,
             'discount' => 0,
         ];

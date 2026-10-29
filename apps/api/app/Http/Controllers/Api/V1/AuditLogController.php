@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Audit\StoreAuditTelemetryRequest;
 use App\Services\AuditLogService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -50,14 +51,15 @@ class AuditLogController extends Controller
     }
 
     /**
-     * GAP-06: Store client UI telemetry only.
-     * Rejects sensitive actions directly submitted from the client.
+     * GAP-06 & SEC-02: Store client UI telemetry with strict validation & throttling.
+     * Rejects sensitive actions directly submitted from the client, tags source=client.
      * POST /api/v1/audit-logs
      */
-    public function storeTelemetry(Request $request): JsonResponse
+    public function storeTelemetry(StoreAuditTelemetryRequest $request): JsonResponse
     {
-        $action = strtolower(trim((string) $request->input('action')));
-        $entity = strtolower(trim((string) $request->input('entity')));
+        $validated = $request->validated();
+        $action = strtolower(trim((string) ($validated['action'] ?? $request->input('action'))));
+        $entity = strtolower(trim((string) ($validated['entity'] ?? $request->input('entity'))));
 
         // Aksi bisnis sensitif yang wajib dilakukan lewat endpoint bisnis server:
         // 1. Ubah nilai
@@ -99,12 +101,17 @@ class AuditLogController extends Controller
         }
 
         try {
+            $newValues = array_merge(
+                (array) ($request->input('new_values') ?? []),
+                ['source' => 'client']
+            );
+
             $audit = $this->auditLogService->record(
                 action: (string) $request->input('action', 'ui.telemetry'),
                 entity: (string) ($request->input('entity') ?? 'ClientTelemetry'),
                 entityId: $request->input('entity_id'),
                 oldValues: $request->input('old_values'),
-                newValues: $request->input('new_values'),
+                newValues: $newValues,
                 reason: $request->input('reason'),
                 request: $request,
                 isAuthoritative: false
@@ -112,6 +119,7 @@ class AuditLogController extends Controller
 
             return $this->successResponse([
                 'id' => $audit->id,
+                'source' => 'client',
                 'is_authoritative' => false,
                 'message' => 'Telemetri berhasil dicatat',
             ], 200);

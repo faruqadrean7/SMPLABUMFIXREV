@@ -25,6 +25,8 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { financeApi } from '@/features/finance/finance-api';
 import { PaymentProviderSetting } from '@/types/finance';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 
 export default function FinanceSettingsPage() {
   const [providers, setProviders] = useState<PaymentProviderSetting[]>([]);
@@ -35,6 +37,8 @@ export default function FinanceSettingsPage() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PaymentProviderSetting | null>(null);
+  const [providerToDelete, setProviderToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingProvider, setIsDeletingProvider] = useState(false);
   const [formData, setFormData] = useState<{
     name: string;
     instructions: string;
@@ -91,13 +95,22 @@ export default function FinanceSettingsPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Yakin ingin menghapus konfigurasi "${name}"?`)) return;
+  const handleDelete = (id: string, name: string) => {
+    setProviderToDelete({ id, name });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!providerToDelete) return;
+    setIsDeletingProvider(true);
     try {
-      await financeApi.deletePaymentProvider(id);
+      await financeApi.deletePaymentProvider(providerToDelete.id);
+      toast.success(`Kanal pembayaran "${providerToDelete.name}" berhasil dihapus.`);
+      setProviderToDelete(null);
       await loadData();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal menghapus penyedia pembayaran.');
+      toast.error(err instanceof Error ? err.message : 'Gagal menghapus penyedia pembayaran.');
+    } finally {
+      setIsDeletingProvider(false);
     }
   };
 
@@ -352,6 +365,20 @@ export default function FinanceSettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Dialog Konfirmasi Hapus Payment Provider */}
+      <ConfirmDialog
+        isOpen={!!providerToDelete}
+        onClose={() => setProviderToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="Hapus Penyedia Pembayaran"
+        description="Apakah Anda yakin ingin menghapus konfigurasi penyedia pembayaran ini?"
+        affectedItemName={providerToDelete?.name}
+        confirmLabel="Ya, Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={isDeletingProvider}
+      />
     </div>
   );
 }

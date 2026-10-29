@@ -35,6 +35,8 @@ class TeacherController extends Controller
             $teachers = $this->teacherStaffService->listTeachers($request);
 
             return $this->paginatedResponse($teachers);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 

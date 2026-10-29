@@ -30,6 +30,8 @@ class GradeController extends Controller
             $paginator = $this->service->listGrades($request->all(), $request);
 
             return $this->paginatedResponse($paginator);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
