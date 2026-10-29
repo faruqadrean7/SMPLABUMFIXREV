@@ -226,7 +226,7 @@ export default function ChildDetailPage() {
                 </div>
                 <div className="divide-y divide-slate-100">
                   {attendance?.history.map((rec, i) => (
-                    <div key={i} className="p-4 flex items-center justify-between text-xs">
+                    <div key={`${rec.date}-${i}`} className="p-4 flex items-center justify-between text-xs">
                       <div>
                         <span className="font-bold text-slate-900">{rec.date}</span>
                         {rec.checkInTime && (

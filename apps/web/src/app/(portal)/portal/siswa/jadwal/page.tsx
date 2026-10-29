@@ -846,7 +846,7 @@ export default function StudentJadwalPage() {
                 <div className="space-y-2">
                   {group.events.map((evt, idx) => (
                     <div
-                      key={idx}
+                      key={`${evt.date}-${evt.title}-${idx}`}
                       className={`p-3 px-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs ${
                         evt.isUrgent 
                           ? 'bg-rose-50/40 border-rose-200' 
