@@ -103,26 +103,69 @@ export default function HomePage() {
           ========================================================================= */}
       <section
         aria-labelledby="hero-heading"
-        className="relative bg-white overflow-hidden border-b border-gray-100"
+        className="relative min-h-[600px] lg:min-h-[660px] flex items-center py-20 overflow-hidden bg-pub-navy-deep text-white"
       >
-        <div className="relative w-full min-h-0 lg:min-h-[580px] flex flex-col lg:flex-row lg:items-center">
-          {/* Layer Foto Siswa di Kanan - Tampil Hanya Pada Layar Desktop (lg:) */}
-          <div className="hidden lg:block absolute inset-y-0 right-0 w-[58%] xl:w-[55%] overflow-hidden pointer-events-none select-none">
-            <div className="relative w-full h-full">
-              <Image
-                src="/images/hero-academic.jpg"
-                alt="Siswa SMP Laboratorium UM dalam kegiatan riset pembelajaran di laboratorium"
-                fill
-                priority
-                unoptimized
-                sizes="55vw"
-                className="object-cover object-[58%_center]"
-              />
-              {/* Gradasi Transparan Halus dari Kiri ke Kanan: Kiri putih membaur dengan latar teks */}
-              <div
-                className="absolute inset-0 bg-gradient-to-r from-white via-white/85 via-15% lg:via-25% to-transparent to-55% lg:to-65%"
-                aria-hidden="true"
-              />
+        {/* Background Poster & Video Overlay */}
+        <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden z-0 bg-pub-navy-deep">
+          <div
+            className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+            style={{ backgroundImage: `url('${HERO_CONTENT.videoThumbnail}')` }}
+          />
+          <iframe
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100vw] h-[56.25vw] min-h-screen min-w-[177.77vh] pointer-events-none border-0 opacity-100"
+            src={HERO_CONTENT.youtubeEmbedUrl}
+            title="Video Profil SMP Laboratorium"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            loading="eager"
+          />
+          <div className="absolute inset-0 z-10 bg-gradient-to-r from-pub-navy-deep/90 via-pub-navy-deep/60 to-black/40 pointer-events-none" />
+          <div className="absolute inset-0 z-10 bg-black/20 pointer-events-none" />
+        </div>
+
+        <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+          <div className="max-w-3xl space-y-6">
+            {/* Badges Afiliasi & Akreditasi */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="inline-flex items-center gap-1.5 bg-pub-gold text-pub-navy-deep font-extrabold text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider shadow-sm">
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                {tagline}
+              </span>
+              <span className="bg-white/15 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full border border-white/20">
+                {HERO_CONTENT.badgeAffiliation}
+              </span>
+              <span className="bg-pub-green/80 text-white text-xs font-semibold px-3 py-1.5 rounded-full border border-pub-green/40">
+                {accreditationBadge}
+              </span>
+            </div>
+
+            {/* Headline Utama */}
+            <h1
+              id="hero-heading"
+              className="font-pub-heading text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight text-white drop-shadow-md tracking-tight"
+            >
+              Mewujudkan Generasi <span className="text-pub-gold">Beriman, Berkarakter</span>, Berprestasi, dan Berbudaya
+            </h1>
+
+            {/* Deskripsi Singkat */}
+            <p className="text-base sm:text-lg text-white/90 leading-relaxed max-w-2xl drop-shadow">
+              {HERO_CONTENT.description}
+            </p>
+
+            {/* Tombol Call to Action */}
+            <div className="pt-2 flex flex-wrap items-center gap-3.5">
+              <Link
+                href={HERO_CONTENT.ctaPrimary.href}
+                className="bg-pub-gold hover:bg-pub-gold-hover text-pub-navy-deep font-bold text-sm sm:text-base px-6 py-3.5 rounded-[10px] shadow-lg hover:shadow-xl transition-all inline-flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-pub-gold focus:ring-offset-2 focus:ring-offset-pub-navy"
+              >
+                <span>{HERO_CONTENT.ctaPrimary.label}</span>
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </Link>
+              <Link
+                href={HERO_CONTENT.ctaSecondary.href}
+                className="bg-transparent hover:bg-white/15 text-white border border-white/50 hover:border-white font-semibold text-sm sm:text-base px-6 py-3.5 rounded-[10px] transition-all backdrop-blur-sm inline-flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-pub-gold focus:ring-offset-2 focus:ring-offset-pub-navy"
+              >
+                <span>{HERO_CONTENT.ctaSecondary.label}</span>
+              </Link>
             </div>
           </div>
 

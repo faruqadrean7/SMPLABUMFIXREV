@@ -28,18 +28,21 @@ export const HERO_CONTENT = {
   badgeSchool: 'SMP Laboratorium',
   badgeAffiliation: 'P2LP Universitas Negeri Malang',
   tagline: 'Beradab, Kreatif, Berprestasi',
-  heading: 'Membina Generasi Unggul, Berkarakter, dan Berwawasan Global',
+  heading: 'Mewujudkan Generasi Beriman, Berkarakter, Berprestasi, dan Berbudaya',
   description:
-    'Sekolah laboratorium model riset inovasi pembelajaran di Kota Malang. Menyelenggarakan pendidikan bermutu, ramah anak, dan berorientasi pada pengembangan potensi holistik setiap peserta didik.',
+    'SMP Laboratorium menyelenggarakan modul pembelajaran inovatif, Lesson Study, dan wawasan global di bawah naungan P2LP Universitas Negeri Malang untuk melahirkan lulusan unggul.',
   ctaPrimary: {
-    label: 'Pendaftaran PPDB 2026/2027',
+    label: 'Pendaftaran SPMB 2026/2027',
     href: '/ppdb',
   },
   ctaSecondary: {
-    label: 'Kenali Profil Sekolah',
+    label: 'Kenali Sekolah Kami',
     href: '/profil',
   },
   accreditationBadge: 'Terakreditasi A (Unggul)',
+  videoThumbnail: 'https://img.youtube.com/vi/BxQztnwi_74/maxresdefault.jpg',
+  youtubeEmbedUrl:
+    'https://www.youtube-nocookie.com/embed/BxQztnwi_74?autoplay=1&mute=1&loop=1&playlist=BxQztnwi_74&controls=0&showinfo=0&rel=0&iv_load_policy=3&disablekb=1&modestbranding=1&playsinline=1',
 };
 
 export const PROFILE_SUMMARY = {

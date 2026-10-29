@@ -48,8 +48,8 @@ describe('Public HomePage Tests (WEB-HOME-01)', () => {
 
     renderWithClient(<HomePage />);
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/membina generasi/i);
-    expect(screen.getByText(/p2lp universitas negeri malang/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/(membina|mewujudkan) generasi/i);
+    expect(screen.getAllByText(/p2lp universitas negeri malang/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/terakreditasi a \(unggul\)/i)).toBeInTheDocument();
   });
 
@@ -59,10 +59,10 @@ describe('Public HomePage Tests (WEB-HOME-01)', () => {
 
     renderWithClient(<HomePage />);
 
-    const ppdbBtn = screen.getByRole('link', { name: /pendaftaran ppdb 2026\/2027/i });
+    const ppdbBtn = screen.getByRole('link', { name: /pendaftaran (ppdb|spmb) 2026\/2027/i });
     expect(ppdbBtn).toHaveAttribute('href', '/ppdb');
 
-    const profilBtn = screen.getByRole('link', { name: /kenali profil sekolah/i });
+    const profilBtn = screen.getByRole('link', { name: /kenali (profil sekolah|sekolah kami)/i });
     expect(profilBtn).toHaveAttribute('href', '/profil');
   });
 

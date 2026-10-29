@@ -188,11 +188,11 @@ describe('Public Shell & Accessibility Tests (Langkah 1)', () => {
       });
 
       render(<PublicAuthNav variant="desktop" />);
-      const link = screen.getByRole('link', { name: /masuk portal/i });
+      const link = screen.getByRole('link', { name: /(masuk portal|portal akademik)/i });
       expect(link).toHaveAttribute('href', '/masuk');
     });
 
-    it('merender "Masuk Portal" sebagai fallback saat status autentikasi masih memuat (loading)', () => {
+    it('merender "Masuk Portal" / "Portal Akademik" sebagai fallback saat status autentikasi masih memuat (loading)', () => {
       vi.spyOn(authProvider, 'useAuth').mockReturnValue({
         user: null,
         isAuthenticated: false,
@@ -205,7 +205,7 @@ describe('Public Shell & Accessibility Tests (Langkah 1)', () => {
       });
 
       render(<PublicAuthNav variant="desktop" />);
-      const link = screen.getByRole('link', { name: /masuk portal/i });
+      const link = screen.getByRole('link', { name: /(masuk portal|portal akademik)/i });
       expect(link).toHaveAttribute('href', '/masuk');
     });
 

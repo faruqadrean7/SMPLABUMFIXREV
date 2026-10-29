@@ -26,7 +26,7 @@ export function PublicAuthNav({ variant = 'desktop', onNavigate }: PublicAuthNav
       ? getDestinationPath(resolveUserDestination((user.roles as string[]) || []))
       : '/masuk';
 
-  const label = !isLoading && isAuthenticated ? 'Buka Portal Saya' : 'Masuk Portal';
+  const label = !isLoading && isAuthenticated ? 'Buka Portal Saya' : 'Portal Akademik';
 
   if (variant === 'mobile') {
     return (

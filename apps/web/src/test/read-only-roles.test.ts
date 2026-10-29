@@ -233,26 +233,38 @@ describe('FASE 5: Read-Only Roles (Committee & Supervisor)', () => {
 
     it('allows auth endpoints (e.g. /auth/logout) even for read-only user', async () => {
       tokenStorage.setUser(committeeUser);
+      const originalAdapter = apiClient.defaults.adapter;
+      apiClient.defaults.adapter = async () => ({
+        data: { success: true },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
 
-      // Interceptor should not reject auth whitelisted paths with 403
-      // (It will proceed to Axios transport which can fail with network error in test environment, but not 403 FORBIDDEN)
-      try {
-        await apiClient.post('/auth/logout', { refreshToken: 'mock-ref' });
-      } catch (err: any) {
-        expect(err.code).not.toBe('FORBIDDEN');
-      }
+      await expect(
+        apiClient.post('/auth/logout', { refreshToken: 'mock-ref' })
+      ).resolves.toBeDefined();
+
+      apiClient.defaults.adapter = originalAdapter;
     });
 
     it('allows write requests to pass through interceptor for principal or admin user', async () => {
       tokenStorage.setUser(principalUser);
+      const originalAdapter = apiClient.defaults.adapter;
+      apiClient.defaults.adapter = async () => ({
+        data: { success: true },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
 
-      // Principal is not blocked by read-only guard
-      try {
-        await apiClient.post('/academic/attendance', { class_id: '7a' });
-      } catch (err: any) {
-        // Will fail at network/mock level, but NOT with FORBIDDEN 403 from read-only interceptor
-        expect(err.code).not.toBe('FORBIDDEN');
-      }
+      await expect(
+        apiClient.post('/academic/attendance', { class_id: '7a' })
+      ).resolves.toBeDefined();
+
+      apiClient.defaults.adapter = originalAdapter;
     });
   });
 });
