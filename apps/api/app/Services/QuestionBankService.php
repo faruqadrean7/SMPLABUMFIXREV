@@ -165,9 +165,12 @@ class QuestionBankService
 
         if (! empty($filters['search'])) {
             $keyword = '%'.strtolower($filters['search']).'%';
-            $query->where(function ($q) use ($keyword) {
+            $isPgsql = DB::getDriverName() === 'pgsql';
+            $jsonContentExpr = $isPgsql ? "LOWER(body->>'content')" : "LOWER(json_extract(body, '$.content'))";
+
+            $query->where(function ($q) use ($keyword, $jsonContentExpr) {
                 $q->whereRaw('LOWER(cp_code) LIKE ?', [$keyword])
-                    ->orWhereRaw("LOWER(json_extract(body, '$.content')) LIKE ?", [$keyword]);
+                    ->orWhereRaw("{$jsonContentExpr} LIKE ?", [$keyword]);
             });
         }
 

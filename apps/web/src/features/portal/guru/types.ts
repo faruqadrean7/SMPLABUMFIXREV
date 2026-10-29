@@ -199,3 +199,152 @@ export interface TeacherHomeroomData {
     rank: number;
   }>;
 }
+
+export interface TeacherQuestionBankItem {
+  id: string;
+  name: string;
+  subject_id: string;
+  grade_level_id?: string;
+  questions_count?: number;
+  subject?: { id: string; name: string; code: string };
+  gradeLevel?: { id: string; name: string };
+  questions?: Array<{
+    id: string;
+    question_type: string;
+    body: { text?: string; [key: string]: any };
+    cognitive_level?: string;
+    difficulty?: number;
+    weight?: number;
+    options?: any[];
+  }>;
+}
+
+// === GAP REMEDIATION: FITUR A - E TYPES ===
+
+export interface StudentLeaveRequest {
+  id: string;
+  studentId?: string;
+  student_id: string;
+  studentName?: string;
+  leaveType?: 'sakit' | 'izin' | 'dispen';
+  leave_type: 'sakit' | 'izin' | 'dispen';
+  startDate?: string;
+  start_date: string;
+  endDate?: string;
+  end_date: string;
+  reason: string;
+  status: 'menunggu' | 'disetujui' | 'ditolak';
+  decisionNotes?: string;
+  decision_notes?: string;
+  decidedBy?: string;
+  student?: {
+    id: string;
+    full_name: string;
+    nis: string;
+    nisn: string;
+    classes?: Array<{ id: string; name: string }>;
+  };
+}
+
+export interface StudentPointPayload {
+  student_id: string;
+  point_type_id?: string;
+  kind?: 'prestasi' | 'pelanggaran';
+  category?: string;
+  points?: number;
+  date?: string;
+  notes?: string;
+  idempotency_key?: string;
+}
+
+export interface CounselingReferralPayload {
+  student_id: string;
+  reason: string;
+  priority?: 'biasa' | 'segera' | 'normal' | 'tinggi';
+}
+
+export interface FacilityBookingItem {
+  id: string;
+  facility_id: string;
+  facility_name?: string;
+  facility?: { id: string; name: string; code?: string; type?: string } | string;
+  start_at?: string;
+  end_at?: string;
+  start_time?: string;
+  end_time?: string;
+  date?: string;
+  time_slot?: string;
+  purpose: string;
+  status: 'menunggu' | 'disetujui' | 'ditolak' | 'selesai' | 'dibatalkan' | 'approved' | 'rejected';
+  attendees_count?: number;
+  participant_count?: number;
+  decision_notes?: string;
+  notes?: string;
+  requested_by?: string;
+  created_at: string;
+}
+
+export interface FacilityBookingPayload {
+  facility_id: string;
+  start_at?: string;
+  end_at?: string;
+  start_time?: string;
+  end_time?: string;
+  purpose: string;
+  attendees_count?: number;
+  participant_count?: number;
+}
+
+export interface SarprasTicketItem {
+  id: string;
+  ticket_number: string;
+  reporter_id: string;
+  category: string;
+  priority: 'rendah' | 'sedang' | 'tinggi' | 'darurat';
+  subject?: string;
+  title?: string;
+  description: string;
+  location?: string;
+  status: 'terbuka' | 'diproses' | 'selesai' | 'dibatalkan' | 'pending';
+  created_at: string;
+}
+
+export interface SarprasTicketPayload {
+  title?: string;
+  subject?: string;
+  category: string;
+  priority: 'rendah' | 'sedang' | 'tinggi' | 'darurat';
+  description: string;
+  location?: string;
+}
+
+export interface TeacherQuestionItem {
+  id: string;
+  bank_id?: string;
+  subject_id: string;
+  type: string;
+  prompt: string;
+  options?: any;
+  weight?: number;
+  difficulty?: string;
+  created_at: string;
+}
+
+export interface TeacherQuestionPayload {
+  subject_id: string;
+  bank_id?: string;
+  type: string;
+  prompt: string;
+  options?: any;
+  answer_key?: any;
+  weight?: number;
+  difficulty?: string;
+}
+
+export interface TeacherLockGradesPayload {
+  class_id: string;
+  subject_id: string;
+  academic_year_id?: string;
+  semester_id?: string;
+}
+

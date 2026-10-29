@@ -657,13 +657,25 @@ export default function CharacterNotesPage() {
                           {hasNote && Object.keys(row.scale_data).length > 0 ? (
                             <div className="flex flex-wrap gap-1 max-w-md">
                               {CHARACTER_ASPECTS.map((asp) => {
-                                const rating = (row.scale_data[asp.key] as CharacterRating) || 'baik';
-                                const color = CHARACTER_RATING_COLORS[rating];
+                                const rawRating = row.scale_data[asp.key];
+                                const numMap: Record<string | number, CharacterRating> = {
+                                  4: 'sangat_baik',
+                                  3: 'baik',
+                                  2: 'cukup',
+                                  1: 'perlu_bimbingan',
+                                };
+                                const rating: CharacterRating =
+                                  numMap[rawRating] ||
+                                  (typeof rawRating === 'string' && rawRating in CHARACTER_RATING_COLORS
+                                    ? (rawRating as CharacterRating)
+                                    : 'baik');
+                                const color = CHARACTER_RATING_COLORS[rating] || CHARACTER_RATING_COLORS.baik;
+                                const label = CHARACTER_RATING_LABELS[rating] || 'Baik';
 
                                 return (
                                   <span
                                     key={asp.key}
-                                    title={`${asp.name}: ${CHARACTER_RATING_LABELS[rating]}`}
+                                    title={`${asp.name}: ${label}`}
                                     className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${color.badge}`}
                                   >
                                     <span className={`h-1.5 w-1.5 rounded-full ${color.dot}`} />

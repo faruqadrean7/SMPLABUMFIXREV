@@ -64,7 +64,7 @@ export default function TeacherGradesPage() {
   }, [availableClasses, selectedClassId]);
 
   const { data: components = [], isLoading: isLoadingComponents } = useTeacherGradeComponents(selectedClassId, selectedSubjectId);
-  const { data: initialGrades = [], isLoading: isLoadingGrades } = useTeacherStudentGrades(selectedClassId, selectedSubjectId);
+  const { data: initialGrades, isLoading: isLoadingGrades } = useTeacherStudentGrades(selectedClassId, selectedSubjectId);
 
   const [grades, setGrades] = useState<TeacherStudentGrade[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,7 +72,7 @@ export default function TeacherGradesPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initialGrades.length > 0) {
+    if (initialGrades && initialGrades.length > 0) {
       setGrades(initialGrades);
     } else {
       setGrades([]);

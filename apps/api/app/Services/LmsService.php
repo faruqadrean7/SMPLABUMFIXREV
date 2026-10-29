@@ -108,7 +108,7 @@ class LmsService
                 'object_key' => $storagePath,
                 'mime_type' => $uploaded->getMimeType() ?: 'application/octet-stream',
                 'size_bytes' => $uploaded->getSize(),
-                'visibility' => 'publik',
+                'visibility' => 'privat',
                 'checksum' => $checksum,
             ]);
 
@@ -191,7 +191,7 @@ class LmsService
                 'object_key' => $storagePath,
                 'mime_type' => $uploaded->getMimeType() ?: 'application/octet-stream',
                 'size_bytes' => $uploaded->getSize(),
-                'visibility' => 'publik',
+                'visibility' => 'privat',
                 'checksum' => $checksum,
             ]);
 
@@ -358,7 +358,7 @@ class LmsService
                 'object_key' => $storagePath,
                 'mime_type' => $uploaded->getMimeType() ?: 'application/octet-stream',
                 'size_bytes' => $uploaded->getSize(),
-                'visibility' => 'publik',
+                'visibility' => 'privat',
                 'checksum' => $checksum,
             ]);
 
@@ -453,7 +453,7 @@ class LmsService
                 'object_key' => $storagePath,
                 'mime_type' => $uploaded->getMimeType() ?: 'application/octet-stream',
                 'size_bytes' => $uploaded->getSize(),
-                'visibility' => 'publik',
+                'visibility' => 'privat',
                 'checksum' => $checksum,
             ]);
 
@@ -634,12 +634,12 @@ class LmsService
             $submission->file_id = $fileId;
             $combinedNotes = $data['notes'] ?? '';
             if (! empty($data['drive_link'])) {
-                $linkPrefix = '[Tautan Berkas/Drive]: ' . $data['drive_link'];
-                $combinedNotes = $combinedNotes ? ($combinedNotes . "\n" . $linkPrefix) : $linkPrefix;
+                $linkPrefix = '[Tautan Berkas/Drive]: '.$data['drive_link'];
+                $combinedNotes = $combinedNotes ? ($combinedNotes."\n".$linkPrefix) : $linkPrefix;
             }
             if (! empty($data['file_name']) && ! empty($data['drive_link'])) {
-                $namePrefix = '[Nama Berkas]: ' . $data['file_name'];
-                $combinedNotes = $namePrefix . "\n" . $combinedNotes;
+                $namePrefix = '[Nama Berkas]: '.$data['file_name'];
+                $combinedNotes = $namePrefix."\n".$combinedNotes;
             }
             if ($combinedNotes) {
                 $submission->notes = trim($combinedNotes);
@@ -692,15 +692,21 @@ class LmsService
                 $semesterId = $assignment->gradeComponent?->semester_id;
                 if ($semesterId) {
                     $currentMonth = (int) Carbon::now()->format('m');
-                    $period = GradePeriod::firstOrCreate(
-                        [
+                    $period = GradePeriod::where('semester_id', $semesterId)
+                        ->where('month', $currentMonth)
+                        ->first();
+
+                    if (! $period) {
+                        $period = GradePeriod::create([
                             'semester_id' => $semesterId,
                             'month' => $currentMonth,
-                        ],
-                        [
                             'status' => 'open',
-                        ]
-                    );
+                        ]);
+                    }
+
+                    if ($period->status === 'locked') {
+                        throw new HttpException(422, 'Periode penilaian telah dikunci. Penilaian tugas tidak dapat dimasukkan ke buku nilai tanpa pembukaan kunci.');
+                    }
 
                     Grade::updateOrCreate(
                         [

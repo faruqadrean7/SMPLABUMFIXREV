@@ -383,7 +383,10 @@ class PostService
             'author:id,username',
             'coverFile',
         ])->where(function ($query) use ($slugOrId) {
-            $query->where('slug', $slugOrId)->orWhere('id', $slugOrId);
+            $query->where('slug', $slugOrId);
+            if (\Illuminate\Support\Str::isUuid($slugOrId)) {
+                $query->orWhere('id', $slugOrId);
+            }
         })->firstOrFail();
 
         $post->increment('views_count');

@@ -5,6 +5,7 @@ namespace App\Services\Ntf;
 use App\Models\AuditLog;
 use App\Models\Device;
 use App\Models\Notification;
+use App\Models\NotificationPreference;
 use App\Models\Student;
 use App\Models\User;
 use Carbon\Carbon;
@@ -165,11 +166,11 @@ class NotificationService
         $jsonData = $customData ? json_encode($customData) : null;
 
         // GAP-11: Filter out recipients who disabled this notification type or push channel
-        $disabledUserIds = \App\Models\NotificationPreference::whereIn('user_id', $userIds)
+        $disabledUserIds = NotificationPreference::whereIn('user_id', $userIds)
             ->where('notif_type', $notifType)
             ->where(function ($q) {
                 $q->where('is_enabled', false)
-                  ->orWhere('channel_push', false);
+                    ->orWhere('channel_push', false);
             })
             ->pluck('user_id');
 

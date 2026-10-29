@@ -40,5 +40,3 @@ Schedule::command('bk:evaluate-early-warnings')->dailyAt('23:30')->withoutOverla
 Schedule::command('reminder:dispatch --type=all')->everyFifteenMinutes()->withoutOverlapping(10);
 Schedule::command('reminder:dispatch --type=att')->timezone('Asia/Jakarta')->dailyAt('10:00')->withoutOverlapping(10);
 Schedule::command('reminder:dispatch --recover-stuck')->hourly()->withoutOverlapping(10);
-
-

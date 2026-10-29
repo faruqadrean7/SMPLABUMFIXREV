@@ -11,6 +11,37 @@ class UpdateQuestionRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        if ($this->has('stem') && ! $this->has('body.content')) {
+            $currentBody = $this->input('body', []);
+            if (! is_array($currentBody)) {
+                $currentBody = [];
+            }
+            $currentBody['content'] = (string) $this->input('stem');
+            $currentBody['text'] = (string) $this->input('stem');
+            $merge['body'] = $currentBody;
+        }
+
+        if ($this->has('options') && is_array($this->input('options'))) {
+            $options = $this->input('options');
+            foreach ($options as $k => $opt) {
+                if (isset($opt['text']) && ! isset($opt['body'])) {
+                    $options[$k]['body'] = [
+                        'text' => $opt['text'],
+                        'content' => $opt['text'],
+                    ];
+                }
+            }
+            $merge['options'] = $options;
+        }
+
+        if (! empty($merge)) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
         return [

@@ -3,6 +3,9 @@
 namespace App\Http\Requests\Academic;
 
 use App\Http\Requests\BaseApiRequest;
+use App\Models\Grade;
+use App\Services\GradeService;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class StoreGradeRequest extends BaseApiRequest
 {
@@ -16,8 +19,8 @@ class StoreGradeRequest extends BaseApiRequest
         $componentId = $this->input('component_id');
         if ($componentId) {
             try {
-                app(\App\Services\GradeService::class)->checkGradeEntryAuthorization($user, $componentId);
-            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                app(GradeService::class)->checkGradeEntryAuthorization($user, $componentId);
+            } catch (HttpException $e) {
                 return false;
             }
         }
@@ -46,7 +49,7 @@ class StoreGradeRequest extends BaseApiRequest
             $reason = $this->input('reason');
 
             if ($studentId && $componentId && $periodId && $newValue !== null) {
-                $existing = \App\Models\Grade::where('student_id', $studentId)
+                $existing = Grade::where('student_id', $studentId)
                     ->where('component_id', $componentId)
                     ->where('period_id', $periodId)
                     ->first();
@@ -57,7 +60,6 @@ class StoreGradeRequest extends BaseApiRequest
             }
         });
     }
-
 
     public function messages(): array
     {

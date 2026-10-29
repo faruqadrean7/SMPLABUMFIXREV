@@ -220,7 +220,7 @@ class LeaveRequestTest extends TestCase
     public function test_be_acd_04_guardian_can_submit_leave_with_attachment_file_upload(): void
     {
         $token = $this->guardianUser->createToken('test')->plainTextToken;
-        $fakeFile = UploadedFile::fake()->image('surat_dokter.jpg', 600, 800);
+        $fakeFile = UploadedFile::fake()->create('surat_dokter.jpg', 100, 'image/jpeg');
 
         $startDate = Carbon::now()->addDay()->format('Y-m-d');
         $endDate = Carbon::now()->addDays(2)->format('Y-m-d');
@@ -649,4 +649,3 @@ class LeaveRequestTest extends TestCase
             ->assertJsonPath('data.0.student_id', $this->student1->id);
     }
 }
-

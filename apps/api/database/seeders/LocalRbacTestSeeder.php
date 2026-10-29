@@ -11,6 +11,7 @@ use App\Models\GradeLevel;
 use App\Models\Guardian;
 use App\Models\LeaveRequest;
 use App\Models\Permission;
+use App\Models\PointType;
 use App\Models\PPDBTrack;
 use App\Models\PPDBWave;
 use App\Models\Role;
@@ -19,7 +20,6 @@ use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Models\SiteSetting;
-use App\Models\PointType;
 use App\Models\Staff;
 use App\Models\Student;
 use App\Models\StudentPoint;
@@ -32,7 +32,6 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class LocalRbacTestSeeder extends Seeder
 {
@@ -50,7 +49,7 @@ class LocalRbacTestSeeder extends Seeder
     {
         DB::transaction(function () {
             // 1. Jalankan DatabaseSeeder inti terlebih dahulu untuk memastikan permission dan role dasar terisi
-            (new DatabaseSeeder())->run();
+            (new DatabaseSeeder)->run();
 
             $schoolId = self::DEFAULT_SCHOOL_ID;
 
@@ -311,7 +310,7 @@ class LocalRbacTestSeeder extends Seeder
             $upsertUser = function (string $username, string $email, array $roleCodes) use ($schoolId, $passwordHash): User {
                 $user = User::where('username', $username)->first()
                     ?? User::where('email', $email)->first()
-                    ?? new User();
+                    ?? new User;
                 $user->username = $username;
                 $user->email = $email;
                 $user->school_id = $schoolId;

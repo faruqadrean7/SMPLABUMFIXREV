@@ -599,4 +599,3 @@ class NotificationTest extends TestCase
         ]);
     }
 }
-

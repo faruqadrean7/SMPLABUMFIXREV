@@ -83,7 +83,7 @@ class UatStagingSeeder extends Seeder
                 $schoolId = self::DEFAULT_SCHOOL_ID;
             } else {
                 throw new \RuntimeException(
-                    'Identitas tenant/school_id staging belum terdefinisi. ' .
+                    'Identitas tenant/school_id staging belum terdefinisi. '.
                     'Harap sediakan UAT_SCHOOL_ID yang valid via environment atau pastikan SiteSetting general_info telah diinisialisasi.'
                 );
             }
@@ -116,13 +116,13 @@ class UatStagingSeeder extends Seeder
         if (app()->environment('staging')) {
             if (empty($password)) {
                 throw new \RuntimeException(
-                    'Di lingkungan staging, kata sandi akun UAT wajib disediakan secara eksplisit ' .
+                    'Di lingkungan staging, kata sandi akun UAT wajib disediakan secara eksplisit '.
                     'melalui variabel lingkungan UAT_STAGING_PASSWORD atau UAT_DEFAULT_PASSWORD.'
                 );
             }
             if ($password === 'SistLabUM2026!UAT' && ! filter_var(env('ALLOW_PREDICTABLE_UAT_PASSWORD', false), FILTER_VALIDATE_BOOLEAN)) {
                 throw new \RuntimeException(
-                    'Di lingkungan staging, penggunaan kata sandi default publik tidak diizinkan. ' .
+                    'Di lingkungan staging, penggunaan kata sandi default publik tidak diizinkan. '.
                     'Silakan sediakan rahasia unik yang aman via UAT_STAGING_PASSWORD.'
                 );
             }
@@ -151,7 +151,7 @@ class UatStagingSeeder extends Seeder
 
         DB::transaction(function () use ($schoolId, $password) {
             // 1. Ensure core roles & permissions are populated
-            (new DatabaseSeeder())->run();
+            (new DatabaseSeeder)->run();
 
             // Ensure site setting school identification
             SiteSetting::firstOrCreate(

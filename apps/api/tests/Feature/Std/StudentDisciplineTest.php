@@ -2,11 +2,15 @@
 
 namespace Tests\Feature\Std;
 
+use App\Models\AcademicYear;
+use App\Models\ClassStudent;
+use App\Models\GradeLevel;
 use App\Models\Guardian;
 use App\Models\Permission;
 use App\Models\PointThreshold;
 use App\Models\PointType;
 use App\Models\Role;
+use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\User;
@@ -466,24 +470,24 @@ class StudentDisciplineTest extends TestCase
 
     public function test_be_std_01_filter_points_by_class_and_search_query(): void
     {
-        $academicYear = \App\Models\AcademicYear::firstOrCreate(
+        $academicYear = AcademicYear::firstOrCreate(
             ['name' => '2026/2027'],
             ['start_date' => '2026-07-01', 'end_date' => '2027-06-30', 'is_active' => true]
         );
-        $gradeLevel = \App\Models\GradeLevel::firstOrCreate(['level' => 10], ['name' => 'Kelas 10']);
-        $classA = \App\Models\SchoolClass::create([
+        $gradeLevel = GradeLevel::firstOrCreate(['name' => 'Kelas 10'], ['sort_order' => 10]);
+        $classA = SchoolClass::create([
             'name' => 'X-IPA-1',
             'academic_year_id' => $academicYear->id,
             'grade_level_id' => $gradeLevel->id,
         ]);
-        $classB = \App\Models\SchoolClass::create([
+        $classB = SchoolClass::create([
             'name' => 'X-IPA-2',
             'academic_year_id' => $academicYear->id,
             'grade_level_id' => $gradeLevel->id,
         ]);
 
-        \App\Models\ClassStudent::create(['class_id' => $classA->id, 'student_id' => $this->student->id, 'joined_at' => Carbon::now()->toDateString()]);
-        \App\Models\ClassStudent::create(['class_id' => $classB->id, 'student_id' => $this->otherStudent->id, 'joined_at' => Carbon::now()->toDateString()]);
+        ClassStudent::create(['class_id' => $classA->id, 'student_id' => $this->student->id, 'joined_at' => Carbon::now()->toDateString()]);
+        ClassStudent::create(['class_id' => $classB->id, 'student_id' => $this->otherStudent->id, 'joined_at' => Carbon::now()->toDateString()]);
 
         $type = PointType::create([
             'kind' => 'pelanggaran',
@@ -518,4 +522,3 @@ class StudentDisciplineTest extends TestCase
         $this->assertCount(1, $resSearch->json('data'));
     }
 }
-

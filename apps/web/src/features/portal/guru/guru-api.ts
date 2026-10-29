@@ -17,6 +17,17 @@ import {
   TeacherSalarySlipItem,
   TeacherSelfAttendance,
   TeacherHomeroomData,
+  TeacherQuestionBankItem,
+  StudentLeaveRequest,
+  StudentPointPayload,
+  CounselingReferralPayload,
+  FacilityBookingItem,
+  FacilityBookingPayload,
+  SarprasTicketItem,
+  SarprasTicketPayload,
+  TeacherQuestionItem,
+  TeacherQuestionPayload,
+  TeacherLockGradesPayload,
 } from './types';
 
 const loadGuruMock =
@@ -259,6 +270,32 @@ export const guruApi = {
     );
   },
 
+  // === BANK SOAL & PEMBUATAN UJIAN GURU MANDIRI ===
+  async getQuestionBanks(): Promise<TeacherQuestionBankItem[]> {
+    const res = await apiClient.get<TeacherQuestionBankItem[]>('/me/teacher/question-banks');
+    return unwrapList<TeacherQuestionBankItem>(res);
+  },
+
+  async createQuestionBank(payload: { name: string; subject_id: string; grade_level_id?: string }): Promise<TeacherQuestionBankItem> {
+    const res = await apiClient.post<TeacherQuestionBankItem>('/me/teacher/question-banks', payload);
+    return unwrapItem<TeacherQuestionBankItem>(res, res.data);
+  },
+
+  async getQuestionBankDetail(bankId: string): Promise<TeacherQuestionBankItem> {
+    const res = await apiClient.get<TeacherQuestionBankItem>(`/me/teacher/question-banks/${bankId}`);
+    return unwrapItem<TeacherQuestionBankItem>(res, res.data);
+  },
+
+  async createQuestion(bankId: string, payload: any): Promise<any> {
+    const res = await apiClient.post(`/me/teacher/question-banks/${bankId}/questions`, payload);
+    return unwrapItem(res, res.data);
+  },
+
+  async createExam(payload: any): Promise<any> {
+    const res = await apiClient.post('/me/teacher/exams', payload);
+    return unwrapItem(res, res.data);
+  },
+
   // === IZIN & CUTI GURU ===
   async getLeaveRequests(): Promise<TeacherLeaveRequest[]> {
     return executeWithMockFallback(
@@ -331,5 +368,97 @@ export const guruApi = {
       },
       loadGuruMock ? () => loadGuruMock().then((m) => m.MOCK_HOMEROOM_DATA) : undefined
     );
+  },
+
+  // === FITUR A: PERIZINAN SISWA OLEH WALI KELAS ===
+  async getHomeroomLeaveRequests(params?: {
+    class_id?: string;
+    status?: string;
+    date_from?: string;
+    date_to?: string;
+    q?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<StudentLeaveRequest[]> {
+    const res = await apiClient.get<StudentLeaveRequest[]>('/me/teacher/homeroom/leave-requests', { params });
+    return unwrapList<StudentLeaveRequest>(res);
+  },
+
+  async decideHomeroomLeaveRequest(
+    id: string,
+    payload: { decision: 'approved' | 'rejected'; decision_notes?: string }
+  ): Promise<StudentLeaveRequest> {
+    const res = await apiClient.patch<StudentLeaveRequest>(`/me/teacher/homeroom/leave-requests/${id}/decision`, payload);
+    return unwrapItem<StudentLeaveRequest>(res, res.data);
+  },
+
+  // === FITUR B: POIN KARAKTER & RUJUKAN BK ===
+  async recordStudentPoint(payload: StudentPointPayload): Promise<{ success: boolean; message: string; data?: any }> {
+    const res = await apiClient.post<{ message: string; data: any }>('/me/teacher/student-points', payload);
+    return {
+      success: true,
+      message: res.data?.message || 'Poin karakter siswa berhasil dicatat.',
+      data: res.data?.data,
+    };
+  },
+
+  async createCounselingReferral(payload: CounselingReferralPayload): Promise<{ success: boolean; message: string; data?: any }> {
+    const res = await apiClient.post<{ message: string; data: any }>('/me/teacher/counseling-referrals', payload);
+    return {
+      success: true,
+      message: res.data?.message || 'Rujukan bimbingan konseling berhasil dikirimkan.',
+      data: res.data?.data,
+    };
+  },
+
+  // === FITUR C: PEMINJAMAN FASILITAS & TIKET SARPRAS ===
+  async getFacilityBookings(params?: {
+    status?: string;
+    start_date?: string;
+    end_date?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<FacilityBookingItem[]> {
+    const res = await apiClient.get<FacilityBookingItem[]>('/me/teacher/facility-bookings', { params });
+    return unwrapList<FacilityBookingItem>(res);
+  },
+
+  async createFacilityBooking(payload: FacilityBookingPayload): Promise<FacilityBookingItem> {
+    const res = await apiClient.post<FacilityBookingItem>('/me/teacher/facility-bookings', payload);
+    return unwrapItem<FacilityBookingItem>(res, res.data);
+  },
+
+  async createSarprasTicket(payload: SarprasTicketPayload): Promise<SarprasTicketItem> {
+    const res = await apiClient.post<SarprasTicketItem>('/me/teacher/tickets', payload);
+    return unwrapItem<SarprasTicketItem>(res, res.data);
+  },
+
+  // === FITUR D: BANK SOAL MANDIRI GURU ===
+  async getTeacherQuestions(params?: {
+    subject_id?: string;
+    bank_id?: string;
+    type?: string;
+    difficulty?: string;
+    q?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<TeacherQuestionItem[]> {
+    const res = await apiClient.get<TeacherQuestionItem[]>('/me/teacher/questions', { params });
+    return unwrapList<TeacherQuestionItem>(res);
+  },
+
+  async createDirectQuestion(payload: TeacherQuestionPayload): Promise<TeacherQuestionItem> {
+    const res = await apiClient.post<TeacherQuestionItem>('/me/teacher/questions', payload);
+    return unwrapItem<TeacherQuestionItem>(res, res.data);
+  },
+
+  // === FITUR E: PENGUNCIAN LEDGER NILAI GURU ===
+  async lockTeacherGrades(payload: TeacherLockGradesPayload): Promise<{ success: boolean; message: string; count?: number }> {
+    const res = await apiClient.post<{ message: string; count?: number }>('/me/teacher/grades/lock', payload);
+    return {
+      success: true,
+      message: res.data?.message || 'Buku nilai guru berhasil dikunci.',
+      count: res.data?.count,
+    };
   },
 };

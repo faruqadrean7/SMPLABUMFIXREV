@@ -4,6 +4,7 @@ namespace Tests\Feature\Ntf;
 
 use App\Models\Notification;
 use App\Models\NotificationPreference;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,7 +17,9 @@ class NotificationPreferenceRoleTest extends TestCase
     use RefreshDatabase;
 
     protected User $studentUser;
+
     protected User $teacherUser;
+
     protected User $adminUser;
 
     protected function setUp(): void
@@ -27,7 +30,7 @@ class NotificationPreferenceRoleTest extends TestCase
         $roleTeacher = Role::firstOrCreate(['code' => 'teacher'], ['name' => 'Guru', 'is_system' => true]);
         $roleAdmin = Role::firstOrCreate(['code' => 'super_admin'], ['name' => 'Super Admin', 'is_system' => true]);
 
-        $permBroadcast = \App\Models\Permission::firstOrCreate(['code' => 'notification.broadcast'], ['name' => 'Broadcast Notifikasi', 'module' => 'notification']);
+        $permBroadcast = Permission::firstOrCreate(['code' => 'notification.broadcast'], ['name' => 'Broadcast Notifikasi', 'module' => 'notification']);
         $roleAdmin->permissions()->syncWithoutDetaching([$permBroadcast->id]);
 
         $this->studentUser = User::create([

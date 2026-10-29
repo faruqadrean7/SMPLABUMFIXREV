@@ -3,13 +3,11 @@
 namespace Tests\Feature\Ntf;
 
 use App\Models\Exam;
-use App\Models\Notification;
 use App\Models\ReminderDispatch;
 use App\Models\Role;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
-use App\Services\Ntf\ReminderService;
 use Carbon\Carbon;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
@@ -26,9 +24,13 @@ class SchedulerVerificationTest extends TestCase
     use RefreshDatabase;
 
     protected Schedule $schedule;
+
     protected string $schoolId;
+
     protected User $teacherUser;
+
     protected Teacher $teacher;
+
     protected Subject $subject;
 
     protected function setUp(): void

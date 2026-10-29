@@ -2,27 +2,20 @@
 
 namespace Tests\Feature\Cbt;
 
-use App\Models\AcademicYear;
-use App\Models\AuditLog;
 use App\Models\Exam;
 use App\Models\ExamAnswer;
 use App\Models\ExamParticipant;
-use App\Models\ExamProctorAction;
 use App\Models\ExamQuestion;
 use App\Models\ExamRoom;
 use App\Models\ExamSession;
-use App\Models\GradeLevel;
 use App\Models\Permission;
 use App\Models\Question;
 use App\Models\QuestionBank;
 use App\Models\QuestionOption;
 use App\Models\Role;
 use App\Models\Room;
-use App\Models\SchoolClass;
-use App\Models\Semester;
 use App\Models\Student;
 use App\Models\Subject;
-use App\Models\Teacher;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -690,4 +683,3 @@ class CbtOperationalAndSecurityAuditTest extends TestCase
         $this->assertEquals(1, Exam::where('parent_exam_id', $this->exam->id)->where('title', 'Remedial Asesmen Sumatif IPA')->count());
     }
 }
-

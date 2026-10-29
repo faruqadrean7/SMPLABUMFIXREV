@@ -635,7 +635,7 @@ class GradeTest extends TestCase
             ->assertJsonPath('data.summary.complete_count', 1)
             ->assertJsonPath('data.summary.incomplete_count', 1);
 
-        $this->assertEquals(92.5, $response->json('data.students.0.grades.' . $component->id . '.value'));
+        $this->assertEquals(92.5, $response->json('data.students.0.grades.'.$component->id.'.value'));
     }
 
     public function test_be_grd_01_batch_grades_input_matrix(): void

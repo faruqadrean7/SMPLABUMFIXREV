@@ -9,6 +9,7 @@ use App\Models\Room;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -373,7 +374,7 @@ class TicketTest extends TestCase
             'status' => 'diproses',
             'description' => 'Ada bau sangit dan percikan api',
         ]);
-        \Illuminate\Support\Facades\DB::table('tickets')->where('id', $t2->id)->update(['created_at' => now()->subHours(30)]);
+        DB::table('tickets')->where('id', $t2->id)->update(['created_at' => now()->subHours(30)]);
 
         // 3. Tiket selesai (resolusi 2 jam)
         $t3 = Ticket::create([
@@ -386,7 +387,7 @@ class TicketTest extends TestCase
             'description' => 'Lampu neon redup',
             'resolved_at' => now()->subHours(2),
         ]);
-        \Illuminate\Support\Facades\DB::table('tickets')->where('id', $t3->id)->update(['created_at' => now()->subHours(4)]);
+        DB::table('tickets')->where('id', $t3->id)->update(['created_at' => now()->subHours(4)]);
 
         $this->app['auth']->forgetGuards();
 

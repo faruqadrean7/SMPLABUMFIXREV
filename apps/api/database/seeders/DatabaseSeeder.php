@@ -28,8 +28,10 @@ class DatabaseSeeder extends Seeder
             ['code' => 'librarian', 'name' => 'Pustakawan'],
             ['code' => 'student_affairs', 'name' => 'Staf Kesiswaan'],
             ['code' => 'public_relations', 'name' => 'Staf Humas'],
+            ['code' => 'bendahara', 'name' => 'Bendahara / Keuangan'],
             ['code' => 'student', 'name' => 'Siswa'],
             ['code' => 'guardian', 'name' => 'Orang Tua / Wali Murid'],
+            ['code' => 'staff', 'name' => 'Staf / Tenaga Kependidikan'],
             ['code' => 'guest', 'name' => 'Tamu / Calon Siswa'],
         ];
 
@@ -121,6 +123,12 @@ class DatabaseSeeder extends Seeder
             ['code' => 'dashboard.executive', 'description' => 'Melihat dashboard dan ringkasan eksekutif'],
             ['code' => 'executive.dashboard.view', 'description' => 'Melihat ringkasan eksekutif dan analitik pimpinan'],
             ['code' => 'reports.view', 'description' => 'Melihat laporan dan rekapitulasi data sekolah'],
+
+            // Keuangan (GAP-FIN-01)
+            ['code' => 'finance.fee.manage', 'description' => 'Mengelola master jenis biaya sekolah'],
+            ['code' => 'finance.invoice.manage', 'description' => 'Mengelola dan menerbitkan tagihan siswa'],
+            ['code' => 'finance.payment.verify', 'description' => 'Memverifikasi, menolak, atau membatalkan pembayaran tagihan'],
+            ['code' => 'finance.report.view', 'description' => 'Melihat rekap dan laporan keuangan'],
         ];
 
         $allPermissionIds = [];
@@ -161,6 +169,7 @@ class DatabaseSeeder extends Seeder
             'dashboard.executive',
             'executive.dashboard.view',
             'reports.view',
+            'finance.report.view',
             'academic.grade.read',
             'academic.report.generate',
             'academic.attendance.read',
@@ -290,7 +299,18 @@ class DatabaseSeeder extends Seeder
             'cms.page.manage',
         ]);
 
-        // 11. Siswa (student)
+        // 11. Bendahara / Keuangan (bendahara)
+        $assignRolePermissions('bendahara', [
+            'finance.fee.manage',
+            'finance.invoice.manage',
+            'finance.payment.verify',
+            'finance.report.view',
+            'audit.read',
+            'master.student.read',
+            'reports.view',
+        ]);
+
+        // 12. Siswa (student)
         $assignRolePermissions('student', [
             'cbt.exam.take',
             'cbt.exam.review',
@@ -359,5 +379,15 @@ class DatabaseSeeder extends Seeder
         if (! $superAdmin->roles()->where('role_id', $roleModels['super_admin']->id)->exists()) {
             $superAdmin->roles()->attach($roleModels['super_admin']->id);
         }
+
+        // 4. Default Payment Provider Setting
+        \App\Models\PaymentProviderSetting::firstOrCreate(
+            ['name' => 'Bank Jatim Virtual Account'],
+            [
+                'instructions' => "1. Buka aplikasi m-Banking Bank Jatim atau ATM terdekat.\n2. Pilih menu Transfer / Pembayaran > Virtual Account.\n3. Masukkan nomor Virtual Account (VA) yang tertera pada faktur tagihan ananda.\n4. Periksa kecocokan nama siswa dan nominal tagihan.\n5. Selesaikan transaksi dan simpan struk / bukti transfer.\n6. Unggah foto slip pembayaran dan masukkan nomor referensi transaksi.",
+                'info_url' => 'https://bankjatim.co.id/panduan-va',
+                'is_active' => true,
+            ]
+        );
     }
 }

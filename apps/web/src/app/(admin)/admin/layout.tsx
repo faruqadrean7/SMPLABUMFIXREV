@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import React, { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { AdminSidebar } from '@/components/shell/admin/admin-sidebar';
 import { AdminTopbar } from '@/components/shell/admin/admin-topbar';
@@ -11,16 +11,9 @@ import { canAccessShell, hasPermission } from '@/lib/rbac/evaluator';
 import { getAdminRoutePermission } from '@/lib/rbac/navigation';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace('/masuk?redirect=/admin');
-    }
-  }, [isLoading, isAuthenticated, router]);
 
   if (isLoading) {
     return (
@@ -31,7 +24,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   if (!isAuthenticated) {
-    return null;
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <h1 className="text-6xl font-bold text-slate-800">404</h1>
+        <h2 className="text-xl font-semibold text-slate-700 mt-4">Halaman Tidak Ditemukan</h2>
+        <p className="text-slate-500 mt-2 text-center max-w-md">
+          Halaman yang Anda cari tidak dapat ditemukan atau telah dipindahkan.
+        </p>
+      </div>
+    );
   }
 
   // Cek otorisasi peran terhadap Shell Admin

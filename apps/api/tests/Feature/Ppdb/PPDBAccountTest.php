@@ -25,6 +25,7 @@ class PPDBAccountTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Cache::flush();
 
         $this->schoolId = Str::uuid()->toString();
 

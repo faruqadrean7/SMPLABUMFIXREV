@@ -7,6 +7,7 @@ use App\Models\AssetAudit;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Room;
+use App\Models\Ticket;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -587,7 +588,7 @@ class AssetAndAuditTest extends TestCase
             'room_id' => $this->labKomputer->id,
         ]);
 
-        \App\Models\Ticket::create([
+        Ticket::create([
             'ticket_number' => 'TCK-202610-9001',
             'title' => 'Lensa Proyektor Berdebu',
             'reporter_id' => $this->teacherUser->id,

@@ -2,12 +2,9 @@
 
 namespace Tests\Feature\Ntf;
 
-use App\Jobs\ProcessReminderDispatchJob;
-use App\Models\Notification;
-use App\Models\ReminderDispatch;
 use App\Models\User;
-use App\Services\Ntf\ReminderService;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -23,7 +20,9 @@ use Tests\TestCase;
 class PostgreSqlConcurrencyTest extends TestCase
 {
     protected ?string $pgSchoolId = null;
+
     protected ?string $pgUserId = null;
+
     protected bool $postgresAvailable = false;
 
     protected function setUp(): void
@@ -79,8 +78,8 @@ class PostgreSqlConcurrencyTest extends TestCase
         DB::connection('pgsql_staging')->table('users')->insert([
             'id' => $this->pgUserId,
             'school_id' => $this->pgSchoolId,
-            'username' => 'pg_test_user_' . Str::random(6),
-            'email' => 'pg_' . Str::random(8) . '@sekolah.sch.id',
+            'username' => 'pg_test_user_'.Str::random(6),
+            'email' => 'pg_'.Str::random(8).'@sekolah.sch.id',
             'password_hash' => Hash::make('password'),
             'status' => 'active',
             'created_at' => Carbon::now(),
@@ -123,8 +122,8 @@ class PostgreSqlConcurrencyTest extends TestCase
             'updated_at' => Carbon::now(),
         ]);
 
-        $token1 = 'worker-1-' . Str::uuid();
-        $token2 = 'worker-2-' . Str::uuid();
+        $token1 = 'worker-1-'.Str::uuid();
+        $token2 = 'worker-2-'.Str::uuid();
         $now = Carbon::now();
 
         // Worker 1 mengklaim via koneksi 1
@@ -194,7 +193,7 @@ class PostgreSqlConcurrencyTest extends TestCase
     {
         $dispatchId = (string) Str::uuid();
         $eventId = (string) Str::uuid();
-        $activeToken = 'active-worker-' . Str::uuid();
+        $activeToken = 'active-worker-'.Str::uuid();
 
         // Buat dispatch yang sedang diproses dengan masa berlaku 14 menit lagi
         DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
@@ -222,10 +221,10 @@ class PostgreSqlConcurrencyTest extends TestCase
             ->where('status', 'processing')
             ->where(function ($q) use ($threshold, $now) {
                 $q->where('updated_at', '<', $threshold)
-                  ->orWhere(function ($q2) use ($now) {
-                      $q2->whereNotNull('claim_expires_at')
-                         ->where('claim_expires_at', '<', $now);
-                  });
+                    ->orWhere(function ($q2) use ($now) {
+                        $q2->whereNotNull('claim_expires_at')
+                            ->where('claim_expires_at', '<', $now);
+                    });
             });
 
         $stuckIds = $stuckQuery->pluck('id')->all();
@@ -243,8 +242,8 @@ class PostgreSqlConcurrencyTest extends TestCase
     {
         $dispatchId = (string) Str::uuid();
         $eventId = (string) Str::uuid();
-        $tokenOldWorker = 'old-worker-' . Str::uuid();
-        $tokenNewWorker = 'new-worker-' . Str::uuid();
+        $tokenOldWorker = 'old-worker-'.Str::uuid();
+        $tokenNewWorker = 'new-worker-'.Str::uuid();
 
         // 1. Worker lama mengklaim dispatch
         DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
@@ -432,7 +431,7 @@ class PostgreSqlConcurrencyTest extends TestCase
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ]);
-        } catch (\Illuminate\Database\QueryException $e) {
+        } catch (QueryException $e) {
             // PostgreSQL Unique Violation SQLSTATE code = 23505
             if (str_contains($e->getMessage(), '23505') || str_contains($e->getMessage(), 'unique') || str_contains($e->getMessage(), 'reminder_dispatches_event_recip_ms_unique')) {
                 $duplicateRejected = true;
@@ -449,7 +448,7 @@ class PostgreSqlConcurrencyTest extends TestCase
     {
         $dispatchId = (string) Str::uuid();
         $eventId = (string) Str::uuid();
-        $token = 'worker-rollback-' . Str::uuid();
+        $token = 'worker-rollback-'.Str::uuid();
 
         DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
             'id' => $dispatchId,
@@ -468,7 +467,7 @@ class PostgreSqlConcurrencyTest extends TestCase
         $errorCaught = false;
 
         try {
-            DB::connection('pgsql_staging')->transaction(function () use ($dispatchId, $eventId, $token) {
+            DB::connection('pgsql_staging')->transaction(function () use ($eventId) {
                 // 1. Sisipkan notifikasi
                 DB::connection('pgsql_staging')->table('notifications')->insert([
                     'id' => (string) Str::uuid(),

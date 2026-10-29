@@ -9,10 +9,10 @@ class StoreTeachingAssignmentRequest extends BaseApiRequest
     public function rules(): array
     {
         return [
-            'semester_id' => ['required', 'string', 'exists:semesters,id'],
-            'class_id' => ['required', 'string', 'exists:classes,id'],
-            'subject_id' => ['required', 'string', 'exists:subjects,id'],
-            'teacher_id' => ['required', 'string', 'exists:teachers,id'],
+            'semester_id' => ['required', 'uuid', 'exists:semesters,id'],
+            'class_id' => ['required', 'uuid', 'exists:classes,id'],
+            'subject_id' => ['required', 'uuid', 'exists:subjects,id'],
+            'teacher_id' => ['required', 'uuid', 'exists:teachers,id'],
             'hours_per_week' => ['nullable', 'integer', 'min:1', 'max:40'],
         ];
     }

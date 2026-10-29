@@ -258,7 +258,7 @@ class SiteSettingService
      */
     protected function isAssoc(array $arr): bool
     {
-        if ([] === $arr) {
+        if ($arr === []) {
             return false;
         }
 

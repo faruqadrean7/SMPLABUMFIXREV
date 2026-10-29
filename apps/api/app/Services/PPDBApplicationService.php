@@ -339,20 +339,30 @@ class PPDBApplicationService
                 $year = Carbon::now()->format('Y');
                 $prefix = "PPDB-{$year}-";
 
-                $lastApplicant = Applicant::where('registration_no', 'like', "{$prefix}%")
-                    ->lockForUpdate()
-                    ->orderBy('registration_no', 'desc')
-                    ->first();
+                $existingNumbers = Applicant::where('registration_no', 'like', "{$prefix}%")
+                    ->pluck('registration_no');
 
-                $seq = 1;
-                if ($lastApplicant) {
-                    $lastNumberStr = substr($lastApplicant->registration_no, strlen($prefix));
-                    if (is_numeric($lastNumberStr)) {
-                        $seq = ((int) $lastNumberStr) + 1;
+                $maxSeq = 0;
+                foreach ($existingNumbers as $regNum) {
+                    $numStr = substr($regNum, strlen($prefix));
+                    if (is_numeric($numStr)) {
+                        $num = (int) $numStr;
+                        if ($num > $maxSeq) {
+                            $maxSeq = $num;
+                        }
                     }
                 }
 
-                $applicant->registration_no = sprintf('%s%05d', $prefix, $seq);
+                $seq = $maxSeq + 1;
+                do {
+                    $candidate = sprintf('%s%05d', $prefix, $seq);
+                    $exists = Applicant::where('registration_no', $candidate)->exists();
+                    if (! $exists) {
+                        $applicant->registration_no = $candidate;
+                        break;
+                    }
+                    $seq++;
+                } while ($exists);
             }
 
             $applicant->status = 'submitted';

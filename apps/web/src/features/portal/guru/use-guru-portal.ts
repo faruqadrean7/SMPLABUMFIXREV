@@ -7,6 +7,10 @@ import {
   TeacherMaterialItem,
   TeacherAssignmentItem,
   TeacherStudentGrade,
+  StudentPointPayload,
+  CounselingReferralPayload,
+  FacilityBookingPayload,
+  SarprasTicketPayload,
 } from './types';
 
 export interface TeacherAssignedSubject {
@@ -179,5 +183,80 @@ export function useTeacherHomeroomData(isHomeroom: boolean) {
     queryFn: () => guruApi.getHomeroomData(),
     enabled: isHomeroom,
     staleTime: 1000 * 60 * 5,
+  });
+}
+
+// === GAP REMEDIATION HOOKS: FITUR A - C ===
+
+export function useHomeroomLeaveRequests(params?: {
+  class_id?: string;
+  status?: string;
+  q?: string;
+  page?: number;
+  per_page?: number;
+}, enabled = true) {
+  return useQuery({
+    queryKey: ['guru', 'homeroom-leave-requests', params],
+    queryFn: () => guruApi.getHomeroomLeaveRequests(params),
+    enabled,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useDecideHomeroomLeaveRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { decision: 'approved' | 'rejected'; decision_notes?: string } }) =>
+      guruApi.decideHomeroomLeaveRequest(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guru', 'homeroom-leave-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['guru', 'homeroom'] });
+    },
+  });
+}
+
+export function useRecordStudentPoint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: StudentPointPayload) => guruApi.recordStudentPoint(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guru', 'homeroom'] });
+    },
+  });
+}
+
+export function useCreateCounselingReferral() {
+  return useMutation({
+    mutationFn: (payload: CounselingReferralPayload) => guruApi.createCounselingReferral(payload),
+  });
+}
+
+export function useFacilityBookings(params?: {
+  status?: string;
+  start_date?: string;
+  end_date?: string;
+  page?: number;
+  per_page?: number;
+}) {
+  return useQuery({
+    queryKey: ['guru', 'facility-bookings', params],
+    queryFn: () => guruApi.getFacilityBookings(params),
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useCreateFacilityBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: FacilityBookingPayload) => guruApi.createFacilityBooking(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guru', 'facility-bookings'] });
+    },
+  });
+}
+
+export function useCreateSarprasTicket() {
+  return useMutation({
+    mutationFn: (payload: SarprasTicketPayload) => guruApi.createSarprasTicket(payload),
   });
 }

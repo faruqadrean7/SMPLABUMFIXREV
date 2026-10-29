@@ -7,6 +7,7 @@ use App\Http\Requests\Master\ImportTeachersRequest;
 use App\Http\Requests\Master\StoreSalarySlipRequest;
 use App\Http\Requests\Master\StoreTeacherRequest;
 use App\Http\Requests\Master\UpdateTeacherRequest;
+use App\Models\Teacher;
 use App\Services\TeacherStaffService;
 use App\Traits\ApiResponse;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -343,7 +344,7 @@ class TeacherController extends Controller
     {
         try {
             $user = $request->user();
-            $teacher = \App\Models\Teacher::where('user_id', $user?->id)->first();
+            $teacher = Teacher::where('user_id', $user?->id)->first();
             if (! $teacher) {
                 return $this->errorResponse('Profil pendidik guru Anda belum terdaftar.', 'NOT_FOUND', 404);
             }

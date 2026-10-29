@@ -248,28 +248,95 @@ class ExamSessionService
                 $options = $this->shuffleWithSeed($options, $session->seed.'_opt_'.$q->id);
             }
 
-            // Sanitasi opsi: buang is_correct dan match_key sensitif jika bukan format matching target
-            $sanitizedOptions = $options->map(function ($opt) {
-                $item = [
-                    'id' => $opt->id,
-                    'label' => $opt->label,
-                    'body' => $opt->body,
-                ];
+            // Sanitasi opsi secara ketat (WHITELIST): Hanya field id, label, text, dan body ter-whitelist
+            $sanitizedOptions = [];
+            if (! in_array($q->question_type, ['isian', 'uraian'])) {
+                $sanitizedOptions = $options->map(function ($opt) {
+                    $optText = is_array($opt->body)
+                        ? ($opt->body['text'] ?? $opt->body['content'] ?? '')
+                        : (string) $opt->body;
 
-                // Jika soal tipe menjodohkan, biarkan match_key jika dibutuhkan untuk rendering pasangan,
-                // tapi JANGAN sertakan is_correct
-                return $item;
-            })->values()->all();
+                    $optBody = [];
+                    if (is_array($opt->body)) {
+                        if (isset($opt->body['text'])) {
+                            $optBody['text'] = (string) $opt->body['text'];
+                        }
+                        if (isset($opt->body['content'])) {
+                            $optBody['content'] = (string) $opt->body['content'];
+                        }
+                        if (isset($opt->body['media_url'])) {
+                            $optBody['media_url'] = (string) $opt->body['media_url'];
+                        }
+                        if (isset($opt->body['image_url'])) {
+                            $optBody['image_url'] = (string) $opt->body['image_url'];
+                        }
+                    } else {
+                        $optBody = ['text' => (string) $opt->body];
+                    }
+
+                    return [
+                        'id' => (string) $opt->id,
+                        'label' => (string) $opt->label,
+                        'text' => (string) $optText,
+                        'body' => $optBody,
+                    ];
+                })->values()->all();
+            }
+
+            // Sanitasi body secara ketat (WHITELIST): Hanya field yang eksplisit dibutuhkan siswa
+            $sanitizedBody = [];
+            if (is_array($q->body)) {
+                if (isset($q->body['content'])) {
+                    $sanitizedBody['content'] = (string) $q->body['content'];
+                }
+                if (isset($q->body['text'])) {
+                    $sanitizedBody['text'] = (string) $q->body['text'];
+                }
+                if (isset($q->body['formula'])) {
+                    $sanitizedBody['formula'] = $q->body['formula'];
+                }
+                if (isset($q->body['media_url'])) {
+                    $sanitizedBody['media_url'] = (string) $q->body['media_url'];
+                }
+                if (isset($q->body['media'])) {
+                    $sanitizedBody['media'] = $q->body['media'];
+                }
+                if (isset($q->body['image_url'])) {
+                    $sanitizedBody['image_url'] = (string) $q->body['image_url'];
+                }
+                if (isset($q->body['audio_url'])) {
+                    $sanitizedBody['audio_url'] = (string) $q->body['audio_url'];
+                }
+            } else {
+                $sanitizedBody = [
+                    'content' => (string) $q->body,
+                    'text' => (string) $q->body,
+                ];
+            }
+
+            // Untuk soal menjodohkan: sediakan target pilihan unik teracak untuk kolom pasangan (tanpa mengaitkan kunci ke premis)
+            if ($q->question_type === 'menjodohkan') {
+                $matchTargets = $options->pluck('match_key')->filter()->unique()->values();
+                if ($matchTargets->isNotEmpty()) {
+                    $shuffledTargets = $this->shuffleWithSeed($matchTargets, $session->seed.'_targets_'.$q->id)->all();
+                    $sanitizedBody['targets'] = $shuffledTargets;
+                } elseif (isset($q->body['targets']) && is_array($q->body['targets'])) {
+                    $sanitizedBody['targets'] = array_values($q->body['targets']);
+                }
+            }
 
             $existingAnswer = $savedAnswers->get($q->id);
+            $eq = $examQuestions->firstWhere('question_id', $q->id);
+            $weight = (float) ($eq?->weight_override ?? $q->weight ?? 1.0);
 
             $formattedQuestions[] = [
                 'number' => $index++,
                 'id' => $q->id,
                 'question_id' => $q->id,
                 'question_type' => $q->question_type,
-                'body' => $q->body,
-                'stem' => is_array($q->body) ? ($q->body['content'] ?? '') : (string) $q->body,
+                'weight' => $weight,
+                'body' => $sanitizedBody,
+                'stem' => $sanitizedBody['content'] ?? $sanitizedBody['text'] ?? '',
                 'options' => $sanitizedOptions,
                 'user_answer' => $existingAnswer?->answer,
                 'current_answer' => $existingAnswer?->answer,
@@ -498,6 +565,12 @@ class ExamSessionService
             $session->submitted_at = $now;
             $session->save();
 
+            try {
+                app(ExamGradingService::class)->gradeSessionObjectiveAnswers($session);
+            } catch (\Throwable $gradeEx) {
+                // Non-blocking
+            }
+
             $this->logAudit(
                 $user->id,
                 'exam.finish_session',
@@ -695,7 +768,7 @@ class ExamSessionService
             $session->save();
 
             try {
-                app(\App\Services\Cbt\ExamGradingService::class)->gradeSessionObjectiveAnswers($session);
+                app(ExamGradingService::class)->gradeSessionObjectiveAnswers($session);
             } catch (\Throwable $gradeEx) {
                 // Non-blocking
             }

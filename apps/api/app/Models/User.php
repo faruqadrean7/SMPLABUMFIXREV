@@ -16,6 +16,48 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, HasUuids, Notifiable, SoftDeletes;
 
+    /**
+     * Sumber kebenaran tunggal peran yang diizinkan mengakses Shell Admin Back-Office.
+     */
+    public const ADMIN_SHELL_ROLES = [
+        'super_admin',
+        'admin_tu',
+        'principal',
+        'kepala_sekolah',
+        'vice_principal',
+        'counselor',
+        'facility_staff',
+        'ppdb_committee',
+        'librarian',
+        'student_affairs',
+        'public_relations',
+        'bendahara',
+        'treasurer',
+        'operator_cms',
+        'admin_kurikulum',
+        'kurikulum',
+    ];
+
+    /**
+     * Sumber kebenaran tunggal peran yang wajib mengaktifkan 2FA / TOTP.
+     */
+    public const MANDATORY_2FA_ROLES = self::ADMIN_SHELL_ROLES;
+
+    /**
+     * Pemetaan alias peran lama/kanonis untuk kompatibilitas mundur.
+     */
+    public const ROLE_ALIASES = [
+        'admin' => 'admin_tu',
+        'kepala_sekolah' => 'principal',
+        'treasurer' => 'bendahara',
+        'admin_kurikulum' => 'kurikulum',
+        'guru_bk' => 'counselor',
+        'sarpras' => 'facility_staff',
+        'panitia_ppdb' => 'ppdb_committee',
+        'kesiswaan' => 'student_affairs',
+        'humas' => 'public_relations',
+    ];
+
     protected $fillable = [
         'school_id',
         'username',
@@ -25,10 +67,16 @@ class User extends Authenticatable
         'status',
         'must_change_password',
         'last_login_at',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
+        'two_factor_confirmed_at',
+        'two_factor_last_step',
     ];
 
     protected $hidden = [
         'password_hash',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     protected function casts(): array
@@ -37,6 +85,10 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'last_login_at' => 'datetime',
             'password_hash' => 'hashed',
+            'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
+            'two_factor_last_step' => 'integer',
         ];
     }
 
@@ -46,6 +98,15 @@ class User extends Authenticatable
     public function getAuthPasswordName(): string
     {
         return 'password_hash';
+    }
+
+    public function getNameAttribute(): string
+    {
+        return $this->teacher?->full_name
+            ?? $this->student?->full_name
+            ?? $this->guardian?->full_name
+            ?? $this->staff?->full_name
+            ?? $this->username;
     }
 
     // Profil Relasi
@@ -106,8 +167,20 @@ class User extends Authenticatable
         $this->loadMissing('roles');
         $roleCodes = (array) $roles;
 
-        return $this->roles->contains(function ($role) use ($roleCodes) {
-            return in_array($role->code, $roleCodes, true);
+        $normalizedCodes = [];
+        foreach ($roleCodes as $code) {
+            $normalizedCodes[] = $code;
+            if (isset(self::ROLE_ALIASES[$code])) {
+                $normalizedCodes[] = self::ROLE_ALIASES[$code];
+            }
+            $flipped = array_search($code, self::ROLE_ALIASES, true);
+            if ($flipped !== false) {
+                $normalizedCodes[] = $flipped;
+            }
+        }
+
+        return $this->roles->contains(function ($role) use ($normalizedCodes) {
+            return in_array($role->code, $normalizedCodes, true);
         });
     }
 
@@ -160,6 +233,7 @@ class User extends Authenticatable
 
         if ($this->relationLoaded('teacher') && $this->teacher) {
             $this->teacher->loadMissing('photoFile');
+
             return [
                 'type' => 'teacher',
                 'id' => $this->teacher->id,

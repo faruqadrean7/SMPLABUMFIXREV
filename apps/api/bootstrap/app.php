@@ -10,9 +10,11 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Exceptions\InvalidSignatureException;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -23,16 +25,21 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias([
+        $middleware->trustProxies(at: env('TRUSTED_PROXIES', '*'));
+        $aliases = [
             'permission' => RequirePermission::class,
-        ]);
+        ];
+        if (env('TEST_DISABLE_RATE_LIMIT', false) || env('DISABLE_RATE_LIMITING', false)) {
+            $aliases['throttle'] = \App\Http\Middleware\BypassThrottle::class;
+        }
+        $middleware->alias($aliases);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
 
-        $renderError = function (string $message, string $code, int $status, array $details = []) {
+        $renderError = function (string $message, string $code, int $status, array $details = [], array $headers = []) {
             $requestId = request()->header('X-Request-Id', (string) Str::uuid());
 
             return response()->json([
@@ -42,7 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'details' => $details,
                     'requestId' => $requestId,
                 ],
-            ], $status, ['X-Request-Id' => $requestId]);
+            ], $status, array_merge($headers, ['X-Request-Id' => $requestId]));
         };
 
         $exceptions->render(function (AuthenticationException $e, Request $request) use ($renderError) {
@@ -101,6 +108,47 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (ThrottleRequestsException $e, Request $request) use ($renderError) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return $renderError('Terlalu banyak permintaan, coba lagi nanti', 'RATE_LIMITED', 429);
+            }
+        });
+
+        // BLCK-03: Invalid signed URL request handling
+        $exceptions->render(function (InvalidSignatureException $e, Request $request) use ($renderError) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return $renderError('Tautan tidak valid atau tanda tangan telah kedaluwarsa', 'FORBIDDEN', 403);
+            }
+        });
+
+        // BLCK-03: General HttpExceptionInterface handler for status semantics (403, 404, 405, etc.)
+        $exceptions->render(function (HttpExceptionInterface $e, Request $request) use ($renderError) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                $status = $e->getStatusCode();
+                $code = $e->getHeaders()['X-Error-Code'] ?? match ($status) {
+                    400 => 'BAD_REQUEST',
+                    401 => 'UNAUTHENTICATED',
+                    403 => 'FORBIDDEN',
+                    404 => 'NOT_FOUND',
+                    405 => 'METHOD_NOT_ALLOWED',
+                    409 => 'CONFLICT',
+                    422 => 'UNPROCESSABLE_ENTITY',
+                    429 => 'RATE_LIMITED',
+                    default => $status >= 500 ? 'INTERNAL_SERVER_ERROR' : 'HTTP_ERROR',
+                };
+
+                $message = $status >= 500 && ! config('app.debug')
+                    ? 'Terjadi kesalahan internal server'
+                    : ($e->getMessage() ?: match ($status) {
+                        400 => 'Permintaan tidak valid',
+                        401 => 'Sesi tidak valid atau telah berakhir',
+                        403 => 'Anda tidak memiliki izin untuk tindakan ini',
+                        404 => 'Data tidak ditemukan',
+                        405 => 'Metode HTTP tidak diizinkan untuk rute ini',
+                        409 => 'Data duplikat atau terjadi konflik data',
+                        422 => 'Data tidak dapat diproses',
+                        429 => 'Terlalu banyak permintaan, coba lagi nanti',
+                        default => 'Terjadi kesalahan permintaan',
+                    });
+
+                return $renderError($message, $code, $status, [], $e->getHeaders());
             }
         });
 

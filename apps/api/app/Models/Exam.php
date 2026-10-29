@@ -13,6 +13,27 @@ class Exam extends Model
 {
     use Auditable, HasFactory, HasUuids;
 
+    public const STATUS_DRAFT = 'draft';
+
+    public const STATUS_SCHEDULED = 'dijadwalkan';
+
+    public const STATUS_IN_PROGRESS = 'berlangsung';
+
+    public const STATUS_FINISHED = 'selesai';
+
+    public const STATUS_CANCELLED = 'dibatalkan';
+
+    public const STATUS_ARCHIVED = 'arsip';
+
+    public const STATUSES = [
+        self::STATUS_DRAFT,
+        self::STATUS_SCHEDULED,
+        self::STATUS_IN_PROGRESS,
+        self::STATUS_FINISHED,
+        self::STATUS_CANCELLED,
+        self::STATUS_ARCHIVED,
+    ];
+
     protected $fillable = [
         'school_id',
         'subject_id',

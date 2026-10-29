@@ -218,12 +218,14 @@ class OrphanFileService
             if ($recheck['is_referenced']) {
                 $skippedSafelyCount++;
                 Log::warning("Pembersihan berkas {$fileId} dibatalkan: berkas terdeteksi baru direferensikan oleh ".implode(', ', $recheck['references']));
+
                 continue;
             }
 
             // Batasan Usia: Verifikasi ulang file sudah berusia >= 24 jam
             if ($file->created_at && $file->created_at->diffInHours(now()) < 24) {
                 $skippedSafelyCount++;
+
                 continue;
             }
 

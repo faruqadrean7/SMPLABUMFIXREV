@@ -49,6 +49,11 @@ import {
   QrCode,
   BarChart3,
   Bell,
+  CreditCard,
+  Coins,
+  AlertCircle,
+  Briefcase,
+  ExternalLink,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -89,6 +94,9 @@ const ICON_MAP: Record<string, React.ElementType> = {
   FileClock,
   Wrench,
   QrCode,
+  CreditCard,
+  Coins,
+  AlertCircle,
 };
 
 export function AdminSidebar({
@@ -252,6 +260,37 @@ export function AdminSidebar({
               </div>
             );
           })}
+        </div>
+
+        {/* Tautan Layanan Pribadi Pegawai / Guru */}
+        <div className="p-3 border-t border-blue-900/40 space-y-1.5 bg-blue-950/40">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-blue-300/70 px-1">
+            Layanan Pribadi
+          </div>
+          <Link
+            href="/portal/staf"
+            onClick={onClose}
+            className="flex items-center justify-between px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:text-white hover:bg-brand-blue/80 rounded-md transition-colors border border-blue-800/40"
+          >
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Portal Staf (Presensi & Cuti)</span>
+            </div>
+            <ExternalLink className="h-3 w-3 text-blue-300/70" />
+          </Link>
+          {user?.roles?.some((r) => r === 'teacher' || r === 'homeroom') && (
+            <Link
+              href="/portal/guru"
+              onClick={onClose}
+              className="flex items-center justify-between px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:text-white hover:bg-brand-blue/80 rounded-md transition-colors border border-blue-800/40"
+            >
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-3.5 w-3.5 text-amber-400" />
+                <span>Portal Guru & Kelas</span>
+              </div>
+              <ExternalLink className="h-3 w-3 text-blue-300/70" />
+            </Link>
+          )}
         </div>
 
         {/* Footer Sidebar */}

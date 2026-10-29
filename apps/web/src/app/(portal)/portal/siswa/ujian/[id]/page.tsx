@@ -960,9 +960,10 @@ export default function StudentCbtPlayerPage() {
                         Pilih satu atau lebih jawaban yang benar:
                       </p>
                       {currentQ.options.map((opt) => {
-                        const currentArr = Array.isArray(answers[currentQ.question_id])
-                          ? answers[currentQ.question_id]
-                          : [];
+                        const currentRaw = answers[currentQ.question_id];
+                        const currentArr = Array.isArray(currentRaw)
+                          ? currentRaw
+                          : (Array.isArray(currentRaw?.selected_option_ids) ? currentRaw.selected_option_ids : []);
                         const isSelected = currentArr.includes(opt.id);
 
                         return (
@@ -973,7 +974,7 @@ export default function StudentCbtPlayerPage() {
                               const newArr = isSelected
                                 ? currentArr.filter((id: string) => id !== opt.id)
                                 : [...currentArr, opt.id];
-                              handleAnswerChange(currentQ.question_id, newArr);
+                              handleAnswerChange(currentQ.question_id, { selected_option_ids: newArr });
                             }}
                             className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-start gap-3 ${
                               isSelected
@@ -1003,12 +1004,23 @@ export default function StudentCbtPlayerPage() {
                   {currentQ.question_type === 'bs' && (
                     <div className="grid grid-cols-2 gap-3 pt-2">
                       {['Benar', 'Salah'].map((val) => {
-                        const isSelected = answers[currentQ.question_id] === val;
+                        const matchedOpt = currentQ.options?.find(
+                          (o) => o.text?.toLowerCase() === val.toLowerCase()
+                        );
+                        const isSelected =
+                          answers[currentQ.question_id] === val ||
+                          answers[currentQ.question_id] === matchedOpt?.id ||
+                          answers[currentQ.question_id]?.value === val ||
+                          answers[currentQ.question_id]?.selected_option_id === matchedOpt?.id;
+
                         return (
                           <button
                             key={val}
                             type="button"
-                            onClick={() => handleAnswerChange(currentQ.question_id, val)}
+                            onClick={() => {
+                              const ansVal = matchedOpt ? { selected_option_id: matchedOpt.id, value: val } : val;
+                              handleAnswerChange(currentQ.question_id, ansVal);
+                            }}
                             className={`p-4 rounded-xl border text-center transition-all ${
                               isSelected
                                 ? val === 'Benar'
@@ -1031,8 +1043,14 @@ export default function StudentCbtPlayerPage() {
                         Pilih pasangan yang cocok untuk setiap premis di kolom kiri:
                       </p>
                       {currentQ.options.map((opt, i) => {
-                        const currentMap = answers[currentQ.question_id] || {};
-                        const selectedMatch = currentMap[opt.id] || '';
+                        const currentMap = (typeof answers[currentQ.question_id] === 'object' && answers[currentQ.question_id] !== null)
+                          ? (answers[currentQ.question_id]?.pairs ?? answers[currentQ.question_id])
+                          : {};
+                        const selectedMatch = currentMap[opt.id] || currentMap[opt.label] || '';
+
+                        const availableTargets = ((currentQ.body as any)?.targets && Array.isArray((currentQ.body as any).targets))
+                          ? (currentQ.body as any).targets
+                          : currentQ.options?.map((t: any) => t.match_key || t.text);
 
                         return (
                           <div
@@ -1047,14 +1065,14 @@ export default function StudentCbtPlayerPage() {
                               value={selectedMatch}
                               onChange={(e) => {
                                 const newMap = { ...currentMap, [opt.id]: e.target.value };
-                                handleAnswerChange(currentQ.question_id, newMap);
+                                handleAnswerChange(currentQ.question_id, { pairs: newMap });
                               }}
                               className="text-xs rounded-md border border-slate-300 p-2 bg-white sm:w-60"
                             >
                               <option value="">Pilih Pasangan...</option>
-                              {currentQ.options?.map((targetOpt) => (
-                                <option key={targetOpt.id} value={targetOpt.match_key || targetOpt.label}>
-                                  {targetOpt.match_key || targetOpt.text}
+                              {availableTargets?.map((targetVal: string, tIdx: number) => (
+                                <option key={tIdx} value={targetVal}>
+                                  {targetVal}
                                 </option>
                               ))}
                             </select>
@@ -1069,8 +1087,8 @@ export default function StudentCbtPlayerPage() {
                     <div className="space-y-2 pt-2">
                       <label className="text-xs font-semibold text-slate-700">Tulis Jawaban Singkat:</label>
                       <Input
-                        value={answers[currentQ.question_id] || ''}
-                        onChange={(e) => handleAnswerChange(currentQ.question_id, e.target.value)}
+                        value={typeof answers[currentQ.question_id] === 'object' ? (answers[currentQ.question_id]?.text ?? '') : (answers[currentQ.question_id] || '')}
+                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value })}
                         placeholder="Ketikkan jawaban Anda di sini..."
                         className="text-xs h-10 max-w-md"
                       />
@@ -1085,8 +1103,8 @@ export default function StudentCbtPlayerPage() {
                       </label>
                       <Textarea
                         rows={6}
-                        value={answers[currentQ.question_id] || ''}
-                        onChange={(e) => handleAnswerChange(currentQ.question_id, e.target.value)}
+                        value={typeof answers[currentQ.question_id] === 'object' ? (answers[currentQ.question_id]?.text ?? '') : (answers[currentQ.question_id] || '')}
+                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value })}
                         placeholder="Tuliskan penjelasan dan argumen jawaban Anda di sini..."
                         className="text-xs leading-relaxed"
                       />

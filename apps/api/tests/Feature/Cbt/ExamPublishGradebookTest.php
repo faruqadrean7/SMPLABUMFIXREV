@@ -98,16 +98,15 @@ class ExamPublishGradebookTest extends TestCase
         );
 
         $this->semester = Semester::firstOrCreate(
-            ['academic_year_id' => $academicYear->id, 'semester_type' => 'ganjil'],
+            ['academic_year_id' => $academicYear->id, 'name' => 'Semester Ganjil 2026/2027'],
             [
-                'name' => 'Semester Ganjil 2026/2027',
                 'start_date' => '2026-07-01',
                 'end_date' => '2026-12-31',
                 'is_active' => true,
             ]
         );
 
-        $gradeLevel = GradeLevel::firstOrCreate(['level' => 10], ['name' => 'Kelas 10']);
+        $gradeLevel = GradeLevel::firstOrCreate(['name' => 'Kelas 10'], ['sort_order' => 10]);
         $classA = SchoolClass::firstOrCreate(
             ['name' => 'X-MIPA-1'],
             ['academic_year_id' => $academicYear->id, 'grade_level_id' => $gradeLevel->id]
@@ -423,4 +422,3 @@ class ExamPublishGradebookTest extends TestCase
         ]);
     }
 }
-

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Rpt;
 
+use App\Models\AcademicYear;
 use App\Models\Attendance;
 use App\Models\AuditLog;
 use App\Models\Booking;
@@ -332,7 +333,7 @@ class ExecutiveApprovalTest extends TestCase
             'status' => 'active',
         ]);
 
-        $academicYear = \App\Models\AcademicYear::create([
+        $academicYear = AcademicYear::create([
             'name' => '2026/2027',
             'start_date' => '2026-07-01',
             'end_date' => '2027-06-30',
@@ -351,7 +352,7 @@ class ExecutiveApprovalTest extends TestCase
             'student_id' => $student->id,
             'semester_id' => $semester->id,
             'status' => 'dikunci',
-            'verify_token' => \Illuminate\Support\Str::random(32),
+            'verify_token' => Str::random(32),
             'locked_at' => Carbon::now(),
             'data_snapshot' => ['student_name' => 'Siswa Teladan Rapor', 'average_score' => 88.5],
         ]);
@@ -479,7 +480,7 @@ class ExecutiveApprovalTest extends TestCase
             'status' => 'active',
         ]);
 
-        $academicYear = \App\Models\AcademicYear::create([
+        $academicYear = AcademicYear::create([
             'name' => '2026/2027 Genap',
             'start_date' => '2027-01-01',
             'end_date' => '2027-06-30',
@@ -633,7 +634,7 @@ class ExecutiveApprovalTest extends TestCase
     {
         Sanctum::actingAs($this->principalUser);
 
-        $academicYear = \App\Models\AcademicYear::create([
+        $academicYear = AcademicYear::create([
             'name' => '2026/2027 Ganjil Filter',
             'start_date' => '2026-07-01',
             'end_date' => '2026-12-31',
@@ -891,5 +892,3 @@ class ExecutiveApprovalTest extends TestCase
         ]);
     }
 }
-
-

@@ -10,6 +10,7 @@ use App\Traits\ApiResponse;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
 class PostController extends Controller
@@ -102,7 +103,7 @@ class PostController extends Controller
             return $this->successResponse($post);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Berita tidak ditemukan', 'NOT_FOUND', 404);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
@@ -123,7 +124,7 @@ class PostController extends Controller
             return $this->successResponse($post);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Berita tidak ditemukan', 'NOT_FOUND', 404);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
@@ -144,7 +145,7 @@ class PostController extends Controller
             return $this->successResponse(['message' => 'Berita berhasil dihapus']);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Berita tidak ditemukan', 'NOT_FOUND', 404);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);

@@ -7,6 +7,7 @@ use App\Models\AssignmentSubmission;
 use App\Models\Attendance;
 use App\Models\Exam;
 use App\Models\ExamParticipant;
+use App\Models\Guardian;
 use App\Models\Notification;
 use App\Models\NotificationPreference;
 use App\Models\ReminderDispatch;
@@ -62,6 +63,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
 
         if (! $dispatch) {
             Log::warning("ReminderDispatch not found: {$this->dispatchId}");
+
             return;
         }
 
@@ -119,12 +121,14 @@ class ProcessReminderDispatchJob implements ShouldQueue
             $recipient = User::find($dispatch->recipient_id);
             if (! $recipient) {
                 $this->markFailed('Recipient user record does not exist');
+
                 return;
             }
 
             if ($recipient->school_id && $recipient->school_id !== $dispatch->school_id) {
                 $this->markSkipped('skipped_tenant_mismatch', 'Tenant boundary mismatch between recipient and event');
                 Log::warning("Tenant mismatch rejected: Recipient {$recipient->id} ({$recipient->school_id}) does not belong to school {$dispatch->school_id}");
+
                 return;
             }
         }
@@ -153,6 +157,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
 
         if ($preference && ! $preference->is_enabled) {
             $this->markSkipped('skipped_by_preference');
+
             return;
         }
 
@@ -168,6 +173,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
 
                 if (! $current) {
                     Log::warning("Fencing violation: Worker {$this->claimToken} lost claim on dispatch {$dispatch->id}. Aborting send.");
+
                     return;
                 }
 
@@ -262,6 +268,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
             $assignment = Assignment::find($dispatch->event_id);
             if (! $assignment) {
                 $this->markSkipped('skipped_stale_cancelled');
+
                 return true;
             }
 
@@ -273,6 +280,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
 
                 if ($hasSubmitted) {
                     $this->markSkipped('skipped_stale_submitted');
+
                     return true;
                 }
 
@@ -290,6 +298,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
 
                         if (! $isEnrolled) {
                             $this->markSkipped('skipped_stale_unenrolled');
+
                             return true;
                         }
                     }
@@ -302,6 +311,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
             $exam = Exam::find($dispatch->event_id);
             if (! $exam || in_array($exam->status, ['cancelled', 'selesai', 'archived'])) {
                 $this->markSkipped('skipped_stale_cancelled');
+
                 return true;
             }
 
@@ -315,6 +325,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
 
                     if (! $isParticipant) {
                         $this->markSkipped('skipped_stale_unenrolled');
+
                         return true;
                     }
                 }
@@ -326,6 +337,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
             $class = SchoolClass::with('homeroomTeacher')->find($dispatch->event_id);
             if (! $class) {
                 $this->markSkipped('skipped_stale_cancelled');
+
                 return true;
             }
 
@@ -334,6 +346,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
                 $homeroomTeacher = $class->homeroomTeacher;
                 if ($homeroomTeacher && $homeroomTeacher->user_id !== $dispatch->recipient_id) {
                     $this->markSkipped('skipped_stale_reassigned');
+
                     return true;
                 }
             }
@@ -347,6 +360,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
 
             if ($hasAttendance) {
                 $this->markSkipped('skipped_stale_recorded');
+
                 return true;
             }
         }
@@ -356,18 +370,20 @@ class ProcessReminderDispatchJob implements ShouldQueue
             $att = Attendance::with('student.guardians')->find($dispatch->event_id);
             if (! $att || ! in_array($att->status, ['alpha', 'alpa', 'a'])) {
                 $this->markSkipped('skipped_stale_status_changed');
+
                 return true;
             }
 
             $student = $att->student;
             if (! $student) {
                 $this->markSkipped('skipped_stale_cancelled');
+
                 return true;
             }
 
             // Jika notifikasi ditujukan ke wali (bukan siswa sendiri), pastikan relasi wali masih ada
             if ($student->user_id !== $dispatch->recipient_id) {
-                $isGuardian = \App\Models\Guardian::where('user_id', $dispatch->recipient_id)->exists();
+                $isGuardian = Guardian::where('user_id', $dispatch->recipient_id)->exists();
                 if ($isGuardian) {
                     $isLinkedGuardian = $student->guardians()
                         ->where('guardians.user_id', $dispatch->recipient_id)
@@ -375,6 +391,7 @@ class ProcessReminderDispatchJob implements ShouldQueue
 
                     if (! $isLinkedGuardian) {
                         $this->markSkipped('skipped_stale_relationship_changed');
+
                         return true;
                     }
                 }

@@ -475,4 +475,34 @@ export const ppdbApi = {
     const res = await apiClient.delete<ApiResponse<{ message: string }>>(`/ppdb/applications/${applicationId}/documents/${documentId}`);
     return res.data.data;
   },
+
+  /**
+   * Konfirmasi pendaftaran ulang oleh calon siswa yang dinyatakan diterima (BE-PPDB-08)
+   * POST /api/v1/ppdb/applications/{id}/re-register
+   */
+  async reRegister(applicationId: string, data?: { notes?: string }): Promise<any> {
+    const res = await apiClient.post<ApiResponse<any>>(`/ppdb/applications/${applicationId}/re-register`, data || {});
+    return res.data.data;
+  },
+
+  /**
+   * Mengambil data bukti resmi pendaftaran calon siswa (BE-PPDB-09)
+   * GET /api/v1/ppdb/applications/{id}/receipt
+   */
+  async getReceiptData(applicationId: string): Promise<any> {
+    const res = await apiClient.get<ApiResponse<any>>(`/ppdb/applications/${applicationId}/receipt`);
+    return res.data.data;
+  },
+
+  /**
+   * Mengunduh dokumen PDF resmi bukti tanda pendaftaran (BE-PPDB-09)
+   * GET /api/v1/ppdb/applications/{id}/receipt?format=pdf
+   */
+  async downloadReceiptPdf(applicationId: string): Promise<Blob> {
+    const res = await apiClient.get(`/ppdb/applications/${applicationId}/receipt?format=pdf`, {
+      responseType: 'blob',
+      headers: { Accept: 'application/pdf' },
+    });
+    return res.data;
+  },
 };

@@ -143,7 +143,7 @@ class CbtLoadSimulationTest extends TestCase
                 'user_id' => $user->id,
                 'full_name' => "Virtual Participant {$prefix} {$i}",
                 'nis' => "NIS_{$prefix}_{$i}",
-                'nisn' => "0099".str_pad((string) $i, 6, '0', STR_PAD_LEFT),
+                'nisn' => '0099'.str_pad((string) $i, 6, '0', STR_PAD_LEFT),
                 'nik_enc' => "enc_nik_{$prefix}_{$i}",
                 'gender' => ($i % 2 === 0 ? 'L' : 'P'),
                 'birth_place' => 'Malang',

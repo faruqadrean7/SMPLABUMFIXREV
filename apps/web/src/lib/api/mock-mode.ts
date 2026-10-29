@@ -1,13 +1,29 @@
 /**
- * Centralized Mock Mode Controller (GAP-03)
+ * Centralized Mock Mode Controller (GAP-03 / BATCH 1)
  * Mengendalikan isolasi data mock agar tidak pernah aktif di production
  * dan tidak pernah menyamarkan error otorisasi/server (401, 403, 404, 422, 5xx).
  */
 
+/**
+ * Memvalidasi kepatuhan lingkungan eksekusi terhadap mock mode.
+ * Melempar error fatal jika mock mode terdeteksi aktif pada lingkungan production (build/startup guard).
+ */
+export function assertValidEnvironment(): void {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    (process.env.NEXT_PUBLIC_MOCK_MODE === 'true' || process.env.NEXT_PUBLIC_USE_MOCK === 'true')
+  ) {
+    throw new Error('FATAL: Mock mode dilarang keras aktif pada lingkungan production (NEXT_PUBLIC_MOCK_MODE / NEXT_PUBLIC_USE_MOCK = true)!');
+  }
+}
+
 export function isMockEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
   return (
-    process.env.NODE_ENV !== 'production' &&
-    process.env.NEXT_PUBLIC_USE_MOCK === 'true'
+    process.env.NEXT_PUBLIC_USE_MOCK === 'true' ||
+    process.env.NEXT_PUBLIC_MOCK_MODE === 'true'
   );
 }
 

@@ -280,8 +280,8 @@ class PPDBAccountService
      */
     public function login(string $identifier, string $password, Request $request): array
     {
-        /** @var \App\Services\AuthService $authService */
-        $authService = app(\App\Services\AuthService::class);
+        /** @var AuthService $authService */
+        $authService = app(AuthService::class);
         $authResult = $authService->login([
             'identifier' => $identifier,
             'password' => $password,

@@ -110,6 +110,17 @@ export function useStudentDashboard() {
 }
 
 /**
+ * Hook untuk buku nilai siswa
+ */
+export function useStudentGrades() {
+  return useQuery({
+    queryKey: ['portal', 'student-grades'],
+    queryFn: () => portalApi.getStudentGrades(),
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+/**
  * Hook untuk jadwal mingguan siswa
  */
 export function useStudentSchedule() {

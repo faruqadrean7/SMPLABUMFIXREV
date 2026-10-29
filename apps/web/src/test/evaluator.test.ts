@@ -19,8 +19,9 @@ describe('RBAC Evaluator & Route Protection', () => {
       expect(sanitizeRoles({ role: 'admin' } as any)).toEqual([]);
     });
 
-    it('filters out empty or whitespace-only role strings', () => {
-      expect(sanitizeRoles(['admin', '', '   ', 'teacher', null, undefined])).toEqual(['admin', 'teacher']);
+    it('filters out empty or whitespace-only role strings and resolves aliases', () => {
+      expect(sanitizeRoles(['super_admin', '', '   ', 'teacher', null, undefined])).toEqual(['super_admin', 'teacher']);
+      expect(sanitizeRoles(['admin', '', '   ', 'teacher', null, undefined])).toEqual(['admin', 'admin_tu', 'teacher']);
     });
   });
 

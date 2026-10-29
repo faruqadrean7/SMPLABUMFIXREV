@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AcademicYearController;
+use App\Http\Controllers\Api\V1\AdminAuthController;
 use App\Http\Controllers\Api\V1\AlbumController;
 use App\Http\Controllers\Api\V1\AssignmentController;
 use App\Http\Controllers\Api\V1\AttendanceController;
@@ -36,7 +37,17 @@ use App\Http\Controllers\Api\V1\Hum\TracerSurveyController;
 use App\Http\Controllers\Api\V1\JournalController;
 use App\Http\Controllers\Api\V1\LeaveRequestController;
 use App\Http\Controllers\Api\V1\MaterialController;
+use App\Http\Controllers\Api\V1\MeChildController;
+use App\Http\Controllers\Api\V1\MeFinanceController;
+use App\Http\Controllers\Api\V1\Finance\FeeTypeController;
+use App\Http\Controllers\Api\V1\Finance\PaymentProviderSettingController;
+use App\Http\Controllers\Api\V1\Finance\InvoiceController;
+use App\Http\Controllers\Api\V1\Finance\PaymentController;
+use App\Http\Controllers\Api\V1\Finance\FinanceReportController;
 use App\Http\Controllers\Api\V1\MediaItemController;
+use App\Http\Controllers\Api\V1\MeStaffController;
+use App\Http\Controllers\Api\V1\MeStudentController;
+use App\Http\Controllers\Api\V1\MeTeacherController;
 use App\Http\Controllers\Api\V1\NavigationMenuController;
 use App\Http\Controllers\Api\V1\Ntf\AnnouncementController;
 use App\Http\Controllers\Api\V1\Ntf\MessagingController;
@@ -94,11 +105,8 @@ use App\Http\Controllers\Api\V1\TeacherController;
 use App\Http\Controllers\Api\V1\TeachingAssignmentController;
 use App\Http\Controllers\Api\V1\TeachingMaterialController;
 use App\Http\Controllers\Api\V1\TimeSlotController;
+use App\Http\Controllers\Api\V1\TwoFactorAuthController;
 use App\Http\Controllers\Api\V1\UserController;
-use App\Http\Controllers\Api\V1\MeChildController;
-use App\Http\Controllers\Api\V1\MeStudentController;
-use App\Http\Controllers\Api\V1\MeTeacherController;
-use App\Http\Controllers\Api\V1\MeStaffController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
@@ -152,14 +160,22 @@ Route::prefix('v1')->group(function () {
     // =========================================================================
     Route::prefix('auth')->group(function () {
         Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/admin/login', [AdminAuthController::class, 'login']);
         Route::post('/refresh', [AuthController::class, 'refresh']);
         Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,15');
-        Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+        Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:60,1');
+
+        // GAP-SEC-02 & BATCH 4B & 5C: Manajemen Otentikasi Dua Faktor (2FA / TOTP)
+        Route::post('/2fa/setup', [TwoFactorAuthController::class, 'setup'])->middleware('throttle:10,15');
+        Route::post('/2fa/verify', [TwoFactorAuthController::class, 'verify'])->middleware('throttle:5,15');
+        Route::post('/2fa/challenge', [AdminAuthController::class, 'login'])->middleware('throttle:10,15');
 
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout']);
             Route::get('/me', [AuthController::class, 'me']);
             Route::post('/change-password', [AuthController::class, 'changePassword']);
+
+            Route::post('/2fa/disable', [TwoFactorAuthController::class, 'disable']);
 
             // BE-AUTH-04: Manajemen Sesi Perangkat
             Route::get('/sessions', [AuthController::class, 'sessions']);
@@ -192,6 +208,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/{child}/report-cards', [MeChildController::class, 'reportCards']);
             Route::get('/{child}/character-notes', [MeChildController::class, 'characterNotes']);
             Route::get('/{child}/progress-reports', [MeChildController::class, 'progressReports']);
+            Route::get('/{child}/invoices', [MeFinanceController::class, 'childInvoices']);
         });
 
         // Portal Siswa
@@ -206,6 +223,12 @@ Route::prefix('v1')->group(function () {
             Route::post('/tasks/{id}/submit', [MeStudentController::class, 'submitTask']);
             Route::get('/counseling-requests', [MeStudentController::class, 'counselingRequests']);
             Route::post('/counseling-requests', [MeStudentController::class, 'storeCounselingRequest']);
+            // Keuangan (GAP-FIN-01)
+            Route::get('/invoices', [MeFinanceController::class, 'myInvoices']);
+            Route::get('/invoices/{id}', [MeFinanceController::class, 'showInvoice']);
+            Route::post('/invoices/{id}/payments', [MeFinanceController::class, 'submitPayment']);
+            Route::get('/payments/{id}/receipt', [MeFinanceController::class, 'getReceipt']);
+            Route::get('/payment-providers', [MeFinanceController::class, 'paymentProviders']);
         });
 
         // Portal Guru
@@ -228,11 +251,33 @@ Route::prefix('v1')->group(function () {
             Route::get('/assignments/{id}/submissions', [MeTeacherController::class, 'submissions']);
             Route::post('/submissions/{id}/grade', [MeTeacherController::class, 'gradeSubmission']);
             Route::get('/exams', [MeTeacherController::class, 'exams']);
+            Route::post('/exams', [MeTeacherController::class, 'storeExam']);
+            Route::get('/question-banks', [MeTeacherController::class, 'questionBanks']);
+            Route::post('/question-banks', [MeTeacherController::class, 'storeQuestionBank']);
+            Route::get('/question-banks/{id}', [MeTeacherController::class, 'showQuestionBank']);
+            Route::put('/question-banks/{id}', [MeTeacherController::class, 'updateQuestionBank']);
+            Route::delete('/question-banks/{id}', [MeTeacherController::class, 'destroyQuestionBank']);
+            Route::post('/question-banks/{id}/questions', [MeTeacherController::class, 'storeQuestion']);
+            Route::get('/questions', [MeTeacherController::class, 'questions']);
+            Route::post('/questions', [MeTeacherController::class, 'storeDirectQuestion']);
+            Route::get('/questions/{id}', [MeTeacherController::class, 'showQuestion']);
+            Route::put('/questions/{id}', [MeTeacherController::class, 'updateQuestion']);
+            Route::delete('/questions/{id}', [MeTeacherController::class, 'destroyQuestion']);
             Route::get('/leave-requests', [MeTeacherController::class, 'leaveRequests']);
             Route::post('/leave-requests', [MeTeacherController::class, 'storeLeaveRequest']);
             Route::get('/self-attendance', [MeTeacherController::class, 'selfAttendance']);
             Route::post('/self-attendance', [MeTeacherController::class, 'recordSelfAttendance']);
             Route::get('/homeroom', [MeTeacherController::class, 'homeroom']);
+
+            // Remediasi Kesenjangan Portal Guru (Fitur A - E)
+            Route::get('/homeroom/leave-requests', [MeTeacherController::class, 'homeroomLeaveRequests']);
+            Route::patch('/homeroom/leave-requests/{id}/decision', [MeTeacherController::class, 'decideHomeroomLeaveRequest']);
+            Route::post('/student-points', [MeTeacherController::class, 'storeStudentPoint']);
+            Route::post('/counseling-referrals', [MeTeacherController::class, 'storeCounselingReferral']);
+            Route::get('/facility-bookings', [MeTeacherController::class, 'facilityBookings']);
+            Route::post('/facility-bookings', [MeTeacherController::class, 'storeFacilityBooking']);
+            Route::post('/tickets', [MeTeacherController::class, 'storeTicket']);
+            Route::post('/grades/lock', [MeTeacherController::class, 'lockGrades']);
         });
 
         // Portal Staf
@@ -604,13 +649,13 @@ Route::prefix('v1')->group(function () {
     // =========================================================================
     // BE-GUEST-01 & BE-GUEST-03: Buku Tamu Digital (Public Registration & Signature)
     // =========================================================================
-    Route::post('/public/guests', [GuestController::class, 'register']);
-    Route::post('/public/guests/{id}/signature', [GuestController::class, 'uploadSignature']);
+    Route::post('/public/guests', [GuestController::class, 'register'])->middleware('throttle:60,1');
+    Route::post('/public/guests/{id}/signature', [GuestController::class, 'uploadSignature'])->middleware('throttle:60,1');
 
     // =========================================================================
     // BE-GUEST-02: Aspirasi & Whistleblowing (Public Submission & Tracking)
     // =========================================================================
-    Route::post('/public/complaints', [ComplaintController::class, 'submit']);
+    Route::post('/public/complaints', [ComplaintController::class, 'submit'])->middleware('throttle:60,1');
     Route::get('/public/complaints/{code}', [ComplaintController::class, 'track']);
 
     Route::middleware(['auth:sanctum', 'permission:ppdb.wave.manage'])->group(function () {
@@ -639,11 +684,11 @@ Route::prefix('v1')->group(function () {
     // =========================================================================
     // BE-PPDB-02: PPDB - Akun Calon Siswa & Verifikasi OTP
     // =========================================================================
-    Route::post('/ppdb/register', [PPDBAccountController::class, 'register']);
-    Route::post('/ppdb/verify-otp', [PPDBAccountController::class, 'verifyOtp']);
-    Route::post('/ppdb/resend-otp', [PPDBAccountController::class, 'resendOtp']);
-    Route::post('/ppdb/check-nik', [PPDBAccountController::class, 'checkNik']);
-    Route::post('/ppdb/login', [PPDBAccountController::class, 'login']);
+    Route::post('/ppdb/register', [PPDBAccountController::class, 'register'])->middleware('throttle:60,1');
+    Route::post('/ppdb/verify-otp', [PPDBAccountController::class, 'verifyOtp'])->middleware('throttle:60,1');
+    Route::post('/ppdb/resend-otp', [PPDBAccountController::class, 'resendOtp'])->middleware('throttle:60,1');
+    Route::post('/ppdb/check-nik', [PPDBAccountController::class, 'checkNik'])->middleware('throttle:60,1');
+    Route::post('/ppdb/login', [PPDBAccountController::class, 'login'])->middleware('throttle:60,1');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/ppdb/me', [PPDBAccountController::class, 'me']);
@@ -1371,6 +1416,44 @@ Route::prefix('v1')->group(function () {
         Route::post('/files/presign', [FileController::class, 'presign']);
         Route::post('/files/confirm', [FileController::class, 'confirm']);
         Route::get('/files/{id}/url', [FileController::class, 'url']);
+
+        // =====================================================================
+        // GAP-FIN-01: Modul Keuangan Sekolah (Bendahara & Admin)
+        // =====================================================================
+        Route::prefix('finance')->group(function () {
+            // Master Jenis Biaya (finance.fee.manage)
+            Route::get('/fee-types', [FeeTypeController::class, 'index'])->middleware('permission:finance.fee.manage');
+            Route::post('/fee-types', [FeeTypeController::class, 'store'])->middleware('permission:finance.fee.manage');
+            Route::get('/fee-types/{id}', [FeeTypeController::class, 'show'])->middleware('permission:finance.fee.manage');
+            Route::put('/fee-types/{id}', [FeeTypeController::class, 'update'])->middleware('permission:finance.fee.manage');
+            Route::delete('/fee-types/{id}', [FeeTypeController::class, 'destroy'])->middleware('permission:finance.fee.manage');
+
+            // Pengaturan Penyedia Pembayaran Pihak Ketiga (finance.fee.manage)
+            Route::get('/settings/providers', [PaymentProviderSettingController::class, 'index'])->middleware('permission:finance.fee.manage');
+            Route::post('/settings/providers', [PaymentProviderSettingController::class, 'store'])->middleware('permission:finance.fee.manage');
+            Route::get('/settings/providers/{id}', [PaymentProviderSettingController::class, 'show'])->middleware('permission:finance.fee.manage');
+            Route::put('/settings/providers/{id}', [PaymentProviderSettingController::class, 'update'])->middleware('permission:finance.fee.manage');
+            Route::delete('/settings/providers/{id}', [PaymentProviderSettingController::class, 'destroy'])->middleware('permission:finance.fee.manage');
+
+            // Tagihan / Invoices (finance.invoice.manage)
+            Route::get('/invoices', [InvoiceController::class, 'index'])->middleware('permission:finance.invoice.manage');
+            Route::post('/invoices', [InvoiceController::class, 'store'])->middleware('permission:finance.invoice.manage');
+            Route::post('/invoices/generate-bulk', [InvoiceController::class, 'generateBulk'])->middleware('permission:finance.invoice.manage');
+            Route::get('/invoices/{id}', [InvoiceController::class, 'show'])->middleware('permission:finance.invoice.manage');
+            Route::post('/invoices/{id}/cancel', [InvoiceController::class, 'cancel'])->middleware('permission:finance.invoice.manage');
+
+            // Pembayaran / Payments & Verifikasi (finance.payment.verify)
+            Route::get('/payments', [PaymentController::class, 'index'])->middleware('permission:finance.payment.verify');
+            Route::get('/payments/{id}', [PaymentController::class, 'show'])->middleware('permission:finance.payment.verify');
+            Route::post('/payments/{id}/verify', [PaymentController::class, 'verify'])->middleware('permission:finance.payment.verify');
+            Route::post('/payments/{id}/reject', [PaymentController::class, 'reject'])->middleware('permission:finance.payment.verify');
+            Route::post('/payments/{id}/void', [PaymentController::class, 'void'])->middleware('permission:finance.payment.verify');
+            Route::get('/payments/{id}/receipt', [PaymentController::class, 'receipt'])->middleware('permission:finance.payment.verify');
+
+            // Laporan Keuangan (finance.report.view)
+            Route::get('/reports/arrears', [FinanceReportController::class, 'arrears'])->middleware('permission:finance.report.view');
+            Route::get('/reports/income', [FinanceReportController::class, 'income'])->middleware('permission:finance.report.view');
+        });
     });
 
     // =========================================================================

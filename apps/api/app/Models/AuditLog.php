@@ -65,6 +65,7 @@ class AuditLog extends Model
         if (is_string($val)) {
             return json_decode($val, true);
         }
+
         return $val;
     }
 
@@ -79,6 +80,7 @@ class AuditLog extends Model
         if (is_string($val)) {
             return json_decode($val, true);
         }
+
         return $val;
     }
 

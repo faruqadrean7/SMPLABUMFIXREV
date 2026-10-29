@@ -342,6 +342,44 @@ export const portalApi = {
   },
 
   /**
+   * Mengambil daftar nilai & rapor siswa
+   */
+  async getStudentGrades(): Promise<ChildReportCardSummary> {
+    return executeWithMockFallback(
+      async () => {
+        const res = await apiClient.get<{ data: any[] }>('/me/grades');
+        const items = res.data?.data || [];
+        const avg = items.length > 0
+          ? Math.round((items.reduce((acc, curr) => acc + (Number(curr.finalScore) || 0), 0) / items.length) * 10) / 10
+          : 0;
+
+        return {
+          periodId: 'current',
+          periodName: 'Semester Berjalan',
+          academicYear: '2026/2027',
+          semester: 'Ganjil',
+          totalScore: items.reduce((acc, curr) => acc + (Number(curr.finalScore) || 0), 0),
+          averageScore: avg,
+          grades: items.map((g: any) => ({
+            subjectId: g.subjectId,
+            subjectName: g.subjectName,
+            subjectCode: g.subjectCode,
+            teacherName: g.teacherName || 'Guru Pengampu',
+            dailyAverage: Number(g.finalScore || 0),
+            midExam: Number(g.finalScore || 0),
+            finalExam: Number(g.finalScore || 0),
+            finalScore: Number(g.finalScore || 0),
+            letterGrade: g.letterGrade || (Number(g.finalScore) >= 85 ? 'A' : 'B'),
+            passingGrade: 75,
+            isPassed: Boolean(g.isPassed ?? (Number(g.finalScore) >= 75)),
+          })),
+        };
+      },
+      loadPortalMock ? () => loadPortalMock().then((m) => m.MOCK_CHILD_REPORT_CARD['child-1']) : undefined
+    );
+  },
+
+  /**
    * Mengambil jadwal pelajaran siswa
    */
   async getStudentSchedule(): Promise<StudentScheduleItem[]> {

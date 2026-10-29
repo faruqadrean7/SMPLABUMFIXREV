@@ -11,6 +11,15 @@ class ListAchievementRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('only_my')) {
+            $this->merge([
+                'only_my' => filter_var($this->input('only_my'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [

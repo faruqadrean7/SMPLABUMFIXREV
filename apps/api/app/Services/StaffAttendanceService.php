@@ -196,7 +196,7 @@ class StaffAttendanceService
                 $uq->where('username', 'like', "%{$keyword}%")
                     ->orWhere('email', 'like', "%{$keyword}%")
                     ->orWhereHas('teacher', fn ($tq) => $tq->where('full_name', 'like', "%{$keyword}%")->orWhere('nip', 'like', "%{$keyword}%"))
-                    ->orWhereHas('staff', fn ($sq) => $sq->where('full_name', 'like', "%{$keyword}%")->orWhere('nip', 'like', "%{$keyword}%"));
+                    ->orWhereHas('staff', fn ($sq) => $sq->where('full_name', 'like', "%{$keyword}%")->orWhere('position', 'like', "%{$keyword}%"));
             });
         }
 

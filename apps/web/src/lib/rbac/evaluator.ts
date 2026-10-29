@@ -13,10 +13,27 @@ export const ADMIN_SHELL_ROLES: RoleCode[] = [
   'ppdb_committee',
   'librarian',
   'treasurer',
+  'bendahara',
   'student_affairs',
   'public_relations',
   'operator_cms',
+  'admin_kurikulum',
+  'kurikulum',
 ];
+
+export const MANDATORY_2FA_ROLES: RoleCode[] = ADMIN_SHELL_ROLES;
+
+export const ROLE_ALIASES: Record<string, RoleCode> = {
+  admin: 'admin_tu',
+  kepala_sekolah: 'principal',
+  treasurer: 'bendahara',
+  admin_kurikulum: 'kurikulum',
+  guru_bk: 'counselor',
+  sarpras: 'facility_staff',
+  panitia_ppdb: 'ppdb_committee',
+  kesiswaan: 'student_affairs',
+  humas: 'public_relations',
+};
 
 /**
  * Daftar role dengan hak akses baca-saja (tanpa izin mutasi data operasional)
@@ -66,7 +83,23 @@ export function sanitizeRoles(roles: unknown): string[] {
   if (!roles || !Array.isArray(roles)) {
     return [];
   }
-  return roles.filter((r): r is string => typeof r === 'string' && r.trim().length > 0);
+  const rawRoles = roles.filter((r): r is string => typeof r === 'string' && r.trim().length > 0);
+  const normalized: string[] = [];
+  for (const r of rawRoles) {
+    if (!normalized.includes(r)) {
+      normalized.push(r);
+    }
+    if (ROLE_ALIASES[r] && !normalized.includes(ROLE_ALIASES[r])) {
+      normalized.push(ROLE_ALIASES[r]);
+    }
+    // Bidirectional lookup
+    for (const [aliasKey, targetCode] of Object.entries(ROLE_ALIASES)) {
+      if (targetCode === r && !normalized.includes(aliasKey)) {
+        normalized.push(aliasKey);
+      }
+    }
+  }
+  return normalized;
 }
 
 /**
@@ -105,8 +138,8 @@ export function resolveUserDestination(roles: unknown): PortalDestination {
     }
   }
 
-  // 5. Staf TU, Sarpras & Pustakawan -> Portal Staf
-  if (safeRoles.some((r) => r === 'admin_tu' || r === 'facility_staff' || r === 'librarian')) {
+  // 5. Staf TU, Sarpras, Pustakawan & Staf Umum -> Portal Staf
+  if (safeRoles.some((r) => r === 'admin_tu' || r === 'facility_staff' || r === 'librarian' || r === 'staff')) {
     const hasExecutiveRole = safeRoles.some(
       (r) => r === 'super_admin' || r === 'principal' || r === 'vice_principal'
     );
@@ -304,7 +337,10 @@ export function canAccessShell(
     case 'guru':
       return safeRoles.some((r) => r === 'teacher' || r === 'homeroom');
     case 'staf':
-      return safeRoles.some((r) => r === 'admin_tu' || r === 'facility_staff' || r === 'librarian');
+      return (
+        safeRoles.includes('staff') ||
+        safeRoles.some((r) => ADMIN_SHELL_ROLES.includes(r as RoleCode))
+      );
     case 'kepsek':
       return safeRoles.some((r) => r === 'principal' || r === 'vice_principal');
     default:
@@ -373,12 +409,16 @@ export function getPortalRoleOptions(roles: unknown): Array<{
     });
   }
 
-  if (isSuperAdmin || safeRoles.some((r) => r === 'admin_tu' || r === 'facility_staff' || r === 'librarian')) {
+  if (
+    isSuperAdmin ||
+    safeRoles.includes('staff') ||
+    safeRoles.some((r) => ADMIN_SHELL_ROLES.includes(r as RoleCode))
+  ) {
     result.push({
       portal: 'staf',
-      label: 'Portal Staf & TU',
+      label: 'Portal Staf & Layanan Pribadi',
       href: '/portal/staf',
-      description: 'Layanan administrasi persuratan, presensi kerja, dan operasional',
+      description: 'Presensi mandiri, pengajuan cuti, slip gaji, dan tiket bantuan',
       iconName: 'Briefcase',
     });
   }

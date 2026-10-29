@@ -3,10 +3,13 @@
 namespace App\Services\Sar;
 
 use App\Models\Asset;
+use App\Models\AssetAudit;
 use App\Models\AuditLog;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AssetService
@@ -116,7 +119,7 @@ class AssetService
             'qr_payload' => $qrPayload,
             'label_title' => 'INVENTARIS SEKOLAH',
             'school_id' => $asset->school_id,
-            'printed_at' => \Carbon\Carbon::now()->toIso8601String(),
+            'printed_at' => Carbon::now()->toIso8601String(),
         ];
     }
 
@@ -141,7 +144,7 @@ class AssetService
 
         // Kategori distribusi
         $categories = (clone $query)
-            ->select('category', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
+            ->select('category', DB::raw('count(*) as count'))
             ->groupBy('category')
             ->orderByDesc('count')
             ->limit(10)
@@ -149,7 +152,7 @@ class AssetService
             ->toArray();
 
         // Sesi stok opname
-        $auditQuery = \App\Models\AssetAudit::query();
+        $auditQuery = AssetAudit::query();
         if ($user && ! empty($user->school_id)) {
             $auditQuery->where(function ($q) use ($user) {
                 $q->whereNull('school_id')->orWhere('school_id', $user->school_id);

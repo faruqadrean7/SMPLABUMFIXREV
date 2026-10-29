@@ -315,7 +315,7 @@ class CounselingRequestService
         // Integrasi alur: Buat kasus konseling resmi dan sesi konseling jika diminta
         if (! empty($data['create_case'])) {
             $category = $data['case_category'] ?? 'Pribadi';
-            $summary = $data['case_summary'] ?? ($counselingRequest->topic . ': ' . ($data['notes'] ?? 'Tindak lanjut permintaan konseling'));
+            $summary = $data['case_summary'] ?? ($counselingRequest->topic.': '.($data['notes'] ?? 'Tindak lanjut permintaan konseling'));
 
             $case = CounselingCase::create([
                 'student_id' => $counselingRequest->student_id,

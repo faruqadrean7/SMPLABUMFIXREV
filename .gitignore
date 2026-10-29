@@ -18,6 +18,8 @@ vendor/
 # Next.js build outputs & caches (apps/portal & other Next apps)
 .next/
 **/.next/
+.vite/
+**/.vite/
 out/
 **/out/
 build/
@@ -33,4 +35,13 @@ dist/
 /apps/api/storage/logs/*.log
 /apps/api/public/storage
 /apps/api/database/database.sqlite
+**/seed-credentials.txt
+
+# Test artifacts and temporary load test tokens
+test-results/
+**/test-results/
+playwright-report/
+**/playwright-report/
+/apps/api/storage/load_tokens.json
+/apps/api/tests/load/tokens.json
 

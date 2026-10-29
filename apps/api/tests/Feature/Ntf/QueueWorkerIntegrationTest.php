@@ -5,11 +5,14 @@ namespace Tests\Feature\Ntf;
 use App\Jobs\ProcessReminderDispatchJob;
 use App\Models\Exam;
 use App\Models\ExamParticipant;
+use App\Models\ExamRoom;
 use App\Models\Notification;
 use App\Models\ReminderDispatch;
 use App\Models\Role;
 use App\Models\Room;
+use App\Models\Student;
 use App\Models\Subject;
+use App\Models\Teacher;
 use App\Models\User;
 use App\Services\Ntf\ReminderService;
 use Carbon\Carbon;
@@ -35,11 +38,17 @@ class QueueWorkerIntegrationTest extends TestCase
     use RefreshDatabase;
 
     protected ReminderService $reminderService;
+
     protected User $studentUser;
-    protected \App\Models\Student $student;
+
+    protected Student $student;
+
     protected User $teacherUser;
-    protected \App\Models\Teacher $teacher;
+
+    protected Teacher $teacher;
+
     protected Subject $subject;
+
     protected string $schoolId;
 
     protected function setUp(): void
@@ -64,7 +73,7 @@ class QueueWorkerIntegrationTest extends TestCase
             'status' => 'active',
         ]);
 
-        $this->student = \App\Models\Student::create([
+        $this->student = Student::create([
             'school_id' => $this->schoolId,
             'user_id' => $this->studentUser->id,
             'nis' => '99001',
@@ -86,7 +95,7 @@ class QueueWorkerIntegrationTest extends TestCase
             'status' => 'active',
         ]);
 
-        $this->teacher = \App\Models\Teacher::create([
+        $this->teacher = Teacher::create([
             'school_id' => $this->schoolId,
             'user_id' => $this->teacherUser->id,
             'nip' => '198501012010011005',
@@ -133,7 +142,7 @@ class QueueWorkerIntegrationTest extends TestCase
             'capacity' => 30,
         ]);
 
-        $examRoom = \App\Models\ExamRoom::create([
+        $examRoom = ExamRoom::create([
             'exam_id' => $exam->id,
             'room_id' => $room->id,
             'session_no' => 1,

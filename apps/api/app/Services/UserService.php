@@ -103,8 +103,22 @@ class UserService
 
             // Assign roles if provided
             if (! empty($data['roles'])) {
-                $roleIds = Role::whereIn('code', $data['roles'])
-                    ->orWhereIn('id', $data['roles'])
+                $uuidRoles = array_values(array_filter($data['roles'], fn ($r) => is_string($r) && Str::isUuid($r)));
+                $codeRoles = array_values(array_filter($data['roles'], fn ($r) => is_string($r) && ! Str::isUuid($r)));
+
+                $roleIds = Role::query()
+                    ->where(function ($q) use ($codeRoles, $uuidRoles) {
+                        if (! empty($codeRoles)) {
+                            $q->whereIn('code', $codeRoles);
+                        }
+                        if (! empty($uuidRoles)) {
+                            if (! empty($codeRoles)) {
+                                $q->orWhereIn('id', $uuidRoles);
+                            } else {
+                                $q->whereIn('id', $uuidRoles);
+                            }
+                        }
+                    })
                     ->pluck('id')
                     ->all();
 
@@ -182,8 +196,22 @@ class UserService
 
             // Sync roles if provided
             if (isset($data['roles'])) {
-                $roleIds = Role::whereIn('code', $data['roles'])
-                    ->orWhereIn('id', $data['roles'])
+                $uuidRoles = array_values(array_filter($data['roles'], fn ($r) => is_string($r) && Str::isUuid($r)));
+                $codeRoles = array_values(array_filter($data['roles'], fn ($r) => is_string($r) && ! Str::isUuid($r)));
+
+                $roleIds = Role::query()
+                    ->where(function ($q) use ($codeRoles, $uuidRoles) {
+                        if (! empty($codeRoles)) {
+                            $q->whereIn('code', $codeRoles);
+                        }
+                        if (! empty($uuidRoles)) {
+                            if (! empty($codeRoles)) {
+                                $q->orWhereIn('id', $uuidRoles);
+                            } else {
+                                $q->whereIn('id', $uuidRoles);
+                            }
+                        }
+                    })
                     ->pluck('id')
                     ->all();
                 $user->roles()->sync($roleIds);

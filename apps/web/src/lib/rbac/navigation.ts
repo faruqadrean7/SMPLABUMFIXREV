@@ -68,6 +68,10 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
           { title: 'Jadwal Pelajaran', href: '/admin/academic/schedules', icon: 'Clock', permission: 'academic.schedule.manage' },
           { title: 'Jurnal Mengajar Guru', href: '/admin/academic/journals', icon: 'BookMarked', permission: 'academic.journal.write' },
           { title: 'Presensi KBM Harian', href: '/admin/academic/attendance', icon: 'UserCheck', permission: 'academic.attendance.write' },
+          { title: 'Presensi Guru & Staf', href: '/admin/academic/staff-attendance', icon: 'Clock', permission: ['academic.attendance.write', 'academic.schedule.manage'] },
+          { title: 'Permohonan Izin KBM', href: '/admin/academic/leave-requests', icon: 'CalendarDays', permission: ['academic.attendance.write', 'academic.schedule.manage'] },
+          { title: 'Bahan Ajar & Modul', href: '/admin/academic/teaching-materials', icon: 'Layers', permission: ['academic.schedule.manage', 'academic.journal.write'] },
+          { title: 'Tugas Siswa', href: '/admin/academic/assignments', icon: 'Award', permission: ['academic.schedule.manage', 'academic.journal.write'] },
         ],
       },
       {
@@ -124,6 +128,10 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         href: '/admin/counseling',
         icon: 'HeartHandshake',
         permission: ['counseling.case.read', 'counseling.case.write'],
+        children: [
+          { title: 'Kasus & Catatan BK', href: '/admin/counseling', icon: 'HeartHandshake', permission: 'counseling.case.read' },
+          { title: 'Peringatan Dini (Early Warning)', href: '/admin/counseling/early-warnings', icon: 'ShieldAlert', permission: 'counseling.case.read' },
+        ],
       },
       {
         title: 'Sarana & Prasarana',
@@ -142,6 +150,30 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         href: '/admin/public-relations',
         icon: 'BookOpenCheck',
         permission: ['guest.book.read', 'guest.book.manage', 'complaint.read', 'complaint.manage'],
+      },
+    ],
+  },
+  {
+    title: 'Keuangan & Pembayaran',
+    items: [
+      {
+        title: 'Manajemen Keuangan',
+        href: '/admin/finance',
+        icon: 'CreditCard',
+        permission: [
+          'finance.fee.manage',
+          'finance.invoice.manage',
+          'finance.payment.verify',
+          'finance.report.view',
+        ],
+        children: [
+          { title: 'Jenis Biaya & Tarif', href: '/admin/finance/fee-types', icon: 'Coins', permission: 'finance.fee.manage' },
+          { title: 'Tagihan Siswa', href: '/admin/finance/invoices', icon: 'FileText', permission: 'finance.invoice.manage' },
+          { title: 'Verifikasi Pembayaran', href: '/admin/finance/payments', icon: 'CheckSquare', permission: 'finance.payment.verify' },
+          { title: 'Rekap Tunggakan', href: '/admin/finance/arrears', icon: 'AlertCircle', permission: 'finance.report.view' },
+          { title: 'Laporan Keuangan', href: '/admin/finance/reports', icon: 'BarChart3', permission: 'finance.report.view' },
+          { title: 'Cara Bayar & Rekening', href: '/admin/finance/settings', icon: 'Settings', permission: 'finance.fee.manage' },
+        ],
       },
     ],
   },
@@ -197,6 +229,7 @@ const ADDITIONAL_ADMIN_ROUTES: RoutePermissionRule[] = [
   { href: '/admin/academic/leave-requests', permission: ['academic.attendance.write', 'academic.schedule.manage'] },
   { href: '/admin/academic/staff-attendance', permission: ['academic.attendance.write', 'academic.schedule.manage'] },
   { href: '/admin/academic/character-notes', permission: ['student.point.write', 'academic.journal.write'] },
+  { href: '/admin/finance/settings', permission: 'finance.fee.manage' },
 ];
 
 /**

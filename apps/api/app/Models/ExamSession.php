@@ -13,6 +13,21 @@ class ExamSession extends Model
 {
     use Auditable, HasFactory, HasUuids;
 
+    public const STATUS_NOT_STARTED = 'belum';
+
+    public const STATUS_IN_PROGRESS = 'mengerjakan';
+
+    public const STATUS_FINISHED = 'selesai';
+
+    public const STATUS_LOCKED = 'terkunci';
+
+    public const STATUSES = [
+        self::STATUS_NOT_STARTED,
+        self::STATUS_IN_PROGRESS,
+        self::STATUS_FINISHED,
+        self::STATUS_LOCKED,
+    ];
+
     protected $table = 'exam_sessions';
 
     protected $fillable = [

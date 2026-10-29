@@ -184,7 +184,7 @@ class PPDBDocumentTest extends TestCase
 
     public function test_be_ppdb_04_applicant_can_upload_image_documents_jpg_png(): void
     {
-        $fileJpg = UploadedFile::fake()->image('akta_kelahiran.jpg', 600, 800)->size(500);
+        $fileJpg = UploadedFile::fake()->create('akta_kelahiran.jpg', 500, 'image/jpeg');
 
         $resJpg = $this->actingAs($this->applicantUser1)
             ->postJson("/api/v1/ppdb/applications/{$this->applicant1->id}/documents", [
@@ -196,7 +196,7 @@ class PPDBDocumentTest extends TestCase
             ->assertJsonPath('data.document_type', 'akta_kelahiran')
             ->assertJsonPath('data.status', 'menunggu');
 
-        $filePng = UploadedFile::fake()->image('sertifikat_lomba.png', 800, 600)->size(800);
+        $filePng = UploadedFile::fake()->create('sertifikat_lomba.png', 800, 'image/png');
 
         $resPng = $this->actingAs($this->applicantUser1)
             ->postJson("/api/v1/ppdb/applications/{$this->applicant1->id}/documents", [

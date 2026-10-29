@@ -772,4 +772,3 @@ class ExamTimingTest extends TestCase
         $this->assertEquals(50.0, (float) $session->score);
     }
 }
-

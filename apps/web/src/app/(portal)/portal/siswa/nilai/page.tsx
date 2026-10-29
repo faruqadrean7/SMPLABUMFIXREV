@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/providers/auth-provider';
-import { useChildReportCard } from '@/features/portal';
+import { useStudentGrades } from '@/features/portal';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,9 +22,7 @@ import {
 
 export default function StudentGradesPage() {
   const { user } = useAuth();
-  // Gunakan ID anak atau default 'child-1' untuk fallback siswa
-  const studentId = (user?.profile?.id as string) || 'child-1';
-  const { data: reportCard, isLoading } = useChildReportCard(studentId, user);
+  const { data: reportCard, isLoading } = useStudentGrades();
 
   return (
     <div className="space-y-6">

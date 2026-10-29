@@ -640,4 +640,3 @@ class StudentTest extends TestCase
         $this->assertEquals($this->student2->id, $data[0]['id']);
     }
 }
-

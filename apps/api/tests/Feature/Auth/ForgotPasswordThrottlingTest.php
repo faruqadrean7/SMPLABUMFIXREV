@@ -18,6 +18,7 @@ class ForgotPasswordThrottlingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        \Illuminate\Support\Facades\Cache::flush();
 
         $this->user = User::create([
             'username' => 'user_pwd_throttle',

@@ -207,7 +207,7 @@ class RbacService
 
             $newRoles = $user->roles()->pluck('code')->all();
 
-            app(\App\Services\AuditLogService::class)->record(
+            app(AuditLogService::class)->record(
                 action: 'user.roles_assigned',
                 entity: 'User',
                 entityId: $user->id,

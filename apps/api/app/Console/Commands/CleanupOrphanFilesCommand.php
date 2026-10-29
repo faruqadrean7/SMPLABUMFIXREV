@@ -28,18 +28,18 @@ class CleanupOrphanFilesCommand extends Command
         $isExecute = (bool) $this->option('execute');
         $isForce = (bool) $this->option('force');
 
-        $this->info("=================================================================");
-        $this->info(" SISTLABUM - Audit & Pembersihan Berkas Upload Yatim (Orphan)");
-        $this->info("=================================================================");
-        $this->comment("Mode Operasi: ".($isExecute ? "EKSEKUSI PENGHAPUSAN AKTUAL" : "DRY-RUN (LAPORAN SAJA, TIDAK MENGHAPUS)"));
+        $this->info('=================================================================');
+        $this->info(' SISTLABUM - Audit & Pembersihan Berkas Upload Yatim (Orphan)');
+        $this->info('=================================================================');
+        $this->comment('Mode Operasi: '.($isExecute ? 'EKSEKUSI PENGHAPUSAN AKTUAL' : 'DRY-RUN (LAPORAN SAJA, TIDAK MENGHAPUS)'));
         $this->line("Ambang batas usia : minimal {$hours} jam");
         $this->line("Batas pemindaian   : {$limit} berkas");
-        $this->line("Memindai entitas basis data & penyimpanan...");
+        $this->line('Memindai entitas basis data & penyimpanan...');
 
         $scan = $this->orphanService->scanOrphans($hours, $limit);
 
         $this->newLine();
-        $this->info("--- Ringkasan Pemindaian ---");
+        $this->info('--- Ringkasan Pemindaian ---');
         $this->table(
             ['Metrik', 'Nilai'],
             [
@@ -54,7 +54,8 @@ class CleanupOrphanFilesCommand extends Command
         );
 
         if ($scan['orphan_candidates_count'] === 0) {
-            $this->info("✓ Tidak ditemukan berkas yatim lama. Kondisi penyimpanan bersih.");
+            $this->info('✓ Tidak ditemukan berkas yatim lama. Kondisi penyimpanan bersih.');
+
             return self::SUCCESS;
         }
 
@@ -72,7 +73,7 @@ class CleanupOrphanFilesCommand extends Command
         }, $displayCandidates);
 
         $this->newLine();
-        $this->info("Daftar 10 Kandidat Berkas Yatim Teratas:");
+        $this->info('Daftar 10 Kandidat Berkas Yatim Teratas:');
         $this->table(
             ['File ID (UUID)', 'Bucket', 'Visibilitas', 'Ukuran', 'Usia', 'Status Fisik'],
             $rows
@@ -80,22 +81,24 @@ class CleanupOrphanFilesCommand extends Command
 
         if (! $isExecute) {
             $this->newLine();
-            $this->warn("⚠ MODE DRY-RUN AKTIF: Tidak ada berkas fisik maupun baris data yang dihapus.");
-            $this->line("Untuk melakukan pembersihan aktual, jalankan perintah dengan opsi --execute:");
+            $this->warn('⚠ MODE DRY-RUN AKTIF: Tidak ada berkas fisik maupun baris data yang dihapus.');
+            $this->line('Untuk melakukan pembersihan aktual, jalankan perintah dengan opsi --execute:');
             $this->comment("  php artisan files:cleanup-orphans --hours={$hours} --execute");
+
             return self::SUCCESS;
         }
 
         // Mode Eksekusi Aktual
         if (! $isForce) {
             if (! $this->confirm("Apakah Anda yakin ingin menghapus {$scan['orphan_candidates_count']} berkas yatim secara permanen?")) {
-                $this->warn("Operasi pembersihan dibatalkan oleh pengguna.");
+                $this->warn('Operasi pembersihan dibatalkan oleh pengguna.');
+
                 return self::SUCCESS;
             }
         }
 
         $this->newLine();
-        $this->info("Mengeksekusi pembersihan berkas yatim dengan verifikasi ganda...");
+        $this->info('Mengeksekusi pembersihan berkas yatim dengan verifikasi ganda...');
 
         $orphanIds = array_column($scan['orphan_candidates'], 'id');
         $purgeResult = $this->orphanService->purgeOrphans($orphanIds);
@@ -110,7 +113,8 @@ class CleanupOrphanFilesCommand extends Command
             ]
         );
 
-        $this->info("✓ Eksekusi pembersihan selesai dan dicatat dalam audit logs.");
+        $this->info('✓ Eksekusi pembersihan selesai dan dicatat dalam audit logs.');
+
         return self::SUCCESS;
     }
 
@@ -125,6 +129,7 @@ class CleanupOrphanFilesCommand extends Command
         if ($bytes >= 1024) {
             return round($bytes / 1024, 2).' KB';
         }
+
         return $bytes.' B';
     }
 }

@@ -237,7 +237,7 @@ export default function ExecutiveDashboardPage() {
 
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {metrics.gradeLevelAverages.map((item) => (
+              {(metrics.gradeLevelAverages || []).map((item) => (
                 <div key={item.level} className="p-4 rounded-xl bg-slate-50 border border-slate-200">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-slate-600">{item.level}</span>
@@ -287,7 +287,7 @@ export default function ExecutiveDashboardPage() {
           </CardHeader>
 
           <CardContent className="space-y-3">
-            {metrics.recentIncidents.map((incident) => (
+            {(metrics.recentIncidents || []).map((incident) => (
               <div key={incident.id} className="p-3 rounded-xl border border-slate-200 bg-white space-y-1">
                 <div className="flex items-center justify-between">
                   <Badge

@@ -31,6 +31,9 @@ import {
   ShieldCheck,
   Wrench,
   Building,
+  HeartHandshake,
+  Trophy,
+  CreditCard,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -87,8 +90,12 @@ export function PortalShell({ children }: PortalShellProps) {
       return [
         { title: 'Beranda', href: '/portal/siswa', icon: Home },
         { title: 'Jadwal', href: '/portal/siswa/jadwal', icon: Calendar },
+        { title: 'Tugas', href: '/portal/siswa/tugas', icon: Award },
         { title: 'Buku Nilai', href: '/portal/siswa/nilai', icon: FileText },
         { title: 'Ujian CBT', href: '/portal/siswa/cbt', icon: Monitor },
+        { title: 'Konseling', href: '/portal/siswa/konseling', icon: HeartHandshake },
+        { title: 'Buku Poin', href: '/portal/siswa/poin', icon: Trophy },
+        { title: 'Tagihan', href: '/portal/siswa/tagihan', icon: CreditCard },
         { title: 'Notifikasi', href: '/portal/notifikasi', icon: Bell },
       ];
     }
@@ -116,6 +123,7 @@ export function PortalShell({ children }: PortalShellProps) {
         { title: 'Izin & Cuti', href: '/portal/guru/izin-cuti', icon: CalendarDays },
         { title: 'Slip Gaji', href: '/portal/guru/slip-gaji', icon: DollarSign },
         { title: 'Presensi Kerja', href: '/portal/guru/presensi-saya', icon: Clock },
+        { title: 'Fasilitas & Sarpras', href: '/portal/guru/fasilitas', icon: Building },
       ];
 
       if (isHomeroom) {

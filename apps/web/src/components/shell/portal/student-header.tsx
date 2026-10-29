@@ -14,6 +14,7 @@ import {
   Award,
   LogOut,
   Monitor,
+  CreditCard,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/notifications/notification-bell';
@@ -29,6 +30,7 @@ export function StudentHeader() {
     { title: 'Ujian CBT', href: '/portal/siswa/cbt', icon: Monitor },
     { title: 'E-Rapor', href: '/portal/siswa/rapor', icon: FileText },
     { title: 'Poin Disiplin', href: '/portal/siswa/poin', icon: Award },
+    { title: 'Tagihan', href: '/portal/siswa/tagihan', icon: CreditCard },
   ];
 
   const studentName =

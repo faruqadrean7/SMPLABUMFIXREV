@@ -111,6 +111,7 @@ class MeChildController extends Controller
 
         $attendances = Attendance::where('student_id', $child)
             ->orderBy('att_date', 'desc')
+            ->orderBy('created_at', 'desc')
             ->get();
 
         $presentCount = $attendances->where('status', 'hadir')->count();

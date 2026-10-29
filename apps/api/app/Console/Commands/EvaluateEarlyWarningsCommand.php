@@ -51,7 +51,7 @@ class EvaluateEarlyWarningsCommand extends Command
 
             return Command::SUCCESS;
         } catch (\Throwable $e) {
-            $this->error('Gagal mengevaluasi deteksi dini: ' . $e->getMessage());
+            $this->error('Gagal mengevaluasi deteksi dini: '.$e->getMessage());
             report($e);
 
             return Command::FAILURE;

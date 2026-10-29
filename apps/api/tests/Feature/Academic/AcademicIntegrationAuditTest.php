@@ -4,7 +4,6 @@ namespace Tests\Feature\Academic;
 
 use App\Models\AcademicYear;
 use App\Models\Attendance;
-use App\Models\CharacterNote;
 use App\Models\ClassStudent;
 use App\Models\Extracurricular;
 use App\Models\ExtracurricularMember;
@@ -35,26 +34,45 @@ class AcademicIntegrationAuditTest extends TestCase
     use RefreshDatabase;
 
     protected User $principalUser;
+
     protected User $adminUser;
+
     protected User $walasUser;
+
     protected User $otherTeacherUser;
+
     protected User $student1User;
+
     protected User $student2User;
+
     protected User $guardian1User;
+
     protected User $guardian2User;
 
     protected Teacher $walas;
+
     protected Teacher $otherTeacher;
+
     protected Student $student1;
+
     protected Student $student2;
+
     protected SchoolClass $classA;
+
     protected SchoolClass $classB;
+
     protected AcademicYear $academicYear;
+
     protected Semester $semester1;
+
     protected GradePeriod $periodMonth8;
+
     protected Subject $subjectMath;
+
     protected Subject $subjectEnglish;
+
     protected GradeComponent $compMathFormatif;
+
     protected GradeComponent $compMathSumatif;
 
     protected function setUp(): void
@@ -838,4 +856,3 @@ class AcademicIntegrationAuditTest extends TestCase
         $this->assertStringContainsString('non-akademik di sekolah.', $content);
     }
 }
-

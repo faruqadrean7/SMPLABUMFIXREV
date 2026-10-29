@@ -13,9 +13,12 @@ export type RoleCode =
   | 'ppdb_committee'
   | 'librarian'
   | 'treasurer'
+  | 'bendahara'
   | 'student_affairs'
   | 'public_relations'
   | 'operator_cms'
+  | 'admin_kurikulum'
+  | 'kurikulum'
   | 'committee'
   | 'supervisor'
   | 'student'
@@ -56,10 +59,23 @@ export interface AuthTokens {
 }
 
 export interface LoginPayload {
-  identifier: string;
-  password: string;
+  identifier?: string;
+  password?: string;
   platform?: 'web' | 'android' | 'ios';
   fcm_token?: string;
+  totp_code?: string;
+  recovery_code?: string;
+  mfa_token?: string;
+  isAdminLogin?: boolean;
+}
+
+export interface LoginResult {
+  user: User | null;
+  destination: PortalDestination | null;
+  mfa_required?: boolean;
+  mfa_token?: string;
+  mfa_enrollment_required?: boolean;
+  enrollment_token?: string;
 }
 
 export interface LoginResponseData {

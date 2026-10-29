@@ -5,34 +5,30 @@ namespace Tests\Feature\Portal;
 use App\Models\AcademicYear;
 use App\Models\Assignment;
 use App\Models\Attendance;
-use App\Models\CharacterNote;
 use App\Models\ClassStudent;
-use App\Models\CounselingRequest;
 use App\Models\Exam;
 use App\Models\ExamParticipant;
+use App\Models\ExamRoom;
 use App\Models\Grade;
 use App\Models\GradeComponent;
+use App\Models\GradeLevel;
 use App\Models\GradePeriod;
 use App\Models\Guardian;
-use App\Models\LeaveRequest;
-use App\Models\ReportCard;
 use App\Models\Role;
+use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Models\Staff;
-use App\Models\StaffAttendance;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeachingAssignment;
-use App\Models\Ticket;
 use App\Models\TimeSlot;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class MeStudentGuardianStaffPortalApiTest extends TestCase
@@ -40,23 +36,35 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $guardianUser1;
+
     protected User $guardianUser2;
+
     protected Guardian $guardian1;
+
     protected Guardian $guardian2;
+
     protected Student $student1;
+
     protected Student $student2;
+
     protected SchoolClass $classA;
 
     protected User $studentUser1;
+
     protected User $teacherUser1;
+
     protected Teacher $teacher1;
+
     protected Subject $subjectMath;
 
     protected User $staffUser1;
+
     protected Staff $staff1;
 
     protected AcademicYear $academicYear;
+
     protected Semester $semester;
+
     protected TimeSlot $timeSlot;
 
     protected function setUp(): void
@@ -118,7 +126,7 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
             'passing_grade' => 75.0,
         ]);
 
-        $gradeLevel = \App\Models\GradeLevel::firstOrCreate(
+        $gradeLevel = GradeLevel::firstOrCreate(
             ['name' => 'Kelas 7'],
             ['sort_order' => 7]
         );
@@ -311,14 +319,14 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
             'created_by' => $this->teacherUser1->id,
         ]);
 
-        $room = \App\Models\Room::create([
+        $room = Room::create([
             'name' => 'Lab Komputer 1',
             'code' => 'LAB-1',
             'room_type' => 'laboratorium',
             'capacity' => 30,
         ]);
 
-        $examRoom = \App\Models\ExamRoom::create([
+        $examRoom = ExamRoom::create([
             'exam_id' => $exam->id,
             'room_id' => $room->id,
             'proctor_id' => $this->teacherUser1->id,
@@ -715,4 +723,3 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
             ->assertJsonPath('error.code', 'FORBIDDEN');
     }
 }
-

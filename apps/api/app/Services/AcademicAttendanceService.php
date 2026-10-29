@@ -304,29 +304,31 @@ class AcademicAttendanceService
             || $currentUser->hasPermission('academic.schedule.manage')
             || $currentUser->roles()->where('code', 'like', 'admin%')->exists();
 
-        $leave = LeaveRequest::with(['student.classes'])->findOrFail($id);
+        return DB::transaction(function () use ($id, $data, $currentUser, $teacher, $isAdmin, $request) {
+            $leave = LeaveRequest::with(['student.classes'])
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        // Otorisasi walas: pastikan guru adalah wali kelas dari kelas aktif siswa tersebut
-        if (! $isAdmin) {
-            if (! $teacher) {
-                throw new HttpException(403, 'Hanya wali kelas atau admin yang berhak memutuskan izin siswa.');
+            // Otorisasi walas: pastikan guru adalah wali kelas dari kelas aktif siswa tersebut
+            if (! $isAdmin) {
+                if (! $teacher) {
+                    throw new HttpException(403, 'Hanya wali kelas atau admin yang berhak memutuskan izin siswa.');
+                }
+
+                $isWalas = SchoolClass::where('homeroom_teacher_id', $teacher->id)
+                    ->whereHas('students', fn ($q) => $q->where('students.id', $leave->student_id))
+                    ->exists();
+
+                if (! $isWalas) {
+                    throw new HttpException(403, 'Hanya wali kelas dari siswa bersangkutan yang berhak memutuskan izin.');
+                }
             }
 
-            $isWalas = SchoolClass::where('homeroom_teacher_id', $teacher->id)
-                ->whereHas('students', fn ($q) => $q->where('students.id', $leave->student_id))
-                ->exists();
-
-            if (! $isWalas) {
-                throw new HttpException(403, 'Hanya wali kelas dari siswa bersangkutan yang berhak memutuskan izin.');
+            // Cegah perubahan status berulang tanpa hak admin
+            if ($leave->status !== 'menunggu' && ! $isAdmin) {
+                throw new HttpException(422, 'Permohonan izin ini sudah diputuskan sebelumnya dan tidak dapat diubah kembali.');
             }
-        }
 
-        // Cegah perubahan status berulang tanpa hak admin
-        if ($leave->status !== 'menunggu' && ! $isAdmin) {
-            throw new HttpException(422, 'Permohonan izin ini sudah diputuskan sebelumnya dan tidak dapat diubah kembali.');
-        }
-
-        return DB::transaction(function () use ($leave, $data, $currentUser, $request) {
             $oldData = $leave->toArray();
             $decisionNotes = $data['decision_notes'] ?? ($data['note'] ?? null);
 
@@ -636,7 +638,7 @@ class AcademicAttendanceService
      */
     public function getMaxEditDays(?string $schoolId = null): int
     {
-        $settingQuery = SiteSetting::where('key', 'journal_edit_max_days');
+        $settingQuery = SiteSetting::where('setting_key', 'journal_edit_max_days');
         if ($schoolId) {
             $settingQuery->where(function ($q) use ($schoolId) {
                 $q->where('school_id', $schoolId)->orWhereNull('school_id');

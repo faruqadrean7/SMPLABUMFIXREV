@@ -12,7 +12,7 @@ function MasukContent() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuth();
 
-  // Jika sudah terautentikasi, langsung alihkan ke portal yang sesuai
+  // Jika sudah terautentikasi, langsung alihkan ke rute portal internal yang sesuai
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
       const destination = resolveUserDestination(user.roles as string[]);

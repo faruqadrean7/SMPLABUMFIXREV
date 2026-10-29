@@ -662,8 +662,8 @@ class CompetitionAndAchievementTest extends TestCase
 
     public function test_be_std_03_cannot_register_student_across_different_schools(): void
     {
-        $schoolA = (string) \Illuminate\Support\Str::uuid();
-        $schoolB = (string) \Illuminate\Support\Str::uuid();
+        $schoolA = (string) Str::uuid();
+        $schoolB = (string) Str::uuid();
 
         $this->teacherUser->update(['school_id' => $schoolA]);
         $this->student->update(['school_id' => $schoolB]);

@@ -82,10 +82,12 @@ describe('Public Shell & Accessibility Tests (Langkah 1)', () => {
       });
     });
 
-    it('merender tombol aksi cepat PPDB Online menuju /ppdb', () => {
+    it('merender tombol aksi cepat PPDB Online menuju /ppdb dengan target _blank', () => {
       render(<PublicHeader />);
       const cta = screen.getAllByRole('link', { name: /ppdb online/i })[0];
       expect(cta).toHaveAttribute('href', '/ppdb');
+      expect(cta).toHaveAttribute('target', '_blank');
+      expect(cta).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
     it('memiliki tombol hamburger mobile dengan atribut aksesibel yang benar', () => {
@@ -175,7 +177,7 @@ describe('Public Shell & Accessibility Tests (Langkah 1)', () => {
   });
 
   describe('PublicAuthNav Component', () => {
-    it('merender "Masuk Portal" menuju /masuk ketika pengguna belum terautentikasi', () => {
+    it('merender "Masuk Portal" menuju rute internal /masuk ketika pengguna belum terautentikasi', () => {
       vi.spyOn(authProvider, 'useAuth').mockReturnValue({
         user: null,
         isAuthenticated: false,
@@ -192,7 +194,7 @@ describe('Public Shell & Accessibility Tests (Langkah 1)', () => {
       expect(link).toHaveAttribute('href', '/masuk');
     });
 
-    it('merender "Masuk Portal" / "Portal Akademik" sebagai fallback saat status autentikasi masih memuat (loading)', () => {
+    it('merender "Masuk Portal" menuju rute internal /masuk saat status autentikasi masih memuat (loading)', () => {
       vi.spyOn(authProvider, 'useAuth').mockReturnValue({
         user: null,
         isAuthenticated: false,
@@ -209,7 +211,7 @@ describe('Public Shell & Accessibility Tests (Langkah 1)', () => {
       expect(link).toHaveAttribute('href', '/masuk');
     });
 
-    it('merender "Buka Portal Saya" menuju destinasi portal ketika pengguna sudah terautentikasi', () => {
+    it('merender "Buka Portal Saya" menuju destinasi portal internal ketika pengguna sudah terautentikasi', () => {
       vi.spyOn(authProvider, 'useAuth').mockReturnValue({
         user: {
           id: 'user-student-1',

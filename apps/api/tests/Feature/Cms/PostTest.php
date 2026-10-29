@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Cms;
 
+use App\Models\File;
 use App\Models\Permission;
 use App\Models\Post;
 use App\Models\PostCategory;
@@ -541,7 +542,7 @@ class PostTest extends TestCase
      */
     public function test_int_05_post_creation_and_update_with_cover_file_id_eager_loads_cover_file(): void
     {
-        $coverFile1 = \App\Models\File::create([
+        $coverFile1 = File::create([
             'school_id' => null,
             'owner_id' => $this->adminUser->id,
             'owner_type' => 'App\Models\User',
@@ -552,7 +553,7 @@ class PostTest extends TestCase
             'visibility' => 'publik',
         ]);
 
-        $coverFile2 = \App\Models\File::create([
+        $coverFile2 = File::create([
             'school_id' => null,
             'owner_id' => $this->adminUser->id,
             'owner_type' => 'App\Models\User',

@@ -116,7 +116,10 @@ class GuestSignatureTest extends TestCase
 
     public function test_be_guest_03_public_can_submit_uploaded_image_file_signature(): void
     {
-        $fakeImage = UploadedFile::fake()->image('signature_pad.png', 200, 100);
+        $fakeImage = UploadedFile::fake()->createWithContent(
+            'signature_pad.png',
+            base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
+        );
         $fileBytes = file_get_contents($fakeImage->getRealPath());
         $expectedHash = hash('sha256', $fileBytes);
 

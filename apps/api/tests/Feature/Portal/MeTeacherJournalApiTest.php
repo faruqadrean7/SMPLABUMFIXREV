@@ -3,10 +3,10 @@
 namespace Tests\Feature\Portal;
 
 use App\Models\AcademicYear;
-use App\Models\Assignment;
 use App\Models\Attendance;
-use App\Models\Grade;
+use App\Models\ClassStudent;
 use App\Models\GradeComponent;
+use App\Models\GradeLevel;
 use App\Models\GradePeriod;
 use App\Models\Journal;
 use App\Models\Role;
@@ -29,15 +29,25 @@ class MeTeacherJournalApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $teacherUser;
+
     protected Teacher $teacher;
+
     protected User $studentUser;
+
     protected Student $student;
+
     protected SchoolClass $class;
+
     protected Subject $subject;
+
     protected Schedule $schedule;
+
     protected AcademicYear $academicYear;
+
     protected Semester $semester;
+
     protected GradePeriod $period;
+
     protected GradeComponent $component;
 
     protected function setUp(): void
@@ -62,7 +72,7 @@ class MeTeacherJournalApiTest extends TestCase
             'is_active' => true,
         ]);
 
-        $gradeLevel = \App\Models\GradeLevel::create([
+        $gradeLevel = GradeLevel::create([
             'name' => 'Kelas 7',
             'sort_order' => 7,
         ]);
@@ -142,7 +152,7 @@ class MeTeacherJournalApiTest extends TestCase
             'status' => 'aktif',
         ]);
 
-        \App\Models\ClassStudent::create([
+        ClassStudent::create([
             'class_id' => $this->class->id,
             'student_id' => $this->student->id,
             'joined_at' => '2026-07-01',

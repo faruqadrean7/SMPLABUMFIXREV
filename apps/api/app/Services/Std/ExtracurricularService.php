@@ -174,7 +174,6 @@ class ExtracurricularService
             // Cek kuota aktif secara atomik
             $activeCount = ExtracurricularMember::where('extracurricular_id', $ekskul->id)
                 ->where('status', 'aktif')
-                ->lockForUpdate()
                 ->count();
 
             if ($activeCount >= $ekskul->quota) {

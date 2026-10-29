@@ -16,6 +16,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ExtracurricularTest extends TestCase
@@ -536,7 +537,7 @@ class ExtracurricularTest extends TestCase
             'semester_id' => $sem->id,
             'status' => 'locked',
             'locked_at' => now(),
-            'verify_token' => \Illuminate\Support\Str::random(32),
+            'verify_token' => Str::random(32),
             'data_snapshot' => ['extracurriculars' => []],
         ]);
 

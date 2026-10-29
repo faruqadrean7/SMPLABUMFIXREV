@@ -67,7 +67,7 @@ class DispatchRemindersCommand extends Command
 
         // 2. Opsi Recovery: Retry Failed Dispatches (tidak menjalankan dispatch biasa)
         if ($this->option('retry-failed')) {
-            $this->info('Menjalankan ulang dispatch pengingat yang gagal (school: ' . ($schoolId ?? 'all') . ')...');
+            $this->info('Menjalankan ulang dispatch pengingat yang gagal (school: '.($schoolId ?? 'all').')...');
             $retried = $reminderService->retryFailedDispatches($schoolId, 50, $async);
             $this->info("Selesai. Total dispatch gagal yang diproses ulang: {$retried}.");
 
@@ -89,11 +89,12 @@ class DispatchRemindersCommand extends Command
 
         if (! in_array($type, $validTypes, true)) {
             $this->error("Tipe pengingat '{$type}' tidak valid. Pilihan valid: all, cbt, lms, att (atau attendance_daily).");
+
             return Command::FAILURE;
         }
 
         // 5. Default: Eksekusi Reminder Engine sesuai tipe yang divalidasi
-        $this->info("Menjalankan Reminder Engine (type: {$type}, school: " . ($schoolId ?? 'all') . ', mode: ' . ($async ? 'async/queue' : 'sync') . ')...');
+        $this->info("Menjalankan Reminder Engine (type: {$type}, school: ".($schoolId ?? 'all').', mode: '.($async ? 'async/queue' : 'sync').')...');
 
         $result = match ($type) {
             'cbt', 'cbt_exam' => ['cbt' => $reminderService->dispatchCbtExamReminders($schoolId, $async)],

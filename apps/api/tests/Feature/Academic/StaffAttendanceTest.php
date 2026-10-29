@@ -154,7 +154,7 @@ class StaffAttendanceTest extends TestCase
     {
         $token = $this->teacher1User->createToken('test')->plainTextToken;
 
-        $selfie = UploadedFile::fake()->image('selfie.jpg', 600, 600);
+        $selfie = UploadedFile::fake()->create('selfie.jpg', 100, 'image/jpeg');
 
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->post('/api/v1/staff-attendances/check-in', [
@@ -512,5 +512,21 @@ class StaffAttendanceTest extends TestCase
             'action' => 'staff_attendance.settings_updated',
         ]);
     }
-}
 
+    /**
+     * BATCH 5E-1 BUG FIX: Search keyword on staff attendance should not crash 500 when querying staff relations
+     */
+    public function test_be_acd_05_list_staff_attendances_with_search_keyword_works_without_sql_error(): void
+    {
+        $token = $this->adminUser->createToken('test')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/v1/staff-attendances?q=Matematika&page=1&per_page=15');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'data',
+                'meta' => ['page', 'limit', 'total', 'totalPages'],
+            ]);
+    }
+}

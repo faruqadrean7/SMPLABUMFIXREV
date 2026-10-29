@@ -7,13 +7,17 @@ use App\Models\AcademicYear;
 use App\Models\Assignment;
 use App\Models\AssignmentSubmission;
 use App\Models\Attendance;
+use App\Models\ClassStudent;
 use App\Models\Exam;
 use App\Models\ExamParticipant;
+use App\Models\ExamRoom;
+use App\Models\GradeLevel;
 use App\Models\Guardian;
 use App\Models\Notification;
 use App\Models\NotificationPreference;
 use App\Models\ReminderDispatch;
 use App\Models\Role;
+use App\Models\Room;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Subject;
@@ -31,16 +35,27 @@ class ReminderEngineTest extends TestCase
     use RefreshDatabase;
 
     protected ReminderService $reminderService;
+
     protected User $studentUser1;
+
     protected User $studentUser2;
+
     protected Student $student1;
+
     protected Student $student2;
+
     protected User $teacherUser;
+
     protected Teacher $teacher;
+
     protected User $guardianUser;
+
     protected Guardian $guardian;
+
     protected SchoolClass $class;
+
     protected Subject $subject;
+
     protected string $schoolId;
 
     protected function setUp(): void
@@ -148,7 +163,7 @@ class ReminderEngineTest extends TestCase
             'is_active' => true,
         ]);
 
-        $gl = \App\Models\GradeLevel::create([
+        $gl = GradeLevel::create([
             'school_id' => $this->schoolId,
             'name' => '10',
             'sort_order' => 1,
@@ -163,13 +178,13 @@ class ReminderEngineTest extends TestCase
             'capacity' => 36,
         ]);
 
-        \App\Models\ClassStudent::create([
+        ClassStudent::create([
             'class_id' => $this->class->id,
             'student_id' => $this->student1->id,
             'joined_at' => '2026-07-15',
         ]);
 
-        \App\Models\ClassStudent::create([
+        ClassStudent::create([
             'class_id' => $this->class->id,
             'student_id' => $this->student2->id,
             'joined_at' => '2026-07-15',
@@ -182,7 +197,7 @@ class ReminderEngineTest extends TestCase
             'subject_group' => 'umum',
         ]);
 
-        $this->room = \App\Models\Room::create([
+        $this->room = Room::create([
             'school_id' => $this->schoolId,
             'code' => 'LAB-KOMP-1',
             'name' => 'Lab Komputer 1',
@@ -191,9 +206,9 @@ class ReminderEngineTest extends TestCase
         ]);
     }
 
-    protected function createExamRoom(Exam $exam): \App\Models\ExamRoom
+    protected function createExamRoom(Exam $exam): ExamRoom
     {
-        return \App\Models\ExamRoom::create([
+        return ExamRoom::create([
             'exam_id' => $exam->id,
             'room_id' => $this->room->id,
             'session_no' => 1,
@@ -445,7 +460,7 @@ class ReminderEngineTest extends TestCase
             'status' => 'scheduled',
         ]);
 
-        $examRoom = \App\Models\ExamRoom::create([
+        $examRoom = ExamRoom::create([
             'exam_id' => $otherExam->id,
             'room_id' => $this->room->id,
             'session_no' => 1,
@@ -968,7 +983,7 @@ class ReminderEngineTest extends TestCase
         ]);
 
         // A. Worker A mengklaim dispatch dengan Token A
-        $tokenA = 'worker-a-token-' . Str::random(10);
+        $tokenA = 'worker-a-token-'.Str::random(10);
         $jobA = new ProcessReminderDispatchJob($dispatch->id, $tokenA);
 
         // Simulasi Worker A baru selesai melakukan atomic claim
@@ -1195,4 +1210,3 @@ class ReminderEngineTest extends TestCase
         $this->assertEquals(0, Notification::where('user_id', $this->teacherUser->id)->count());
     }
 }
-

@@ -25,12 +25,12 @@ class LoginTest extends TestCase
     {
         parent::setUp();
 
-        RateLimiter::clear('login_attempts:*');
+        \Illuminate\Support\Facades\Cache::flush();
 
-        // Create basic roles and permissions
+        // Create basic roles and permissions for portal user
         $this->adminRole = Role::create([
-            'code' => 'admin_tu',
-            'name' => 'Admin Tata Usaha',
+            'code' => 'teacher',
+            'name' => 'Guru',
             'is_system' => true,
         ]);
 
@@ -62,7 +62,7 @@ class LoginTest extends TestCase
             ->assertHeader('X-Request-Id')
             ->assertJsonPath('data.user.username', 'johndoe')
             ->assertJsonPath('data.user.email', 'john@labschool.sch.id')
-            ->assertJsonPath('data.user.roles', ['admin_tu'])
+            ->assertJsonPath('data.user.roles', ['teacher'])
             ->assertJsonStructure([
                 'data' => [
                     'user' => [
@@ -391,7 +391,7 @@ class LoginTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('data.user.username', 'johndoe')
             ->assertJsonPath('data.user.email', 'john@labschool.sch.id')
-            ->assertJsonPath('data.user.roles', ['admin_tu'])
+            ->assertJsonPath('data.user.roles', ['teacher'])
             ->assertJsonPath('data.user.permissions', ['auth.user.read', 'master.student.read']);
     }
 

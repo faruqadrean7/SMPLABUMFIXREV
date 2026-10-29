@@ -46,12 +46,11 @@ class DashboardService
 
         // 1. CBT Live (Real-Time, TIDAK di-cache)
         $now = Carbon::now();
-        $activeSessionQuery = ExamSession::where('status', 'in_progress');
+        $activeSessionQuery = ExamSession::whereIn('status', ['mengerjakan', 'in_progress']);
         $ongoingExamsQuery = Exam::where(function ($q) {
             $q->whereIn('status', ['berlangsung', 'dijadwalkan', 'published']);
         })->where(function ($q) use ($now) {
-            $q->where(fn ($sub) => $sub->where('start_at', '<=', $now)->where('end_at', '>=', $now))
-                ->orWhere(fn ($sub) => $sub->where('start_time', '<=', $now)->where('end_time', '>=', $now));
+            $q->where('start_at', '<=', $now)->where('end_at', '>=', $now);
         });
 
         if ($schoolId) {
@@ -59,7 +58,7 @@ class DashboardService
             $ongoingExamsQuery->where('school_id', $schoolId);
         }
 
-        $activeRoomsQuery = ExamSession::where('exam_sessions.status', 'in_progress')
+        $activeRoomsQuery = ExamSession::whereIn('exam_sessions.status', ['mengerjakan', 'in_progress'])
             ->join('exams', 'exam_sessions.exam_id', '=', 'exams.id');
         if ($schoolId) {
             $activeRoomsQuery->where('exams.school_id', $schoolId);
@@ -72,7 +71,7 @@ class DashboardService
         ];
 
         // 2. Metrik Agregat Ter-cache (Cache 2 Menit / 120 Detik)
-        $cacheKey = 'dashboard_executive_metrics_' . ($schoolId ?? 'global');
+        $cacheKey = 'dashboard_executive_metrics_'.($schoolId ?? 'global');
         $cachedMetrics = Cache::remember($cacheKey, 120, function () use ($schoolId) {
             $today = Carbon::today()->toDateString();
 
@@ -202,10 +201,7 @@ class DashboardService
                 $q->where('priority', 'darurat')
                     ->orWhere(fn ($sub) => $sub->where('priority', 'tinggi')->where('status', 'pending'));
             });
-            $assetsQuery = Asset::where(function ($q) {
-                $q->where('asset_condition', 'rusak_berat')
-                    ->orWhere('condition', 'rusak_berat');
-            });
+            $assetsQuery = Asset::where('asset_condition', 'rusak_berat');
             if ($schoolId) {
                 $ticketsQuery->where('school_id', $schoolId);
                 $assetsQuery->where('school_id', $schoolId);
@@ -294,18 +290,14 @@ class DashboardService
 
         $todaySchedules = $teacherId
             ? Schedule::where('teacher_id', $teacherId)
-                ->where(function ($q) use ($todayDay, $todayDayIso) {
-                    $q->where('day_of_week', $todayDay)
-                        ->orWhere('day_of_week', $todayDayIso)
-                        ->orWhere('day_of_week', strtolower($todayDay));
-                })
+                ->where('day_of_week', $todayDayIso)
                 ->with(['schoolClass', 'subject', 'timeSlot'])
                 ->get()
             : collect([]);
 
         $pendingJournals = $teacherId
             ? Schedule::where('teacher_id', $teacherId)
-                ->whereDoesntHave('journals', fn ($q) => $q->whereDate('date', Carbon::today()))
+                ->whereDoesntHave('journals', fn ($q) => $q->whereDate('session_date', Carbon::today()))
                 ->count()
             : 0;
 
@@ -500,11 +492,7 @@ class DashboardService
 
         $tomorrowSchedules = ($activeClass)
             ? Schedule::where('class_id', $activeClass->id)
-                ->where(function ($q) use ($tomorrowDay, $tomorrowDayIso) {
-                    $q->where('day_of_week', $tomorrowDay)
-                        ->orWhere('day_of_week', $tomorrowDayIso)
-                        ->orWhere('day_of_week', strtolower($tomorrowDay));
-                })
+                ->where('day_of_week', $tomorrowDayIso)
                 ->with(['subject', 'teacher', 'room', 'timeSlot'])
                 ->get()
             : collect([]);

@@ -601,4 +601,3 @@ class CounselingCaseAndSessionTest extends TestCase
             ->assertJsonPath('error.code', 'FORBIDDEN');
     }
 }
-

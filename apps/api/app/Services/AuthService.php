@@ -76,6 +76,25 @@ class AuthService
             );
         }
 
+        // BATCH 4B (GAP-SEC-02): Akun dengan akses shell admin DITOLAK di endpoint portal civitas
+        $userRoleCodes = $user->roles->pluck('code')->all();
+        $hasAdminShellRole = ! empty(array_intersect($userRoleCodes, \App\Http\Controllers\Api\V1\AdminAuthController::ADMIN_ROLES));
+
+        if ($hasAdminShellRole) {
+            $this->logAudit($user->id, 'auth.login_failed', 'User', $user->id, null, [
+                'identifier' => $identifier,
+                'reason' => 'admin_account_prohibited_on_civitas_portal',
+            ], $request);
+
+            throw new HttpException(
+                401,
+                'Kredensial yang diberikan tidak cocok dengan data kami.',
+                null,
+                [],
+                401
+            );
+        }
+
         // Login success: clear rate limiter
         RateLimiter::clear($rateLimitKey);
 
@@ -467,9 +486,26 @@ class AuthService
     }
 
     /**
+     * Issue tokens directly for an authenticated user (e.g. after 2FA verification).
+     */
+    public function issueTokensForUser(User $user, Request $request, ?string $deviceId = null): array
+    {
+        $tokens = $this->generateTokenPair($user, $deviceId);
+
+        $this->logAudit($user->id, 'auth.admin_login', 'User', $user->id, null, [
+            'platform' => 'admin_web',
+        ], $request);
+
+        return [
+            'user' => $this->formatUserResponse($user),
+            'tokens' => $tokens,
+        ];
+    }
+
+    /**
      * Generate pair of access token (15 mins) and refresh token (14 days).
      */
-    protected function generateTokenPair(User $user, ?string $deviceId = null): array
+    public function generateTokenPair(User $user, ?string $deviceId = null): array
     {
         $tokenResult = $user->createToken('access_token', ['*'], now()->addMinutes(15));
         $plainRefreshToken = bin2hex(random_bytes(32));

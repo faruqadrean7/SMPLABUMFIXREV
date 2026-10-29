@@ -204,7 +204,7 @@ class GuardianService
                 $request->user()?->id,
                 'student_guardian.linked',
                 'StudentGuardian',
-                "{$studentId}:{$guardianId}",
+                $studentId,
                 null,
                 [
                     'student_id' => $studentId,
@@ -266,7 +266,7 @@ class GuardianService
                 $request->user()?->id,
                 'student_guardian.updated',
                 'StudentGuardian',
-                "{$studentId}:{$guardianId}",
+                $studentId,
                 (array) $existing,
                 $pivotUpdate,
                 $request
@@ -303,7 +303,7 @@ class GuardianService
                 $request->user()?->id,
                 'student_guardian.unlinked',
                 'StudentGuardian',
-                "{$studentId}:{$guardianId}",
+                $studentId,
                 (array) $existing,
                 null,
                 $request
@@ -386,7 +386,7 @@ class GuardianService
                 'actor_id' => $actorId,
                 'action' => $action,
                 'entity' => $entity,
-                'entity_id' => $entityId,
+                'entity_id' => ($entityId && \Illuminate\Support\Str::isUuid($entityId)) ? $entityId : null,
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
                 'ip' => $request->ip(),

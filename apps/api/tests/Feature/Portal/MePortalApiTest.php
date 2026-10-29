@@ -3,23 +3,16 @@
 namespace Tests\Feature\Portal;
 
 use App\Models\AcademicYear;
+use App\Models\AssignmentSubmission;
 use App\Models\Attendance;
-use App\Models\CharacterNote;
-use App\Models\Exam;
-use App\Models\ExamParticipant;
-use App\Models\Grade;
-use App\Models\GradeComponent;
-use App\Models\GradePeriod;
+use App\Models\ClassStudent;
+use App\Models\GradeLevel;
 use App\Models\Guardian;
-use App\Models\Journal;
-use App\Models\ProgressReport;
-use App\Models\ReportCard;
 use App\Models\Role;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Models\Staff;
-use App\Models\StaffAttendance;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
@@ -27,7 +20,6 @@ use App\Models\TeachingAssignment;
 use App\Models\Ticket;
 use App\Models\TimeSlot;
 use App\Models\User;
-use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -38,26 +30,41 @@ class MePortalApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $guardianUser1;
+
     protected User $guardianUser2;
+
     protected Guardian $guardian1;
+
     protected Guardian $guardian2;
+
     protected Student $student1;
+
     protected Student $student2;
+
     protected SchoolClass $classA;
+
     protected SchoolClass $classB;
 
     protected User $studentUser1;
+
     protected User $teacherUser1;
+
     protected User $teacherUser2;
+
     protected Teacher $teacher1;
+
     protected Teacher $teacher2;
+
     protected Subject $subjectMath;
 
     protected User $staffUser1;
+
     protected Staff $staff1;
 
     protected AcademicYear $academicYear;
+
     protected Semester $semester;
+
     protected TimeSlot $timeSlot;
 
     protected function setUp(): void
@@ -131,7 +138,7 @@ class MePortalApiTest extends TestCase
             'status' => 'active',
         ]);
 
-        $gradeLevel7 = \App\Models\GradeLevel::create([
+        $gradeLevel7 = GradeLevel::create([
             'name' => 'Kelas 7',
             'sort_order' => 7,
         ]);
@@ -211,7 +218,7 @@ class MePortalApiTest extends TestCase
             'entry_date' => '2024-07-15',
             'status' => 'aktif',
         ]);
-        \App\Models\ClassStudent::create([
+        ClassStudent::create([
             'class_id' => $this->classA->id,
             'student_id' => $this->student1->id,
             'joined_at' => '2024-07-15',
@@ -238,7 +245,7 @@ class MePortalApiTest extends TestCase
             'entry_date' => '2024-07-15',
             'status' => 'aktif',
         ]);
-        \App\Models\ClassStudent::create([
+        ClassStudent::create([
             'class_id' => $this->classB->id,
             'student_id' => $this->student2->id,
             'joined_at' => '2024-07-15',
@@ -695,7 +702,7 @@ class MePortalApiTest extends TestCase
         $asgId = $resAsg->json('data.id');
 
         // 2. Buat dummy submission dari student 1
-        $submission = \App\Models\AssignmentSubmission::create([
+        $submission = AssignmentSubmission::create([
             'assignment_id' => $asgId,
             'student_id' => $this->student1->id,
             'notes' => 'Jawaban terlampir pak',
@@ -809,4 +816,3 @@ class MePortalApiTest extends TestCase
         $resAll->assertStatus(200);
     }
 }
-

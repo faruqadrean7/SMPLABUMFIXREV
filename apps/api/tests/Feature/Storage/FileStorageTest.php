@@ -472,7 +472,7 @@ class FileStorageTest extends TestCase
         $token = $presignRes->json('data.token');
         $uploadUrl = $presignRes->json('data.upload_url');
 
-        $fakeImage = UploadedFile::fake()->image('pasfoto_resmi.jpg', 200, 200);
+        $fakeImage = UploadedFile::fake()->create('pasfoto_resmi.jpg', 100, 'image/jpeg');
         $uploadRes = $this->post($uploadUrl, [
             'file' => $fakeImage,
         ]);

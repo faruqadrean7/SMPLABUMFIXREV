@@ -15,12 +15,12 @@ interface PublicAuthNavProps {
 /**
  * PublicAuthNav Component (Client Island)
  * Mengintegrasikan status autentikasi tanpa mengakses storage langsung.
- * Fallback stabil ke label "Masuk Portal" saat inisialisasi / belum login.
+ * Mengarahkan pengunjung ke alur autentikasi internal /masuk atau portal persona pengguna.
  */
 export function PublicAuthNav({ variant = 'desktop', onNavigate }: PublicAuthNavProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
 
-  // Selama loading atau belum login, arahkan ke /masuk
+  // Jika sudah terautentikasi, arahkan ke portal yang sesuai peran; jika belum, arahkan ke /masuk
   const destinationPath =
     !isLoading && isAuthenticated && user
       ? getDestinationPath(resolveUserDestination((user.roles as string[]) || []))

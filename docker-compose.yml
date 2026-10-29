@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_DATABASE:-sistlabum}
     ports:
-      - "${DB_PORT:-5433}:5432"
+      - "${DB_PORT_HOST:-${DB_PORT:-5433}}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -46,7 +46,7 @@ services:
   # MinIO S3-Compatible Object Storage (Jalankan dengan: docker compose --profile storage up)
   # ============================================================================
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-11-07T00-52-49Z
+    image: cgr.dev/chainguard/minio:latest
     profiles: ["storage"]
     container_name: sistlabum-minio
     restart: unless-stopped
@@ -83,6 +83,7 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     container_name: sistlabum-api
+    command: php artisan serve --host=0.0.0.0 --port=8000 --no-reload
     restart: unless-stopped
     depends_on:
       postgres:
@@ -92,9 +93,11 @@ services:
     ports:
       - "8000:8000"
     environment:
+      PHP_CLI_SERVER_WORKERS: "35"
+      TEST_DISABLE_RATE_LIMIT: ${TEST_DISABLE_RATE_LIMIT:-true}
       APP_ENV: local
       APP_DEBUG: "true"
-      APP_KEY: ${APP_KEY:-}
+      APP_KEY: ${APP_KEY:-base64:w6oCVlMI64nU2Pmfg4Zp4LzcQXDC+lPJsZ63sL4wwTQ=}
       APP_URL: http://localhost:8000
       DB_CONNECTION: pgsql
       DB_HOST: postgres
@@ -107,7 +110,7 @@ services:
       QUEUE_CONNECTION: redis
       CACHE_STORE: redis
       SESSION_DRIVER: redis
-      FILESYSTEM_DISK: s3
+      FILESYSTEM_DISK: ${FILESYSTEM_DISK:-s3}
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-minioadmin}
       AWS_DEFAULT_REGION: us-east-1
@@ -117,8 +120,36 @@ services:
       MAIL_MAILER: smtp
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
+      UAT_SEED_ENABLED: ${UAT_SEED_ENABLED:-true}
     volumes:
       - ./apps/api:/var/www/html
+    networks:
+      - sistlabum-network
+
+  # ============================================================================
+  # Frontend Web (Next.js 14 - Landing, PPDB, Admin, Portal Terpadu)
+  # ============================================================================
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: sistlabum-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+      - "3001:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_APP_NAME: "SISTLABUM - Portal Sekolah Satu Pintu"
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
     networks:
       - sistlabum-network
 

@@ -7,6 +7,7 @@ use App\Models\File;
 use App\Models\Staff;
 use App\Models\Teacher;
 use App\Models\TeacherSalarySlip;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -775,7 +776,7 @@ class TeacherStaffService
 
         $teacher = Teacher::where('user_id', $user->id)->first();
         if (! $teacher) {
-            throw new HttpException(404, 'Profil pendidik guru Anda belum terdaftar.');
+            return collect([]);
         }
 
         return TeacherSalarySlip::where('teacher_id', $teacher->id)
@@ -798,10 +799,19 @@ class TeacherStaffService
 
         $teacher = Teacher::where('user_id', $user->id)->first();
         if (! $teacher) {
-            throw new HttpException(404, 'Profil pendidik guru Anda belum terdaftar.');
+            return collect([]);
         }
 
-        return $this->downloadSalarySlip($teacher->id, $slipId, $request);
+        $salarySlip = TeacherSalarySlip::with('teacher')->find($slipId);
+        if (! $salarySlip) {
+            throw new HttpException(404, 'Slip gaji tidak ditemukan.');
+        }
+
+        if ($salarySlip->teacher_id !== $teacher->id && ! $this->canAccessTeacherSalary($user, $salarySlip->teacher)) {
+            throw new HttpException(403, 'Anda tidak memiliki hak akses untuk mengunduh slip gaji ini.');
+        }
+
+        return $this->downloadSalarySlip($salarySlip->teacher_id, $slipId, $request);
     }
 
     /**
@@ -853,7 +863,7 @@ class TeacherStaffService
     /**
      * Helper to verify if user has access to view a teacher's salary information (IDOR safe).
      */
-    protected function canAccessTeacherSalary(?\App\Models\User $user, Teacher $teacher): bool
+    protected function canAccessTeacherSalary(?User $user, Teacher $teacher): bool
     {
         if (! $user) {
             return false;

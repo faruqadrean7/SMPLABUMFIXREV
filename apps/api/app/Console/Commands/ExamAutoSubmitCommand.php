@@ -41,7 +41,7 @@ class ExamAutoSubmitCommand extends Command
         $count = 0;
         foreach ($expiredSessionIds as $sessionId) {
             try {
-                DB::transaction(function () use ($sessionId, $cutoff, $now, $gradingService, &$count) {
+                DB::transaction(function () use ($sessionId, $cutoff, $gradingService, &$count) {
                     // Lock sesi untuk mencegah race condition antar-worker yang berjalan bersamaan
                     $session = ExamSession::where('id', $sessionId)
                         ->whereIn('status', ['mengerjakan', 'in_progress'])

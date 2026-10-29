@@ -9,6 +9,7 @@ use App\Models\Loan;
 use App\Models\StudentPoint;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\AuditLogService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -67,7 +68,7 @@ class ReportService
         $csvContent = $this->buildCsv($type, $reportData['summary'], $reportData['rows']);
         $filename = 'rekap_'.$type.'_'.Carbon::now()->format('Ymd_His').'.csv';
 
-        app(\App\Services\AuditLogService::class)->record(
+        app(AuditLogService::class)->record(
             action: 'report.export',
             entity: 'Report_'.$type,
             entityId: null,

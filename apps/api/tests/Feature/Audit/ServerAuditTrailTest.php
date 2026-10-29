@@ -2,21 +2,27 @@
 
 namespace Tests\Feature\Audit;
 
+use App\Models\AcademicYear;
 use App\Models\AuditLog;
+use App\Models\ClassStudent;
 use App\Models\Grade;
 use App\Models\GradeComponent;
+use App\Models\GradeLevel;
 use App\Models\GradePeriod;
+use App\Models\Permission;
 use App\Models\ReportCard;
 use App\Models\Role;
 use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeachingAssignment;
 use App\Models\User;
+use App\Services\AuditLogService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ServerAuditTrailTest extends TestCase
@@ -24,12 +30,19 @@ class ServerAuditTrailTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $teacherUser;
+
     protected Teacher $teacher;
+
     protected Student $student;
+
     protected SchoolClass $class;
+
     protected Semester $semester;
+
     protected GradePeriod $period;
+
     protected GradeComponent $component;
 
     protected function setUp(): void
@@ -38,8 +51,8 @@ class ServerAuditTrailTest extends TestCase
 
         $adminRole = Role::firstOrCreate(['code' => 'super_admin'], ['name' => 'Super Admin', 'is_system' => true]);
         $teacherRole = Role::firstOrCreate(['code' => 'teacher'], ['name' => 'Guru', 'is_system' => true]);
-        $permGrade = \App\Models\Permission::firstOrCreate(['code' => 'academic.grade.write'], ['name' => 'Tulis Nilai', 'module' => 'academic']);
-        $permReport = \App\Models\Permission::firstOrCreate(['code' => 'academic.report.generate'], ['name' => 'Kelola Rapor', 'module' => 'academic']);
+        $permGrade = Permission::firstOrCreate(['code' => 'academic.grade.write'], ['name' => 'Tulis Nilai', 'module' => 'academic']);
+        $permReport = Permission::firstOrCreate(['code' => 'academic.report.generate'], ['name' => 'Kelola Rapor', 'module' => 'academic']);
         $teacherRole->permissions()->syncWithoutDetaching([$permGrade->id]);
         $adminRole->permissions()->syncWithoutDetaching([$permGrade->id, $permReport->id]);
 
@@ -66,7 +79,7 @@ class ServerAuditTrailTest extends TestCase
             'status' => 'aktif',
         ]);
 
-        $academicYear = \App\Models\AcademicYear::create([
+        $academicYear = AcademicYear::create([
             'name' => '2026/2027',
             'start_date' => '2026-07-01',
             'end_date' => '2027-06-30',
@@ -81,7 +94,7 @@ class ServerAuditTrailTest extends TestCase
             'is_active' => true,
         ]);
 
-        $gradeLevel = \App\Models\GradeLevel::create([
+        $gradeLevel = GradeLevel::create([
             'name' => 'Kelas 7',
             'order' => 7,
         ]);
@@ -105,7 +118,7 @@ class ServerAuditTrailTest extends TestCase
             'user_id' => $studentUser->id,
             'nis' => '10001',
             'nisn' => '0012345678',
-            'nik_enc' => encrypt('3578010101010001'),
+            'nik_enc' => '3578010101010001',
             'full_name' => 'Ahmad Siswa',
             'gender' => 'L',
             'birth_place' => 'Malang',
@@ -116,13 +129,13 @@ class ServerAuditTrailTest extends TestCase
             'status' => 'aktif',
         ]);
 
-        \App\Models\ClassStudent::create([
+        ClassStudent::create([
             'class_id' => $this->class->id,
             'student_id' => $this->student->id,
             'joined_at' => '2026-07-15',
         ]);
 
-        $subject = \App\Models\Subject::create([
+        $subject = Subject::create([
             'code' => 'MAT-7',
             'name' => 'Matematika Kelas 7',
             'subject_group' => 'A',
@@ -234,7 +247,7 @@ class ServerAuditTrailTest extends TestCase
             'semester_id' => $this->semester->id,
             'status' => 'terkunci',
             'data_snapshot' => ['grades' => []],
-            'verify_token' => \Illuminate\Support\Str::random(32),
+            'verify_token' => Str::random(32),
             'locked_at' => now(),
         ]);
 
@@ -277,7 +290,7 @@ class ServerAuditTrailTest extends TestCase
             'semester_id' => $this->semester->id,
             'status' => 'menunggu_pengesahan',
             'data_snapshot' => ['grades' => []],
-            'verify_token' => \Illuminate\Support\Str::random(32),
+            'verify_token' => Str::random(32),
         ]);
 
         // Tolak tanpa alasan -> tolak 422
@@ -423,7 +436,7 @@ class ServerAuditTrailTest extends TestCase
      */
     public function test_gap_06_sensitive_fields_are_redacted_in_audit(): void
     {
-        $auditService = app(\App\Services\AuditLogService::class);
+        $auditService = app(AuditLogService::class);
         $request = Request::create('/test', 'POST', [], [], [], [
             'HTTP_X_REQUEST_ID' => 'test-redact-1',
         ]);

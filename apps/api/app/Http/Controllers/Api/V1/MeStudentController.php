@@ -10,7 +10,9 @@ use App\Models\AssignmentSubmission;
 use App\Models\Attendance;
 use App\Models\ClassStudent;
 use App\Models\CounselingRequest;
+use App\Models\Exam;
 use App\Models\ExamParticipant;
+use App\Models\ExamSession;
 use App\Models\Grade;
 use App\Models\Schedule;
 use App\Models\Student;
@@ -188,20 +190,49 @@ class MeStudentController extends Controller
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        $participants = ExamParticipant::with('exam.subject')
+        $participants = ExamParticipant::with(['exam.subject', 'exam.questions', 'examRoom.room'])
             ->where('student_id', $student->id)
             ->get();
 
-        $data = $participants->map(fn (ExamParticipant $p) => [
-            'id' => $p->exam_id,
-            'title' => $p->exam?->title ?? 'Ujian CBT',
-            'subjectName' => $p->exam?->subject?->name ?? 'Mata Pelajaran',
-            'durationMinutes' => $p->exam?->duration_min ?? 60,
-            'totalQuestions' => 30,
-            'startTime' => $p->exam?->start_at?->toISOString() ?? now()->toISOString(),
-            'endTime' => $p->exam?->end_at?->toISOString() ?? now()->addHours(1)->toISOString(),
-            'status' => $p->exam?->status ?? 'scheduled',
-        ]);
+        $examIds = $participants->pluck('exam_id')->filter()->unique();
+        $sessions = ExamSession::where('student_id', $student->id)
+            ->whereIn('exam_id', $examIds)
+            ->get()
+            ->keyBy('exam_id');
+
+        $data = $participants->map(function (ExamParticipant $p) use ($sessions) {
+            $exam = $p->exam;
+            $session = $sessions->get($p->exam_id);
+
+            if ($session && $session->status === 'selesai') {
+                $status = 'selesai';
+            } elseif ($session && $session->status === 'mengerjakan') {
+                $status = 'aktif';
+            } elseif ($exam?->status === Exam::STATUS_IN_PROGRESS || $exam?->status === 'aktif' || $exam?->status === 'berlangsung') {
+                $status = 'aktif';
+            } elseif ($exam?->status === Exam::STATUS_SCHEDULED || $exam?->status === 'terjadwal' || $exam?->status === 'dijadwalkan') {
+                $status = 'terjadwal';
+            } elseif ($exam?->status === Exam::STATUS_FINISHED) {
+                $status = 'selesai';
+            } else {
+                $status = $exam?->status ?? 'aktif';
+            }
+
+            return [
+                'id' => $p->exam_id,
+                'title' => $exam?->title ?? 'Ujian CBT',
+                'subjectName' => $exam?->subject?->name ?? 'Mata Pelajaran',
+                'durationMinutes' => $exam?->duration_min ?? 60,
+                'totalQuestions' => $exam?->questions?->count() ?: 30,
+                'startTime' => $exam?->start_at?->toISOString() ?? now()->toISOString(),
+                'endTime' => $exam?->end_at?->toISOString() ?? now()->addHours(1)->toISOString(),
+                'status' => $status,
+                'roomName' => $p->examRoom?->room?->name ?? 'Lab Komputer 1',
+                'kktp' => (float) ($exam?->passing_grade ?? 75),
+                'tokenRequired' => $p->examRoom?->token ?? 'LAB-CBT',
+                'score' => $session?->score !== null ? (float) $session->score : null,
+            ];
+        });
 
         return $this->successResponse($data);
     }
@@ -306,7 +337,7 @@ class MeStudentController extends Controller
                 $prefSchedule = $c->preferred_date->format('Y-m-d');
             }
             if ($c->preferred_time) {
-                $prefSchedule = trim($prefSchedule . ' ' . $c->preferred_time);
+                $prefSchedule = trim($prefSchedule.' '.$c->preferred_time);
             }
 
             return [
@@ -381,7 +412,7 @@ class MeStudentController extends Controller
         if ($counseling->preferred_date) {
             $prefDateStr = is_string($counseling->preferred_date) ? substr($counseling->preferred_date, 0, 10) : $counseling->preferred_date->format('Y-m-d');
         }
-        $counselingData['preferredSchedule'] = trim($prefDateStr . ' ' . ($counseling->preferred_time ?? ''));
+        $counselingData['preferredSchedule'] = trim($prefDateStr.' '.($counseling->preferred_time ?? ''));
         $counselingData['counselorName'] = 'Guru BK';
         $counselingData['notes'] = $counseling->notes;
 

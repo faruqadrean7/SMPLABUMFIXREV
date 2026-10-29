@@ -6,6 +6,15 @@ use App\Http\Requests\BaseApiRequest;
 
 class ListScheduleRequest extends BaseApiRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('all')) {
+            $this->merge([
+                'all' => filter_var($this->input('all'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $this->input('all'),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [

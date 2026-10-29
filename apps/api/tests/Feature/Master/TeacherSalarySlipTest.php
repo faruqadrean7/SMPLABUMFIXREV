@@ -3,6 +3,7 @@
 namespace Tests\Feature\Master;
 
 use App\Models\AcademicYear;
+use App\Models\GradeLevel;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\SchoolClass;
@@ -268,7 +269,7 @@ class TeacherSalarySlipTest extends TestCase
             'status' => 'aktif',
         ]);
 
-        $gradeLevel = \App\Models\GradeLevel::create([
+        $gradeLevel = GradeLevel::create([
             'level' => 7,
             'name' => 'Kelas 7',
         ]);

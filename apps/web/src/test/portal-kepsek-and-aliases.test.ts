@@ -11,12 +11,14 @@ import {
 import { User } from '@/types/auth';
 
 describe('SISTLABUM: Portal Kepsek & URL Aliases Routing Suite', () => {
+  const resolvedConfig = typeof (nextConfig as any) === 'function' ? (nextConfig as any)('phase-development-server') : (nextConfig as any);
+
   describe('1. Next.js Redirects & URL Aliases Configuration', () => {
     it('mengonfigurasi redirects untuk alias portal persona sesuai spesifikasi', async () => {
-      expect(typeof nextConfig.redirects).toBe('function');
-      if (!nextConfig.redirects) throw new Error('nextConfig.redirects is undefined');
+      expect(typeof resolvedConfig.redirects).toBe('function');
+      if (!resolvedConfig.redirects) throw new Error('resolvedConfig.redirects is undefined');
 
-      const redirects = await nextConfig.redirects();
+      const redirects = await resolvedConfig.redirects();
       const findRedirect = (source: string) => redirects.find((r: any) => r.source === source);
 
       // Alias Guru

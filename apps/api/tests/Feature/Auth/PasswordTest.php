@@ -18,6 +18,7 @@ class PasswordTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        \Illuminate\Support\Facades\Cache::flush();
 
         $this->user = User::create([
             'username' => 'testuser',

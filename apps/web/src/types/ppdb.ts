@@ -434,6 +434,13 @@ export interface ApplicantProfileApplication {
     status: DocumentStatus;
     reject_reason?: string | null;
   }[];
+  re_registered_at?: string | null;
+  re_registration?: {
+    id?: string;
+    status: 'menunggu' | 'diverifikasi' | 'ditolak';
+    confirmed_at?: string;
+    notes?: string | null;
+  } | null;
 }
 
 export interface ApplicantProfileResponse {

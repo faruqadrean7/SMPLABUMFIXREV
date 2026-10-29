@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { User, LoginPayload, PortalDestination, RoleCode } from '@/types/auth';
+import { User, LoginPayload, LoginResult, PortalDestination, RoleCode } from '@/types/auth';
 import { apiClient } from '@/lib/api/api-client';
 import { tokenStorage } from '@/lib/auth/token-storage';
 import { resolveUserDestination, sanitizeRoles } from '@/lib/rbac/evaluator';
@@ -17,7 +17,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   activeRole: string | null;
-  login: (payload: LoginPayload) => Promise<{ user: User; destination: PortalDestination }>;
+  login: (payload: LoginPayload) => Promise<LoginResult>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   setActiveRole: (role: string) => void;
@@ -108,20 +108,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
-  const login = async (payload: LoginPayload): Promise<{ user: User; destination: PortalDestination }> => {
+  const login = async (payload: LoginPayload): Promise<LoginResult> => {
     setIsLoading(true);
     try {
+      const endpoint = payload.isAdminLogin ? '/auth/admin/login' : '/auth/login';
       const res = await apiClient.post<
         ApiResponse<{
-          user: User;
-          tokens: { accessToken: string; refreshToken?: string };
-        }>
-      >('/auth/login', {
+          user?: User;
+          tokens?: { accessToken: string; refreshToken?: string };
+        }> & {
+          mfa_required?: boolean;
+          mfa_token?: string;
+          mfa_enrollment_required?: boolean;
+          enrollment_token?: string;
+        }
+      >(endpoint, {
         ...payload,
         platform: payload.platform || 'web',
       });
 
+      if (res.data.mfa_enrollment_required && res.data.enrollment_token) {
+        return {
+          user: null,
+          destination: null,
+          mfa_enrollment_required: true,
+          enrollment_token: res.data.enrollment_token,
+        };
+      }
+
+      if (res.data.mfa_required && res.data.mfa_token) {
+        return {
+          user: null,
+          destination: null,
+          mfa_required: true,
+          mfa_token: res.data.mfa_token,
+        };
+      }
+
       const responseData = res.data.data;
+      if (!responseData?.user || !responseData?.tokens) {
+        throw new Error('Format respon autentikasi tidak valid.');
+      }
       const loggedUser = responseData.user;
       const tokens = responseData.tokens;
 
@@ -137,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Tentukan destinasi portal
       const destination = resolveUserDestination(roles);
-      return { user: loggedUser, destination };
+      return { user: loggedUser, destination, mfa_required: false };
     } finally {
       setIsLoading(false);
     }

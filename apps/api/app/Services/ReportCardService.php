@@ -8,6 +8,7 @@ use App\Models\CharacterNote;
 use App\Models\ClassStudent;
 use App\Models\ExtracurricularMember;
 use App\Models\Grade;
+use App\Models\GradePeriod;
 use App\Models\Guardian;
 use App\Models\ReportCard;
 use App\Models\ReportDescriptionTemplate;
@@ -144,6 +145,19 @@ class ReportCardService
         }
 
         $statusToSet = $data['status'] ?? 'draft';
+
+        if ($statusToSet === 'terbit') {
+            if (! $this->checkIsAdmin($currentUser)) {
+                $hasOpenPeriods = GradePeriod::where('semester_id', $semester->id)
+                    ->where('status', '!=', 'locked')
+                    ->exists();
+
+                if ($hasOpenPeriods) {
+                    throw new HttpException(422, 'E-Rapor semester hanya dapat diterbitkan bila periode penilaian telah dikunci (locked).');
+                }
+            }
+        }
+
         $results = [];
 
         DB::transaction(function () use ($students, $semester, $statusToSet, $data, &$results, $request, $currentUser) {
@@ -411,7 +425,7 @@ class ReportCardService
             throw new HttpException(403, 'Hanya Administrator atau Admin Kurikulum yang berwenang mengunci e-rapor.');
         }
 
-        return DB::transaction(function () use ($id, $data, $currentUser, $request) {
+        return DB::transaction(function () use ($id, $data, $request) {
             $report = ReportCard::findOrFail($id);
             $oldStatus = $report->status;
             $isLocked = (bool) $data['is_locked'];
@@ -428,7 +442,7 @@ class ReportCardService
 
             $action = $isLocked ? 'academic.report_card.lock' : 'academic.report_card.unlock';
 
-            app(\App\Services\AuditLogService::class)->record(
+            app(AuditLogService::class)->record(
                 action: $action,
                 entity: 'ReportCard',
                 entityId: $report->id,
@@ -451,15 +465,32 @@ class ReportCardService
         /** @var User $currentUser */
         $currentUser = $request->user();
 
-        if (! $this->canApprove($currentUser)) {
-            throw new HttpException(403, 'Hanya Kepala Sekolah atau Administrator yang berwenang mengesahkan e-rapor.');
+        $report = ReportCard::with(['student.classes'])->findOrFail($id);
+
+        if (! $this->canApprove($currentUser, $report)) {
+            throw new HttpException(403, 'Hanya Kepala Sekolah, Administrator, atau Wali Kelas terkait yang berwenang mengesahkan atau menerbitkan e-rapor.');
         }
 
-        return DB::transaction(function () use ($id, $data, $currentUser, $request) {
-            $report = ReportCard::findOrFail($id);
-            $oldStatus = $report->status;
-            $newStatus = $data['status'];
+        $oldStatus = $report->status;
+        $newStatus = $data['status'];
 
+        if ($newStatus === 'terbit') {
+            if ($oldStatus === 'terbit') {
+                throw new HttpException(422, 'E-Rapor semester telah diterbitkan dan tidak dapat diterbitkan kembali.');
+            }
+
+            if (! $this->checkIsAdmin($currentUser)) {
+                $hasOpenPeriods = GradePeriod::where('semester_id', $report->semester_id)
+                    ->where('status', '!=', 'locked')
+                    ->exists();
+
+                if ($hasOpenPeriods) {
+                    throw new HttpException(422, 'E-Rapor semester hanya dapat diterbitkan bila periode penilaian telah dikunci (locked).');
+                }
+            }
+        }
+
+        return DB::transaction(function () use ($report, $oldStatus, $newStatus, $data, $currentUser, $request) {
             $report->status = $newStatus;
             if (in_array($newStatus, ['disetujui', 'terbit'])) {
                 $report->approved_by = $currentUser->id;
@@ -471,7 +502,7 @@ class ReportCardService
 
             $reason = $data['note'] ?? $data['reason'] ?? null;
 
-            app(\App\Services\AuditLogService::class)->record(
+            app(AuditLogService::class)->record(
                 action: 'academic.report_card.approve',
                 entity: 'ReportCard',
                 entityId: $report->id,
@@ -494,12 +525,12 @@ class ReportCardService
         /** @var User $currentUser */
         $currentUser = $request->user();
 
-        if (! $this->canApprove($currentUser)) {
-            throw new HttpException(403, 'Hanya Kepala Sekolah atau Administrator yang berwenang mengesahkan e-rapor.');
+        if (! $this->canBulkApprove($currentUser)) {
+            throw new HttpException(403, 'Hanya Kepala Sekolah atau Administrator yang berwenang mengesahkan e-rapor secara massal.');
         }
 
         $newStatus = $data['status'];
-        $query = ReportCard::query();
+        $query = ReportCard::with(['student.classes']);
 
         if (! empty($data['report_ids'])) {
             $query->whereIn('id', $data['report_ids']);
@@ -522,6 +553,28 @@ class ReportCardService
             ];
         }
 
+        foreach ($reports as $report) {
+            if (! $this->canApprove($currentUser, $report)) {
+                throw new HttpException(403, 'Anda tidak berwenang mengesahkan satu atau lebih e-rapor.');
+            }
+
+            if ($newStatus === 'terbit') {
+                if ($report->status === 'terbit') {
+                    throw new HttpException(422, "E-Rapor siswa {$report->student?->full_name} sudah diterbitkan sebelumnya.");
+                }
+
+                if (! $this->checkIsAdmin($currentUser)) {
+                    $hasOpenPeriods = GradePeriod::where('semester_id', $report->semester_id)
+                        ->where('status', '!=', 'locked')
+                        ->exists();
+
+                    if ($hasOpenPeriods) {
+                        throw new HttpException(422, 'E-Rapor semester hanya dapat diterbitkan bila periode penilaian telah dikunci (locked).');
+                    }
+                }
+            }
+        }
+
         $updatedCount = 0;
         $updatedItems = [];
 
@@ -540,7 +593,7 @@ class ReportCardService
                 $updatedCount++;
 
                 $reason = $data['note'] ?? $data['reason'] ?? null;
-                app(\App\Services\AuditLogService::class)->record(
+                app(AuditLogService::class)->record(
                     action: 'academic.report_card.bulk_approve',
                     entity: 'ReportCard',
                     entityId: $report->id,
@@ -1009,19 +1062,36 @@ class ReportCardService
             || Teacher::where('user_id', $user->id)->exists();
     }
 
-    protected function canApprove(User $user): bool
+    protected function canApprove(User $user, ?ReportCard $report = null): bool
     {
-        return $user->hasRole('principal')
+        if ($this->checkIsAdmin($user)
+            || $user->hasRole('principal')
             || $user->hasRole('super_admin')
-            || $user->hasPermission('academic.report.generate')
-            || $user->roles()->where('code', 'like', 'admin%')->exists();
+            || $user->hasPermission('academic.report.generate')) {
+            return true;
+        }
+
+        if ($report && $user->hasRole('homeroom')) {
+            $teacher = Teacher::where('user_id', $user->id)->first();
+            if ($teacher) {
+                $homeroomClassIds = SchoolClass::where('homeroom_teacher_id', $teacher->id)->pluck('id');
+
+                return $report->student?->classes()->whereIn('classes.id', $homeroomClassIds)->exists();
+            }
+        }
+
+        return false;
+    }
+
+    protected function canBulkApprove(User $user): bool
+    {
+        return $this->checkIsAdmin($user);
     }
 
     protected function checkIsAdmin(User $user): bool
     {
         return $user->hasRole('super_admin')
             || $user->hasRole('principal')
-            || $user->hasPermission('academic.report.generate')
             || $user->roles()->where('code', 'like', 'admin%')->exists();
     }
 

@@ -85,14 +85,14 @@ class ApprovalService
 
             $items[] = [
                 'id' => (string) $leave->id,
-                'code' => 'APP-LEAVE-' . strtoupper(substr(str_replace('-', '', (string) $leave->id), 0, 6)),
+                'code' => 'APP-LEAVE-'.strtoupper(substr(str_replace('-', '', (string) $leave->id), 0, 6)),
                 'category' => 'leave_request',
-                'title' => 'Permohonan Izin / Cuti: ' . $applicantName,
+                'title' => 'Permohonan Izin / Cuti: '.$applicantName,
                 'requesterName' => $applicantName,
                 'requesterRole' => $applicantRole,
                 'requester_name' => $applicantName,
                 'requester_role' => $applicantRole,
-                'details' => trim(($leave->reason ? $leave->reason . ' ' : '') . ($dateRange ? "({$dateRange})" : '')),
+                'details' => trim(($leave->reason ? $leave->reason.' ' : '').($dateRange ? "({$dateRange})" : '')),
                 'submittedAt' => $leave->created_at?->toIso8601String() ?? Carbon::now()->toIso8601String(),
                 'submitted_at' => $leave->created_at?->toIso8601String() ?? Carbon::now()->toIso8601String(),
                 'status' => 'pending',
@@ -115,14 +115,14 @@ class ApprovalService
 
             $items[] = [
                 'id' => (string) $booking->id,
-                'code' => 'APP-SARPRAS-' . strtoupper(substr(str_replace('-', '', (string) $booking->id), 0, 6)),
+                'code' => 'APP-SARPRAS-'.strtoupper(substr(str_replace('-', '', (string) $booking->id), 0, 6)),
                 'category' => 'facility_purchase',
-                'title' => 'Peminjaman Fasilitas: ' . $facilityName,
+                'title' => 'Peminjaman Fasilitas: '.$facilityName,
                 'requesterName' => $applicantName,
                 'requesterRole' => 'Pengguna Sarpras',
                 'requester_name' => $applicantName,
                 'requester_role' => 'Pengguna Sarpras',
-                'details' => trim(($booking->purpose ? $booking->purpose . ' ' : '') . ($startAt ? "({$startAt})" : '')),
+                'details' => trim(($booking->purpose ? $booking->purpose.' ' : '').($startAt ? "({$startAt})" : '')),
                 'submittedAt' => $booking->created_at?->toIso8601String() ?? Carbon::now()->toIso8601String(),
                 'submitted_at' => $booking->created_at?->toIso8601String() ?? Carbon::now()->toIso8601String(),
                 'status' => 'pending',
@@ -145,9 +145,9 @@ class ApprovalService
 
             $items[] = [
                 'id' => (string) $report->id,
-                'code' => 'APP-RAPOR-' . strtoupper(substr(str_replace('-', '', (string) $report->id), 0, 6)),
+                'code' => 'APP-RAPOR-'.strtoupper(substr(str_replace('-', '', (string) $report->id), 0, 6)),
                 'category' => 'report_card',
-                'title' => 'Pengesahan E-Rapor Siswa: ' . $studentName,
+                'title' => 'Pengesahan E-Rapor Siswa: '.$studentName,
                 'requesterName' => 'Wali Kelas',
                 'requesterRole' => 'Wali Kelas',
                 'requester_name' => 'Wali Kelas',
@@ -233,7 +233,7 @@ class ApprovalService
                             ],
                             [
                                 'status' => $attStatus,
-                                'note' => "Pengajuan {$leave->leave_type} disetujui: {$leave->reason}" . ($notes ? " (Catatan Pimpinan: {$notes})" : ''),
+                                'note' => "Pengajuan {$leave->leave_type} disetujui: {$leave->reason}".($notes ? " (Catatan Pimpinan: {$notes})" : ''),
                                 'recorded_by' => $user->id,
                             ]
                         );
@@ -428,4 +428,3 @@ class ApprovalService
         });
     }
 }
-

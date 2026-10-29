@@ -222,7 +222,7 @@ class DashboardTest extends TestCase
             'exam_id' => $this->exam->id,
             'student_id' => $this->student1->id,
             'seed' => 12345,
-            'status' => 'in_progress',
+            'status' => 'mengerjakan',
             'started_at' => Carbon::now()->subMinutes(5),
             'deadline_at' => Carbon::now()->addMinutes(55),
         ]);
@@ -268,7 +268,7 @@ class DashboardTest extends TestCase
             'exam_id' => $this->exam->id,
             'student_id' => $this->student1->id,
             'seed' => 12345,
-            'status' => 'in_progress',
+            'status' => 'mengerjakan',
             'started_at' => Carbon::now()->subMinute(),
             'deadline_at' => Carbon::now()->addMinutes(59),
         ]);

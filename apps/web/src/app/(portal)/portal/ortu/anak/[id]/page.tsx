@@ -31,15 +31,17 @@ import {
   ShieldAlert,
   Award,
   AlertCircle,
+  CreditCard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ParentFinanceTab } from '@/features/finance/components/parent-finance-tab';
 
 export default function ChildDetailPage() {
   const params = useParams();
   const childId = params.id as string;
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'presensi' | 'rapor' | 'karakter' | 'perkembangan'>('presensi');
+  const [activeTab, setActiveTab] = useState<'presensi' | 'rapor' | 'karakter' | 'perkembangan' | 'keuangan'>('presensi');
 
   // GAP-09: Ambil daftar anak resmi wali dari API /me/children
   const { data: childrenList = [], isLoading: isLoadingChildren } = useChildren(user);
@@ -150,6 +152,7 @@ export default function ChildDetailPage() {
           { id: 'rapor', label: 'E-Rapor & Buku Nilai', icon: FileText },
           { id: 'karakter', label: 'Catatan Karakter', icon: Sparkles },
           { id: 'perkembangan', label: 'Laporan Perkembangan', icon: HeartHandshake },
+          { id: 'keuangan', label: 'Keuangan & Tagihan', icon: CreditCard },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -386,6 +389,11 @@ export default function ChildDetailPage() {
             ))
           )}
         </div>
+      )}
+
+      {/* Tab 5: Keuangan & Pembayaran */}
+      {activeTab === 'keuangan' && (
+        <ParentFinanceTab childId={childId} />
       )}
     </div>
   );

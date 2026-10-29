@@ -65,7 +65,7 @@ export default function TeacherMaterialsPage() {
       if (!selectedSubjectId || !subjects.some((s) => s.id === selectedSubjectId)) {
         setSelectedSubjectId(subjects[0].id);
       }
-    } else {
+    } else if (selectedSubjectId !== '') {
       setSelectedSubjectId('');
     }
   }, [subjects, selectedSubjectId]);
@@ -75,10 +75,14 @@ export default function TeacherMaterialsPage() {
     if (availableClasses.length > 0) {
       setSelectedClassIds((prev) => {
         const valid = prev.filter((id) => availableClasses.some((c) => c.id === id));
-        return valid.length > 0 ? valid : [availableClasses[0].id];
+        const next = valid.length > 0 ? valid : [availableClasses[0].id];
+        if (prev.length === next.length && prev.every((v, i) => v === next[i])) {
+          return prev;
+        }
+        return next;
       });
     } else {
-      setSelectedClassIds([]);
+      setSelectedClassIds((prev) => (prev.length === 0 ? prev : []));
     }
   }, [availableClasses]);
 

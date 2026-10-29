@@ -113,11 +113,23 @@ class AuditLogService
         }
 
         if ($request->filled('start_date')) {
-            $query->where('created_at', '>=', $request->query('start_date'));
+            $startDate = (string) $request->query('start_date');
+            $startDate = preg_replace('/\s(\d{2}:\d{2})$/', '+$1', $startDate);
+            try {
+                $query->where('created_at', '>=', Carbon::parse($startDate));
+            } catch (\Throwable) {
+                $query->where('created_at', '>=', $startDate);
+            }
         }
 
         if ($request->filled('end_date')) {
-            $query->where('created_at', '<=', $request->query('end_date'));
+            $endDate = (string) $request->query('end_date');
+            $endDate = preg_replace('/\s(\d{2}:\d{2})$/', '+$1', $endDate);
+            try {
+                $query->where('created_at', '<=', Carbon::parse($endDate));
+            } catch (\Throwable) {
+                $query->where('created_at', '<=', $endDate);
+            }
         }
 
         if ($request->filled('q')) {

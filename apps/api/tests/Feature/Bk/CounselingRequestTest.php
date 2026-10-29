@@ -4,7 +4,6 @@ namespace Tests\Feature\Bk;
 
 use App\Models\AcademicYear;
 use App\Models\ClassStudent;
-use App\Models\CounselingCase;
 use App\Models\CounselingRequest;
 use App\Models\GradeLevel;
 use App\Models\Guardian;

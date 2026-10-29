@@ -51,12 +51,12 @@ export const FOOTER_QUICK_LINKS: QuickLinkItem[] = [
 ];
 
 /**
- * Tautan akses portal akademik untuk footer kolom 3
+ * Tautan akses portal akademik untuk footer kolom 3 (Internal Route Apps/Web)
  */
 export const FOOTER_PORTAL_LINKS: QuickLinkItem[] = [
   { label: 'Masuk Portal Akademik', href: '/masuk' },
-  { label: 'Portal Siswa', href: '/masuk' },
-  { label: 'Portal Guru & Staf', href: '/masuk' },
-  { label: 'Portal Orang Tua', href: '/masuk' },
+  { label: 'Portal Siswa', href: '/portal/siswa' },
+  { label: 'Portal Guru & Staf', href: '/portal/guru' },
+  { label: 'Portal Orang Tua', href: '/portal/ortu' },
   { label: 'Informasi PPDB Online', href: '/ppdb' },
 ];

@@ -55,10 +55,13 @@ export type ExamType =
 
 export type ExamStatus =
   | 'draft'
-  | 'published'
-  | 'active'
+  | 'dijadwalkan'
   | 'berlangsung'
   | 'selesai'
+  | 'dibatalkan'
+  | 'arsip'
+  | 'published'
+  | 'active'
   | 'archived';
 
 export interface ExamRoomItem {
@@ -140,6 +143,10 @@ export interface ExamItem {
 }
 
 export type ExamSessionStatus =
+  | 'belum'
+  | 'mengerjakan'
+  | 'selesai'
+  | 'terkunci'
   | 'not_started'
   | 'in_progress'
   | 'submitted'
@@ -234,6 +241,7 @@ export interface StudentSessionQuestionItem {
   question_id: string;
   question_type: QuestionType;
   stem: string;
+  body?: any;
   options?: StudentSessionQuestionOption[];
   current_answer?: any;
   is_flagged?: boolean;
