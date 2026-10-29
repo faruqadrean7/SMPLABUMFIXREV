@@ -11,17 +11,28 @@ use App\Models\Payment;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\AuditLogService;
+use App\Services\Finance\Channels\PaymentChannelManager;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class FinanceService
 {
+    protected PaymentChannelManager $channelManager;
+
     public function __construct(
         protected AuditLogService $auditLogService,
         protected InvoiceGeneratorService $invoiceGeneratorService,
-        protected ReceiptService $receiptService
-    ) {}
+        protected ReceiptService $receiptService,
+        ?PaymentChannelManager $channelManager = null
+    ) {
+        $this->channelManager = $channelManager ?? new PaymentChannelManager;
+    }
+
+    public function getChannelManager(): PaymentChannelManager
+    {
+        return $this->channelManager;
+    }
 
     /**
      * Buat tagihan tunggal untuk seorang siswa.
@@ -196,14 +207,11 @@ class FinanceService
             ]);
         }
 
-        // Berkas bukti slip pembayaran WAJIB
-        if (! $proofFile) {
-            throw ValidationException::withMessages([
-                'proof_file' => ['Berkas bukti/slip pembayaran transfer wajib dilampirkan.'],
-            ]);
-        }
+        // Validasi & proses data melalui adapter PaymentChannel (memfasilitasi migrasi gateway Fase 2 tanpa refactor)
+        $channelAdapter = $this->channelManager->get($data['channel_type'] ?? 'manual_transfer');
+        $channelMeta = $channelAdapter->processSubmission($invoice, $data, $proofFile, $actor);
 
-        return DB::transaction(function () use ($invoice, $data, $proofFile, $actor, $amount, $extRef) {
+        return DB::transaction(function () use ($invoice, $data, $proofFile, $actor, $amount, $extRef, $channelMeta) {
             // Validasi ukuran maks 2MB
             if ($proofFile->getSize() > 2 * 1024 * 1024) {
                 throw ValidationException::withMessages([
@@ -234,7 +242,8 @@ class FinanceService
                 'checksum' => $checksum,
             ]);
 
-            $channel = trim($data['channel'] ?? 'Transfer Bank');
+            $channel = $channelMeta['channel'] ?? trim($data['channel'] ?? 'Transfer Bank');
+            $initialStatus = $channelMeta['initial_status'] ?? 'menunggu_verifikasi';
 
             $payment = Payment::create([
                 'school_id' => $invoice->school_id,
@@ -244,7 +253,7 @@ class FinanceService
                 'external_reference' => $extRef,
                 'payment_date' => $data['payment_date'] ?? now()->toDateString(),
                 'proof_file_id' => $fileRecord->id,
-                'status' => 'menunggu_verifikasi',
+                'status' => $initialStatus,
                 'submitted_by' => $actor->id,
             ]);
 

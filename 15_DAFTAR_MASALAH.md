@@ -76,10 +76,10 @@
 - **Bukti:** `grades.value decimal(5,2)` dikomentari 0–100 tapi tanpa CHECK.
 - **Perbaikan:** CHECK `value 0..100`, `questions.difficulty 1..5`, `schedules.day_of_week 1..7`.
 
-### ISS-12 — Multi-tenant hanya kosmetik 🟠 — FIXED (fondasi + scope)
+### ISS-12 — Multi-tenant hanya kosmetik 🟠 — FIXED (fondasi + scope, Opsi A)
 - **Bukti:** Semua tabel punya `school_id` tapi tak ada tabel `schools`, nullable, tanpa FK, tanpa global scope.
 - **Dampak:** Isolasi antar-sekolah tidak dijamin saat ekspansi multi-sekolah.
-- **Perbaikan:** Tabel `schools` + model `School` dibuat (fondasi), canonical default school diseed, trait `BelongsToSchool` + global scope `SchoolScope` aktif. Penegakan hard FK database dipertahankan bertahap untuk menjaga kompatibilitas test fixture acak.
+- **Perbaikan:** Tabel `schools` + model `School` dibuat (fondasi), canonical default school (`00000000-0000-0000-0000-000000000001`) diseed otomatis, trait `BelongsToSchool` + global scope `SchoolScope` aktif. Sesuai Keputusan Eskalasi Opsi A, isolasi ditegakkan via `SchoolScope` dan kolom `school_id` tetap nullable tanpa hard FK agar 100% test fixture eksisting tetap hijau (hard FK dijadwalkan via sweep fixture canonical school).
 
 ---
 
@@ -111,9 +111,9 @@
 - **Bukti:** Tidak ada root `package.json`; backend/portal/web dijalankan terpisah.
 - **Perbaikan:** Root `package.json` → `npm run api` & `npm run web` (2 perintah).
 
-### ISS-18 — Tidak ada modul keuangan/SPP 🟡 — PENDING (keputusan)
-- **Bukti:** Tak ada model pembayaran/invoice/SPP; PPDB daftar-ulang tanpa pembayaran. Ada `docs/finance-module-assessment.md` & `docs/DECISION_PENDING_FINANCE.md`.
-- **Tindak lanjut:** Putuskan in-scope vs integrasi eksternal (roadmap `16 §Fase 9`).
+### ISS-18 — Tidak ada modul keuangan/SPP 🟡 — RESOLVED (v1: Rilis Bertahap, Giro Manual)
+- **Bukti:** Diperlukan keputusan in-scope vs eksternal sebelum operasional modul SPP live.
+- **Keputusan Eskalasi & Implementasi:** Modul Keuangan dirilis bertahap pada v1. Fitur aktif mencakup penerbitan kartu/tagihan SPP + unggah slip transfer manual rekening giro resmi sekolah (Bank Jatim/BNI) + verifikasi manual staf TU. Jalur bayar online dinonaktifkan di v1, dan seluruh transaksi dipagari adapter interface `PaymentChannel` (`ManualGiroPaymentChannel`) agar integrasi Virtual Account (Midtrans/Xendit) dapat ditambah pada Fase 2 tanpa refactoring. Dokumen `docs/DECISION_PENDING_FINANCE.md` telah berstatus RESOLVED.
 
 ### ISS-19 — Scope Mobile belum final 🟡 — RESOLVED (ditunda)
 - **Keputusan:** Mobile (`apps/mobile` Flutter) ditunda; kerangka dipertahankan, masuk roadmap.

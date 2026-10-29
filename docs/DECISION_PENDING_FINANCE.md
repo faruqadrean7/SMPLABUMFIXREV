@@ -2,9 +2,9 @@
 
 **Nomor Dokumen:** `GOV-01-FINANCE-DECISION`  
 **Institusi:** SMP Laboratorium Universitas Negeri Malang  
-**Status:** ⏸️ **MENUNGGU KEPUTUSAN SEKOLAH (PENDING DECISION)**  
+**Status:** ✅ **RESOLVED (v1: Rilis Bertahap, Rekening Giro Mitra + Verifikasi Manual TU)**  
 **Referensi Regulasi:** `AGENTS.md §8 (Hal yang HARUS Ditanyakan, Bukan Diputuskan Sendiri)` & `13_MASTER_MODULES.md §5`  
-**Tanggal:** 27 Oktober 2026  
+**Tanggal Resolusi:** 29 Oktober 2026  
 
 ---
 
@@ -79,15 +79,16 @@ Sebelum modul ini dioperasikan penuh pada lingkungan produksi (*live*), pemangku
 
 | No | Pertanyaan Kebijakan | Opsi Jawaban | Rekomendasi Engineering | Keputusan Final |
 |:--:|---|---|---|:---:|
-| 1 | Bagaimana status aktivasi Modul Keuangan pada rilis v1? | A. Diaktifkan penuh<br/>B. Ditunda (hanya pencatatan manual di TU)<br/>C. Aktif parsial (hanya info tagihan tanpa bayar online) | **Opsi C** (Rilis fitur bertahap) | *[Menunggu Input]* |
-| 2 | Kanal pembayaran mana yang akan digunakan? | A. Transfer manual ke Giro Sekolah + Unggah Slip<br/>B. Virtual Account otomatis (Midtrans/Xendit)<br/>C. Loket kasir fisik sekolah | **Opsi A** untuk tahap awal, dilanjutkan Opsi B | *[Menunggu Input]* |
-| 3 | Apakah tunggakan SPP membatasi hak ujian CBT siswa? | A. Ya, sistem otomatis mengunci ujian CBT<br/>B. Tidak, penagihan murni persuasif ke orang tua | **Opsi B** (Hak belajar & evaluasi siswa tetap terjamin) | *[Menunggu Input]* |
-| 4 | Siapa pihak yang memiliki hak otorisasi verifikasi pembayaran? | A. Bendahara Sekolah<br/>B. Kepala Tata Usaha<br/>C. Staf Administrasi Umum | **Opsi A & B** (Role `admin` dan `staff` tertentu) | *[Menunggu Input]* |
+| 1 | Bagaimana status aktivasi Modul Keuangan pada rilis v1? | A. Diaktifkan penuh<br/>B. Ditunda (hanya pencatatan manual di TU)<br/>C. Aktif parsial (hanya info tagihan tanpa bayar online) | **Opsi C** (Rilis fitur bertahap) | **Opsi C (Rilis Bertahap)**: Kartu/tagihan SPP + unggah slip transfer manual, verifikasi oleh TU. Jalur bayar online dinonaktifkan di v1. |
+| 2 | Kanal pembayaran mana yang akan digunakan? | A. Transfer manual ke Giro Sekolah + Unggah Slip<br/>B. Virtual Account otomatis (Midtrans/Xendit)<br/>C. Loket kasir fisik sekolah | **Opsi A** untuk tahap awal, dilanjutkan Opsi B | **Opsi A (Giro Mitra + Verifikasi Manual)**: Memakai rekening giro resmi sekolah. Seluruh logika ditaruh di balik adapter interface `PaymentChannel` sehingga VA dapat ditambah di Fase 2 tanpa refactoring. |
+| 3 | Apakah tunggakan SPP membatasi hak ujian CBT siswa? | A. Ya, sistem otomatis mengunci ujian CBT<br/>B. Tidak, penagihan murni persuasif ke orang tua | **Opsi B** (Hak belajar & evaluasi siswa tetap terjamin) | **Opsi B**: Hak evaluasi siswa dijamin, penagihan murni persuasif ke orang tua / wali murid. |
+| 4 | Siapa pihak yang memiliki hak otorisasi verifikasi pembayaran? | A. Bendahara Sekolah<br/>B. Kepala Tata Usaha<br/>C. Staf Administrasi Umum | **Opsi A & B** (Role `admin` dan `staff` tertentu) | **Opsi A & B**: Bendahara Sekolah dan Staf TU yang memegang permission `finance.payment.verify`. |
 
 ---
 
-## 5. Tindakan Teknis Selama Menunggu Keputusan
+## 5. Tindakan Teknis Pasca-Keputusan (Resolved)
 
-1. **Kode Tetap Disimpan:** Seluruh controller, route modular, komponen UI, migrasi basis data, dan automated test untuk modul keuangan tetap dipertahankan secara utuh.
-2. **Feature Gate / Permission Isolation:** Hak akses operasional keuangan hanya diberikan kepada pengguna yang memiliki permission spesifik (`finance.*`). Siswa/wali hanya dapat melihat status tagihan jika data faktur diterbitkan oleh admin.
-3. **Dokumentasi Terpadu:** Modul ini dicatat secara resmi pada `13_MASTER_MODULES.md` dengan status **Menunggu Keputusan Sekolah**.
+1. **Adapter Pattern Terpasang:** Arsitektur pembayaran modular telah diterapkan via `PaymentChannelInterface`, `ManualGiroPaymentChannel`, dan `PaymentChannelManager` di backend (`apps/api/app/Services/Finance/Channels/`).
+2. **Kanal v1 Dibatasi ke Giro Mitra:** Pengajuan pembayaran mewajibkan unggah slip bukti transfer bank giro sekolah dan nomor referensi unik, kemudian diverifikasi oleh staf TU sebelum menerbitkan kuitansi resmi.
+3. **Pintu Masuk VA Fase 2 Terbuka:** Ketika sekolah siap bermitra dengan agregator payment gateway (Midtrans/Xendit), integrasi cukup menambahkan class adapter baru yang mengimplementasikan `PaymentChannelInterface` tanpa mengubah alur tagihan atau database.
+4. **Keamanan & Guarding:** Hak akses tetap dipagari secara ketat di bawah permission `finance.*` dan tidak dibuka ke publik sebelum alur operasional TU teruji menyeluruh.
