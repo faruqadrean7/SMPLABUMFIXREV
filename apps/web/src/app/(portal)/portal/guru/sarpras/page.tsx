@@ -175,7 +175,7 @@ export default function SarprasGuruPage() {
         start_at: `${bookingDate}T08:00:00`,
         end_at: `${bookingDate}T10:00:00`,
         purpose: bookingPurpose,
-        attendees_count: Number(bookingCount),
+        attendees_count: Number(bookingCount) || 0,
       });
       toast.success(`Pengajuan peminjaman ${bookingFacility} berhasil diajukan!`);
     } catch {

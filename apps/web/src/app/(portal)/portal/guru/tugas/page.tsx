@@ -145,7 +145,7 @@ export default function GuruTugasPage() {
       title,
       description,
       due_at: new Date(dueDate).toISOString(),
-      max_score: Number(maxScore),
+      max_score: Number(maxScore) || 0,
       file: selectedFile || undefined,
     });
   };
@@ -392,8 +392,8 @@ export default function GuruTugasPage() {
                   const dueDateObj = new Date(assignment.due_at);
                   const isPastDue = dueDateObj.getTime() < Date.now();
                   const collected = assignment.submissions_count || 0;
-                  const total = assignment.total_students || 32;
-                  const percent = Math.round((collected / total) * 100);
+                  const total = assignment.total_students || 0;
+                  const percent = total > 0 ? Math.round((collected / total) * 100) : 0;
                   const unreviewed = collected - (assignment.reviewed_count || 0);
 
                   return (
@@ -664,7 +664,7 @@ export default function GuruTugasPage() {
                     min={10}
                     max={100}
                     value={maxScore}
-                    onChange={(e) => setMaxScore(Number(e.target.value))}
+                    onChange={(e) => setMaxScore(Number(e.target.value) || 0)}
                     className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-mono font-bold"
                   />
                 </div>

@@ -223,8 +223,8 @@ export default function CBTExamWorkspacePage({ params }: { params: Promise<{ id:
 
   const answeredCount = Object.keys(answers).length;
   const flaggedCount = Object.values(flagged).filter(Boolean).length;
-  const unansweredCount = exam.total_questions - answeredCount;
-  const progressPercent = Math.round((answeredCount / exam.total_questions) * 100);
+  const unansweredCount = Math.max(0, (exam.total_questions || 0) - answeredCount);
+  const progressPercent = exam.total_questions > 0 ? Math.round((answeredCount / exam.total_questions) * 100) : 0;
 
   // Final Submit Handler
   const handleFinalSubmit = () => {
