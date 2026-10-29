@@ -49,6 +49,10 @@ export interface User {
   roles: RoleCode[] | string[];
   permissions: string[];
   profile: UserProfileSummary;
+  full_name?: string;
+  name?: string;
+  nip?: string;
+  avatar_url?: string | null;
 }
 
 export interface AuthTokens {
@@ -84,3 +88,13 @@ export interface LoginResponseData {
 }
 
 export type PortalDestination = 'admin' | 'siswa' | 'ortu' | 'guru' | 'staf' | 'kepsek' | 'portal';
+
+export type AuthUser = User;
+export type UserRole = RoleCode | string;
+export interface ApiResponse<T = any> {
+  data: T;
+  message?: string;
+  success?: boolean;
+  meta?: any;
+}
+

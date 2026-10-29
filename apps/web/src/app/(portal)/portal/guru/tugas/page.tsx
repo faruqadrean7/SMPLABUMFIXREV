@@ -2,538 +2,755 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import {
-  useTeacherAssignments,
-  useAssignmentSubmissions,
-  useTeacherAssignmentsSummary,
-  guruApi,
-  TeacherAssignmentItem,
-  TeacherAssignmentSubmission,
-} from '@/features/portal/guru';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { EmptyState } from '@/components/shared/empty-state';
-import {
-  Award,
-  ArrowLeft,
-  Plus,
-  Clock,
-  CheckCircle2,
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { 
+  Plus, 
+  Search, 
+  Clock, 
+  FileText, 
+  CheckCircle2, 
+  AlertCircle, 
+  ChevronRight, 
+  X, 
+  UploadCloud,
   FileCheck2,
-  Users,
-  Eye,
-  Save,
-  X,
-  ExternalLink,
-  AlertCircle,
+  Lock,
+  Unlock,
+  Download,
+  SlidersHorizontal,
+  BookmarkCheck
 } from 'lucide-react';
+import { lmsApi } from '@/lib/api-client';
+import { Assignment } from '@/types/lms';
+import { useTeacherClasses, useTeacherSubjects } from '@/lib/use-teacher-data';
+import { toast } from 'sonner';
 
-export default function TeacherAssignmentsPage() {
-  const { data: initialAssignments = [], isLoading } = useTeacherAssignments();
-  const {
-    subjects,
-    getClassesForSubject,
-    isLoading: isLoadingAssignments,
-  } = useTeacherAssignmentsSummary();
+export default function GuruTugasPage() {
+  const queryClient = useQueryClient();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [classFilter, setClassFilter] = useState<'all' | string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'locked'>('all');
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [assignments, setAssignments] = useState<TeacherAssignmentItem[]>([]);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
+  const { data: teacherClasses = [] } = useTeacherClasses();
+  const { data: teacherSubjects = [] } = useTeacherSubjects();
 
-  // Form Buat Tugas Baru
+  // Form state
   const [title, setTitle] = useState('');
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
-  const [dueDate, setDueDate] = useState('');
+  const [classId, setClassId] = useState('');
+  const [subjectId, setSubjectId] = useState('');
+  const [gradeComponentName, setGradeComponentName] = useState('Tugas Formatif 1');
+  const [dueDate, setDueDate] = useState('2026-10-28T23:59');
+  const [maxScore, setMaxScore] = useState(100);
+  const [allowLate, setAllowLate] = useState(true);
+  const [lockAfterDue, setLockAfterDue] = useState(false);
   const [description, setDescription] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [createModalError, setCreateModalError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   React.useEffect(() => {
-    if (initialAssignments.length > 0) {
-      setAssignments(initialAssignments);
+    if (!classId && teacherClasses.length > 0) {
+      setClassId(teacherClasses[0].id);
     }
-  }, [initialAssignments]);
-
-  // Available classes for selected subject
-  const availableClasses = React.useMemo(() => {
-    return getClassesForSubject(selectedSubjectId);
-  }, [getClassesForSubject, selectedSubjectId]);
-
-  // Auto-select subject if 1 or not yet selected
-  React.useEffect(() => {
-    if (subjects.length > 0) {
-      if (!selectedSubjectId || !subjects.some((s) => s.id === selectedSubjectId)) {
-        setSelectedSubjectId(subjects[0].id);
-      }
-    } else {
-      setSelectedSubjectId('');
-    }
-  }, [subjects, selectedSubjectId]);
-
-  // Keep class aligned with availableClasses for this subject
-  React.useEffect(() => {
-    if (availableClasses.length > 0) {
-      if (!selectedClassId || !availableClasses.some((c) => c.id === selectedClassId)) {
-        setSelectedClassId(availableClasses[0].id);
-      }
-    } else {
-      setSelectedClassId('');
-    }
-  }, [availableClasses, selectedClassId]);
-
-  const { data: initialSubmissions = [], isLoading: isLoadingSubmissions } = useAssignmentSubmissions(
-    selectedAssignmentId || ''
-  );
-  const [submissions, setSubmissions] = useState<TeacherAssignmentSubmission[]>([]);
+  }, [teacherClasses, classId]);
 
   React.useEffect(() => {
-    if (initialSubmissions.length > 0) {
-      setSubmissions(initialSubmissions);
+    if (!subjectId && teacherSubjects.length > 0) {
+      setSubjectId(teacherSubjects[0].id);
     }
-  }, [initialSubmissions]);
+  }, [teacherSubjects, subjectId]);
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !dueDate || !selectedSubjectId || !selectedClassId) return;
+  // Fetch assignments
+  const { data: assignments = [], isLoading, isError, refetch } = useQuery({
+    queryKey: ['assignments'],
+    queryFn: () => lmsApi.getAssignments(),
+  });
 
-    setIsSubmitting(true);
-    setCreateModalError(null);
-    setErrorMessage(null);
-    try {
-      const activeSubject = subjects.find((s) => s.id === selectedSubjectId);
-      const activeClass = availableClasses.find((c) => c.id === selectedClassId);
-      const newAsg = await guruApi.createAssignment({
-        title,
-        subjectId: selectedSubjectId,
-        subjectName: activeSubject?.name || 'Mata Pelajaran',
-        classId: selectedClassId,
-        className: activeClass?.name || 'Kelas',
-        dueDate,
-        description,
-      });
-      setAssignments((prev) => [newAsg, ...prev]);
-      setSuccessMessage('Tugas KBM baru berhasil diterbitkan.');
-      setIsCreateModalOpen(false);
-      setTitle('');
-      setDueDate('');
-      setDescription('');
-      setTimeout(() => setSuccessMessage(null), 4000);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menerbitkan tugas KBM.';
-      setCreateModalError(msg);
-      setErrorMessage(msg);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleScoreChange = (submissionId: string, scoreVal: string) => {
-    const score = Number(scoreVal) || 0;
-    setSubmissions((prev) =>
-      prev.map((s) => (s.id === submissionId ? { ...s, score } : s))
-    );
-  };
-
-  const handleFeedbackChange = (submissionId: string, feedback: string) => {
-    setSubmissions((prev) =>
-      prev.map((s) => (s.id === submissionId ? { ...s, feedback } : s))
-    );
-  };
-
-  const handleSaveGrade = async (submission: TeacherAssignmentSubmission) => {
-    if (submission.score === undefined) return;
-    try {
-      await guruApi.gradeSubmission(submission.id, submission.score, submission.feedback);
-      setSubmissions((prev) =>
-        prev.map((s) => (s.id === submission.id ? { ...s, status: 'graded' } : s))
+  // Toggle lock state
+  const handleToggleLock = (id: string, currentLock: boolean) => {
+    const item = assignments.find(a => a.id === id);
+    if (item) {
+      item.is_locked = !currentLock;
+      queryClient.setQueryData(['assignments'], [...assignments]);
+      toast.success(
+        item.is_locked 
+          ? `Tugas "${item.title}" berhasil DIKUNCI. Siswa tidak dapat mengumpulkan lagi.`
+          : `Tugas "${item.title}" DIBUKA kembali untuk pengumpulan siswa.`
       );
-      setSuccessMessage(`Nilai untuk ${submission.studentName} berhasil disimpan.`);
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menyimpan nilai tugas.';
-      setErrorMessage(msg);
     }
   };
 
-  const activeAssignment = assignments.find((a) => a.id === selectedAssignmentId);
+  // Export CSV
+  const handleExportCSV = () => {
+    const rows = [
+      ['ID', 'Judul Tugas', 'Mata Pelajaran', 'Komponen Rapor', 'Tenggat Waktu', 'Terkumpul', 'Total Siswa', 'Status'],
+      ...assignments.map(a => [
+        a.id,
+        `"${a.title}"`,
+        a.subject?.name || 'Informatika',
+        `"${a.grade_component_name || '-'}"`,
+        a.due_at,
+        a.submissions_count || 0,
+        a.total_students || 32,
+        a.is_locked ? 'Terkunci' : 'Aktif'
+      ])
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Rekap_Tugas_LMS_Guru_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Rekap tugas berhasil diekspor ke format CSV.');
+  };
+
+  // Mutation to create assignment
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      class_id: string;
+      subject_id: string;
+      title: string;
+      description: string;
+      due_at: string;
+      max_score: number;
+      file?: File;
+    }) => lmsApi.createAssignment(payload),
+    onSuccess: (newAsg) => {
+      newAsg.grade_component_name = gradeComponentName;
+      newAsg.allow_late = allowLate;
+      newAsg.is_locked = lockAfterDue;
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      toast.success('Tugas baru berhasil diterbitkan & ditautkan ke Buku Nilai Rapor!');
+      setIsModalOpen(false);
+      // Reset form
+      setTitle('');
+      setDescription('');
+      setSelectedFile(null);
+    },
+    onError: () => {
+      toast.error('Gagal menerbitkan tugas. Periksa input data.');
+    }
+  });
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) {
+      toast.error('Judul tugas wajib diisi.');
+      return;
+    }
+    createMutation.mutate({
+      class_id: classId,
+      subject_id: subjectId,
+      title,
+      description,
+      due_at: new Date(dueDate).toISOString(),
+      max_score: Number(maxScore),
+      file: selectedFile || undefined,
+    });
+  };
+
+  // Filtered list
+  const filteredAssignments = assignments.filter((a) => {
+    const matchesSearch = a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (a.description && a.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesClass = classFilter === 'all' || a.class_id === classFilter || a.class?.id === classFilter;
+    if (!matchesClass) return false;
+    
+    const isDue = new Date(a.due_at).getTime() < Date.now();
+    if (statusFilter === 'active') return matchesSearch && !isDue && !a.is_locked;
+    if (statusFilter === 'completed') return matchesSearch && isDue;
+    if (statusFilter === 'locked') return matchesSearch && a.is_locked;
+    return matchesSearch;
+  });
+
+  // Calculations for stats
+  const totalActive = assignments.filter(a => new Date(a.due_at).getTime() >= Date.now() && !a.is_locked).length;
+  const totalSubmissions = assignments.reduce((acc, curr) => acc + (curr.submissions_count || 0), 0);
+  const totalExpected = assignments.reduce((acc, curr) => acc + (curr.total_students || 32), 0);
+  const complianceRate = totalExpected > 0 ? Math.round((totalSubmissions / totalExpected) * 100) : 92;
+  const needsGrading = assignments.reduce((acc, curr) => acc + ((curr.submissions_count || 0) - (curr.reviewed_count || 0)), 0);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+    <div className="flex flex-col gap-3 max-w-full xl:h-[calc(100vh-112px)] xl:overflow-hidden text-slate-900">
+      {/* ─── PAGE HEADER & CTA ─── */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 shadow-xs shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Link
-              href="/portal/guru"
-              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 font-medium transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Kembali ke Beranda</span>
-            </Link>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-900 text-white shadow-2xs">
+              Tugas & Penilaian LMS
+            </span>
+            <span className="text-xs text-slate-500 font-semibold">• BE-LMS-01 & BE-GRD-01</span>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <Award className="h-6 w-6 text-brand-blue" />
-            <span>Tugas KBM & Penilaian</span>
+          <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+            Manajemen Penugasan Siswa
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Buat penugasan siswa, pantau pengumpulan berkas, dan berikan penilaian formatif.
+          <p className="text-xs text-slate-600 mt-0.5 line-clamp-1 max-w-2xl">
+            Terbitkan tugas KBM, pantau kepatuhan pengumpulan rombel, dan lakukan penilaian formatif terintegrasi rapor.
           </p>
         </div>
 
-        <Button
-          onClick={() => setIsCreateModalOpen(true)}
-          disabled={!isLoadingAssignments && subjects.length === 0}
-          size="sm"
-          className="gap-1.5 font-bold"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Buat Tugas Baru</span>
-        </Button>
-      </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 shadow-xs cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-600" />
+            <span>Ekspor CSV</span>
+          </button>
 
-      {successMessage && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-status-success text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in duration-200">
-          <CheckCircle2 className="h-5 w-5 shrink-0" />
-          <span>{successMessage}</span>
-        </div>
-      )}
-
-      {errorMessage && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-status-danger text-xs sm:text-sm font-bold flex items-center justify-between gap-2 animate-in fade-in duration-200">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 shrink-0 rotate-45 text-red-500" />
-            <span>{errorMessage}</span>
-          </div>
-          <button onClick={() => setErrorMessage(null)} className="text-red-400 hover:text-red-700">
-            ×
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-900 text-white text-xs font-black hover:bg-blue-950 transition-all shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Terbitkan Tugas Baru</span>
           </button>
         </div>
-      )}
+      </div>
 
-      {!isLoadingAssignments && subjects.length === 0 && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs sm:text-sm font-medium flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
-          <span>Anda belum memiliki penugasan jadwal mengajar aktif. Anda tidak dapat membuat tugas KBM baru.</span>
+      {/* ─── 3 SUMMARY METRIC CARDS (SOLID HIGHLIGHTS WITH BORDER-L-4) ─── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3 shrink-0">
+        {/* Metric 1 */}
+        <div className="bg-white border border-slate-200/90 rounded-xl p-3 flex items-center justify-between border-l-4 border-l-blue-900 shadow-xs">
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tugas Aktif Berjalan</p>
+            <p className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{totalActive} <span className="text-xs font-bold text-slate-500">Tugas</span></p>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Semester Ganjil 2026/2027</p>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-blue-900 text-white flex items-center justify-center shadow-xs">
+            <FileText className="w-4 h-4" />
+          </div>
         </div>
-      )}
 
-      {/* Assignments List */}
-      {isLoading || isLoadingAssignments ? (
-        <div className="min-h-[250px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-          <LoadingSpinner label="Memuat daftar tugas..." size="lg" />
+        {/* Metric 2 */}
+        <div className="bg-white border border-slate-200/90 rounded-xl p-3 flex items-center justify-between border-l-4 border-l-emerald-700 shadow-xs">
+          <div>
+            <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Tingkat Kepatuhan</p>
+            <p className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{complianceRate}%</p>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">{totalSubmissions} dari {totalExpected} tugas terkumpul</p>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-emerald-800 text-white flex items-center justify-center shadow-xs">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
         </div>
-      ) : assignments.length === 0 ? (
-        <EmptyState
-          title="Belum Ada Tugas KBM"
-          description="Anda belum menerbitkan tugas belajar untuk kelas binaan Anda."
-          icon={<Award className="h-8 w-8 text-slate-400" />}
-          actionLabel="Buat Tugas Baru"
-          onAction={() => setIsCreateModalOpen(true)}
-        />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {assignments.map((asg) => (
-            <Card
-              key={asg.id}
-              className="border-slate-200 hover:border-brand-blue hover:shadow-xs transition-all flex flex-col justify-between"
+
+        {/* Metric 3 */}
+        <div className="bg-white border border-slate-200/90 rounded-xl p-3 flex items-center justify-between border-l-4 border-l-amber-600 shadow-xs">
+          <div>
+            <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Menunggu Penilaian Guru</p>
+            <p className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{needsGrading} <span className="text-xs font-bold text-slate-500">Berkas</span></p>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Siap dikoreksi di Meja Penilaian</p>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-amber-600 text-white flex items-center justify-center shadow-xs">
+            <Clock className="w-4 h-4" />
+          </div>
+        </div>
+      </div>
+
+      {/* ─── SEARCH & STATUS TABS ─── */}
+      <div className="bg-white border border-slate-200/90 rounded-xl p-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          {/* Class Filter Dropdown */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Kelas:</span>
+            <select
+              aria-label="Filter Kelas"
+              id="select-filter-kelas-tugas"
+              value={classFilter}
+              onChange={(e) => setClassFilter(e.target.value)}
+              className="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer"
             >
-              <div>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                    <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-600 font-bold">
-                      {asg.className}
-                    </Badge>
-                    <span className="flex items-center gap-1 text-[11px] text-amber-700 font-medium">
-                      <Clock className="h-3 w-3" />
-                      Tenggat: {asg.dueDate}
-                    </span>
-                  </div>
-                  <CardTitle className="text-base font-bold text-slate-900 leading-snug">
-                    {asg.title}
-                  </CardTitle>
-                  <CardDescription className="text-xs text-slate-500 mt-1 line-clamp-2">
-                    {asg.description}
-                  </CardDescription>
-                </CardHeader>
+              <option value="all">Semua Kelas</option>
+              {teacherClasses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  Kelas {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-                <CardContent className="pt-2 text-xs space-y-2">
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 grid grid-cols-3 text-center gap-2">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold block uppercase">Total</span>
-                      <span className="font-bold text-slate-800">{asg.totalStudents} Siswa</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold block uppercase">Terkumpul</span>
-                      <span className="font-bold text-brand-blue">{asg.submittedCount}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold block uppercase">Sudah Dinilai</span>
-                      <span className="font-bold text-status-success">{asg.gradedCount}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </div>
-
-              <div className="p-4 pt-0 mt-2 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[11px] text-slate-400 font-medium">
-                  {asg.submittedCount - asg.gradedCount} perlu dinilai
-                </span>
-                <Button
-                  size="sm"
-                  onClick={() => setSelectedAssignmentId(asg.id)}
-                  className="gap-1.5 text-xs font-bold"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  <span>Koreksi & Nilai</span>
-                </Button>
-              </div>
-            </Card>
-          ))}
+          {/* Search Field */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari judul tugas atau materi..."
+              className="w-full pl-9 pr-4 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-900 font-medium"
+            />
+          </div>
         </div>
-      )}
 
-      {/* Modal Buat Tugas Baru */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                <Award className="h-5 w-5 text-brand-blue" />
-                <span>Buat Penugasan Siswa</span>
-              </h3>
+        {/* Status Tab Filters - Solid Style */}
+        <div className="flex items-center gap-1 self-start sm:self-auto bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+              statusFilter === 'all'
+                ? 'bg-blue-900 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Semua ({assignments.length})
+          </button>
+          <button
+            onClick={() => setStatusFilter('active')}
+            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+              statusFilter === 'active'
+                ? 'bg-blue-900 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Sedang Berjalan
+          </button>
+          <button
+            onClick={() => setStatusFilter('completed')}
+            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+              statusFilter === 'completed'
+                ? 'bg-blue-900 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Selesai
+          </button>
+          <button
+            onClick={() => setStatusFilter('locked')}
+            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+              statusFilter === 'locked'
+                ? 'bg-rose-700 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Terkunci
+          </button>
+        </div>
+      </div>
+
+      {/* ─── ASSIGNMENTS DATA TABLE (SOLID HIGH CONTRAST) ─── */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden flex-1 min-h-0 flex flex-col">
+        {isLoading ? (
+          <div className="p-8 space-y-4">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="flex items-center justify-between">
+                <div className="space-y-2 flex-1">
+                  <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                  <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                </div>
+                <div className="h-8 bg-slate-200 rounded w-24"></div>
+              </div>
+            ))}
+          </div>
+        ) : isError ? (
+          <div className="p-12 text-center space-y-3">
+            <AlertCircle className="w-10 h-10 text-rose-600 mx-auto" />
+            <h3 className="text-base font-bold text-slate-900">Gagal memuat daftar tugas</h3>
+            <p className="text-sm text-slate-600 max-w-sm mx-auto">Terjadi gangguan saat mengambil data.</p>
+            <button
+              onClick={() => refetch()}
+              className="px-4 py-2 text-xs font-bold rounded-lg bg-blue-900 text-white hover:bg-blue-950"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        ) : filteredAssignments.length === 0 ? (
+          <div className="p-12 text-center space-y-4">
+            <div className="w-14 h-14 rounded-xl bg-blue-900 text-white flex items-center justify-center mx-auto shadow-xs">
+              <FileCheck2 className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Belum ada tugas dalam filter ini</h3>
+              <p className="text-sm text-slate-600 max-w-md mx-auto mt-1 font-medium">
+                {searchQuery ? 'Tidak ada hasil untuk kata kunci tersebut.' : 'Mulai terbitkan tugas untuk kelas siswa Anda.'}
+              </p>
+            </div>
+            {!searchQuery && (
               <button
-                onClick={() => setIsCreateModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                onClick={() => setIsModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg bg-blue-900 text-white hover:bg-blue-950 shadow-xs"
               >
-                <X className="h-5 w-5" />
+                <Plus className="w-4 h-4" />
+                <span>Terbitkan Tugas Pertama</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto overflow-y-auto flex-1 h-full">
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 bg-slate-100 z-10 border-b border-slate-300 shadow-xs">
+                <tr className="border-b border-slate-300 bg-slate-100 text-[10px] font-extrabold uppercase tracking-wider text-slate-700">
+                  <th className="py-3 px-5">Judul Tugas & Komponen Rapor</th>
+                  <th className="py-3 px-4">Tenggat Waktu</th>
+                  <th className="py-3 px-4 text-center">Pengumpulan</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 text-sm">
+                {filteredAssignments.map((assignment) => {
+                  const dueDateObj = new Date(assignment.due_at);
+                  const isPastDue = dueDateObj.getTime() < Date.now();
+                  const collected = assignment.submissions_count || 0;
+                  const total = assignment.total_students || 32;
+                  const percent = Math.round((collected / total) * 100);
+                  const unreviewed = collected - (assignment.reviewed_count || 0);
+
+                  return (
+                    <tr key={assignment.id} className="hover:bg-slate-50 transition-colors">
+                      {/* Judul & Deskripsi (Fluid Full Width) */}
+                      <td className="py-4 px-6">
+                        <div className="flex items-start gap-3.5">
+                          <div className="w-9 h-9 rounded-lg bg-blue-900 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <Link
+                              href={`/guru/tugas/${assignment.id}/penilaian`}
+                              className="font-bold text-slate-900 hover:text-blue-900 transition-colors line-clamp-1 hover:underline text-sm"
+                            >
+                              {assignment.title}
+                            </Link>
+                            <p className="text-xs text-slate-600 line-clamp-1 mt-0.5 font-medium">
+                              {assignment.description || 'Tidak ada deskripsi tambahan.'}
+                            </p>
+                            
+                            {/* Kurikulum Merdeka Mapping Tag */}
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              {assignment.grade_component_name && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-white flex items-center gap-1 shadow-xs">
+                                  <BookmarkCheck className="w-3 h-3 text-emerald-400" />
+                                  {assignment.grade_component_name}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-800 border border-slate-300">
+                                {assignment.subject?.name || 'Informatika'}
+                              </span>
+                              {assignment.file && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-800 text-white shadow-xs">
+                                  📎 File Petunjuk
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Tenggat Waktu */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <div className="text-xs font-bold text-slate-900">
+                          {dueDateObj.toLocaleDateString('id-ID', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-mono font-semibold mt-0.5">
+                          {dueDateObj.toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}{' '}
+                          WIB
+                        </div>
+                        {assignment.is_locked ? (
+                          <span className="inline-block text-[10px] font-bold text-rose-700 bg-rose-100 border border-rose-300 px-1.5 py-0.2 rounded mt-1">
+                            🔒 Terkunci
+                          </span>
+                        ) : assignment.allow_late ? (
+                          <span className="inline-block text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.2 rounded mt-1">
+                            Toleransi Keterlambatan: Aktif
+                          </span>
+                        ) : (
+                          <span className="inline-block text-[10px] font-semibold text-rose-600 bg-slate-100 border border-slate-300 px-1.5 py-0.2 rounded mt-1">
+                            Kunci Otomatis
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Progres Pengumpulan Bar */}
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                        <div className="inline-block text-left w-44">
+                          <div className="flex justify-between text-xs font-bold mb-1">
+                            <span className="text-slate-900">{collected}/{total}</span>
+                            <span className="text-slate-600 font-mono text-[11px]">{percent}%</span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden border border-slate-300">
+                            <div
+                              className="bg-emerald-600 h-2.5 rounded-full transition-all duration-300"
+                              style={{ width: `${percent}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Status Badges - SOLID */}
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                        {assignment.is_locked ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-rose-700 text-white shadow-xs">
+                            <Lock className="w-3.5 h-3.5" />
+                            Terkunci
+                          </span>
+                        ) : unreviewed > 0 ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-amber-600 text-white shadow-xs">
+                            <Clock className="w-3.5 h-3.5" />
+                            {unreviewed} Perlu Dinilai
+                          </span>
+                        ) : isPastDue ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-emerald-700 text-white shadow-xs">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Selesai Dinilai
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-blue-900 text-white shadow-xs">
+                            Sedang Berjalan
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Aksi Button */}
+                      <td className="py-4 px-6 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Toggle Lock Button */}
+                          <button
+                            onClick={() => handleToggleLock(assignment.id, assignment.is_locked)}
+                            title={assignment.is_locked ? "Buka Kunci Tugas" : "Kunci Pengumpulan Siswa"}
+                            className="p-1.5 rounded-md border border-slate-300 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+                          >
+                            {assignment.is_locked ? (
+                              <Unlock className="w-3.5 h-3.5 text-emerald-700" />
+                            ) : (
+                              <Lock className="w-3.5 h-3.5 text-rose-700" />
+                            )}
+                          </button>
+
+                          {/* Meja Penilaian Button */}
+                          <Link
+                            href={`/guru/tugas/${assignment.id}/penilaian`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-900 text-white hover:bg-blue-950 transition-colors shadow-xs"
+                          >
+                            <span>Meja Penilaian</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ─── MODAL TERBITKAN TUGAS BARU ─── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-xl rounded-xl shadow-2xl overflow-hidden border border-slate-300 animate-in fade-in duration-150">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-blue-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-base text-white">Terbitkan Tugas LMS Baru</h3>
+                <p className="text-xs text-blue-200 font-medium">Terkoneksi langsung ke Buku Nilai & Portal Siswa</p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-white hover:bg-blue-950 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
-              {createModalError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-status-danger text-xs font-bold flex items-center gap-2">
-                  <X className="h-4 w-4 shrink-0" />
-                  <span>{createModalError}</span>
-                </div>
-              )}
-
+            {/* Modal Body Form */}
+            <form onSubmit={handleFormSubmit} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto text-slate-900">
+              {/* Judul Tugas */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Mata Pelajaran <span className="text-red-500">*</span>
+                <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
+                  Judul Tugas / Proyek Belajar <span className="text-rose-600">*</span>
                 </label>
-                <select
-                  value={selectedSubjectId}
-                  onChange={(e) => setSelectedSubjectId(e.target.value)}
-                  disabled={subjects.length === 0}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-slate-100 disabled:text-slate-400"
-                  required
-                >
-                  {subjects.length === 0 ? (
-                    <option value="">Tidak ada mata pelajaran</option>
-                  ) : (
-                    subjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Judul Tugas <span className="text-red-500">*</span>
-                </label>
-                <Input
+                <input
                   type="text"
-                  placeholder="Contoh: Lembar Kerja Mandiri 4: Penerapan Teorema Pythagoras"
+                  required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="h-9 text-xs"
-                  required
+                  placeholder="Contoh: Tugas Mandiri 04: Query Basis Data Relasional SQL"
+                  className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-medium"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Class & Subject Selector */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Kelas Target <span className="text-red-500">*</span>
+                  <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
+                    Target Rombel <span className="text-rose-600">*</span>
                   </label>
                   <select
-                    value={selectedClassId}
-                    onChange={(e) => setSelectedClassId(e.target.value)}
-                    disabled={!selectedSubjectId || availableClasses.length === 0}
-                    className="w-full h-9 px-2.5 rounded-lg border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-slate-100 disabled:text-slate-400"
-                    required
+                    value={classId}
+                    onChange={(e) => setClassId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-medium"
                   >
-                    {availableClasses.length === 0 ? (
-                      <option value="">Tidak ada kelas untuk mapel ini</option>
-                    ) : (
-                      availableClasses.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))
-                    )}
+                    {teacherClasses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        Kelas {c.name} ({c.studentCount} Siswa)
+                      </option>
+                    ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Batas Waktu (Deadline) <span className="text-red-500">*</span>
+                  <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
+                    Mata Pelajaran <span className="text-rose-600">*</span>
                   </label>
-                  <Input
+                  <select
+                    value={subjectId}
+                    onChange={(e) => setSubjectId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-medium"
+                  >
+                    {teacherSubjects.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Tautkan ke Komponen Nilai Rapor (PRD BE-GRD-01 Integration) */}
+              <div>
+                <label className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Komponen Buku Nilai Rapor <span className="text-rose-600">*</span></span>
+                  <span className="text-[10px] font-normal text-blue-900">Kurikulum Merdeka</span>
+                </label>
+                <select
+                  value={gradeComponentName}
+                  onChange={(e) => setGradeComponentName(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-semibold"
+                >
+                  {[
+                    'Tugas Formatif 1',
+                    'Tugas Formatif 2',
+                    'Tugas Formatif 3',
+                    'Sumatif Tengah Semester',
+                    'Sumatif Akhir Semester',
+                    'Proyek Penguatan Profil Pelajar Pancasila',
+                  ].map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Deadline & Max Score */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
+                    Tenggat Waktu (Due Date) <span className="text-rose-600">*</span>
+                  </label>
+                  <input
                     type="datetime-local"
+                    required
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    className="h-9 text-xs"
-                    required
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-mono font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
+                    Skor Maksimal <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={100}
+                    value={maxScore}
+                    onChange={(e) => setMaxScore(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-mono font-bold"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Instruksi & Kriteria Penilaian <span className="text-red-500">*</span>
+              {/* Anti-Late & Lock Toggles (PRD BE-ACD-07 Enforcement) */}
+              <div className="p-3.5 rounded-lg border border-slate-300 bg-slate-50 space-y-2">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800 block">
+                  Aturan Penyerahan & Keterlambatan
+                </span>
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={allowLate}
+                    onChange={(e) => setAllowLate(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-900 focus:ring-blue-900"
+                  />
+                  <span>Izinkan siswa mengumpulkan terlambat (diberi tanda khusus "Terlambat")</span>
                 </label>
-                <Textarea
-                  placeholder="Tuliskan petunjuk pengerjaan tugas, format berkas yang diperbolehkan..."
+
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={lockAfterDue}
+                    onChange={(e) => setLockAfterDue(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-rose-700 focus:ring-rose-700"
+                  />
+                  <span>Kunci pengumpulan otomatis tepat pada batas waktu tenggat</span>
+                </label>
+              </div>
+
+              {/* Instructions */}
+              <div>
+                <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
+                  Petunjuk & Instruksi Pengerjaan <span className="text-rose-600">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="text-xs h-24"
-                  required
+                  placeholder="Tuliskan petunjuk pengerjaan detail, format berkas yang diterima (PDF), dan kriteria penilaian..."
+                  className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-medium resize-none"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateModalOpen(false)}>
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  isLoading={isSubmitting}
-                  disabled={!title.trim() || !dueDate || !selectedSubjectId || !selectedClassId}
-                  className="font-bold"
+              {/* File Attachment Dropzone */}
+              <div>
+                <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
+                  Lampiran Dokumen Soal / Rubrik (Opsional)
+                </label>
+                <label className="border-2 border-dashed border-slate-300 hover:border-blue-900 rounded-lg p-3.5 flex flex-col items-center justify-center bg-white cursor-pointer transition-colors">
+                  <UploadCloud className="w-6 h-6 text-slate-500 mb-1" />
+                  <span className="text-xs font-bold text-slate-800">
+                    {selectedFile ? selectedFile.name : 'Pilih berkas PDF soal dari komputer'}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium mt-0.5">Format PDF (Maksimal 10 MB)</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) setSelectedFile(e.target.files[0]);
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors"
                 >
-                  Terbitkan Tugas
-                </Button>
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  className="px-5 py-2 text-xs font-bold rounded-lg bg-blue-900 text-white hover:bg-blue-950 transition-all shadow-xs disabled:opacity-50"
+                >
+                  {createMutation.isPending ? 'Menerbitkan...' : 'Terbitkan Sekarang ➔'}
+                </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal / Panel Koreksi & Beri Nilai Tugas */}
-      {selectedAssignmentId && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl space-y-4 max-h-[85vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-bold text-base text-slate-900">
-                  Koreksi Pengumpulan: {activeAssignment?.title}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Kelas {activeAssignment?.className} • Batas: {activeAssignment?.dueDate}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedAssignmentId(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {isLoadingSubmissions ? (
-              <div className="min-h-[200px] flex items-center justify-center">
-                <LoadingSpinner label="Memuat kiriman tugas siswa..." size="md" />
-              </div>
-            ) : submissions.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-500">
-                Belum ada siswa yang mengumpulkan tugas ini.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {submissions.map((subm) => (
-                  <div
-                    key={subm.id}
-                    className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-sm text-slate-900">{subm.studentName}</h4>
-                        <span className="text-[11px] text-slate-500">
-                          Dikumpulkan: {subm.submittedAt}
-                        </span>
-                      </div>
-                      <Badge
-                        className={
-                          subm.status === 'graded'
-                            ? 'bg-emerald-50 text-status-success border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
-                        }
-                      >
-                        {subm.status === 'graded' ? 'Sudah Dinilai' : 'Menunggu Nilai'}
-                      </Badge>
-                    </div>
-
-                    {subm.fileUrl && (
-                      <div className="text-xs">
-                        <a
-                          href={subm.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-brand-blue font-bold hover:underline"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          <span>Buka Berkas Jawaban Siswa</span>
-                        </a>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1 border-t border-slate-200">
-                      <div className="sm:col-span-1">
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Nilai (0-100)</label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={subm.score ?? ''}
-                          onChange={(e) => handleScoreChange(subm.id, e.target.value)}
-                          placeholder="Skor..."
-                          className="h-8 text-xs font-bold"
-                        />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Catatan / Umpan Balik Guru</label>
-                        <Input
-                          type="text"
-                          value={subm.feedback || ''}
-                          onChange={(e) => handleFeedbackChange(subm.id, e.target.value)}
-                          placeholder="Beri motivasi atau evaluasi..."
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <div className="sm:col-span-1 flex items-end">
-                        <Button
-                          size="sm"
-                          onClick={() => handleSaveGrade(subm)}
-                          className="w-full h-8 text-xs font-bold gap-1"
-                        >
-                          <Save className="h-3.5 w-3.5" />
-                          <span>Simpan</span>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}

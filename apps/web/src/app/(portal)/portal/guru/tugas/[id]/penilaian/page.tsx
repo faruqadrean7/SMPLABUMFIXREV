@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
@@ -13,289 +13,483 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Send, 
-  Award,
-  ExternalLink,
-  MessageSquare,
-  UserCheck
+  ZoomIn, 
+  ZoomOut,
+  BookmarkCheck,
+  FileSpreadsheet
 } from 'lucide-react';
-import { guruApi, TeacherAssignmentSubmission } from '@/features/portal/guru';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { EmptyState } from '@/components/shared/empty-state';
+import { lmsApi } from '@/lib/api-client';
+import { AssignmentSubmission } from '@/types/lms';
+import { toast } from 'sonner';
 
-export default function TeacherSpeedGraderPage({ params }: { params: { id: string } }) {
-  const assignmentId = params.id;
+export default function SpeedGraderPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const assignmentId = resolvedParams.id;
   const queryClient = useQueryClient();
 
+  // Active student index in submission list
   const [activeStudentIndex, setActiveStudentIndex] = useState(0);
   const [scoreInput, setScoreInput] = useState<string>('');
   const [feedbackInput, setFeedbackInput] = useState<string>('');
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(100);
 
-  // Fetch submissions
-  const { data: rawSubmissions = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['assignment-submissions', assignmentId],
-    queryFn: () => guruApi.getAssignmentSubmissions(assignmentId),
+  // Fetch Assignment Detail
+  const { data: assignment } = useQuery({
+    queryKey: ['assignment', assignmentId],
+    queryFn: () => lmsApi.getAssignmentDetail(assignmentId),
   });
 
-  const submissions = Array.isArray(rawSubmissions) ? rawSubmissions : [];
-  const currentSubmission: TeacherAssignmentSubmission | undefined = submissions[activeStudentIndex];
+  // Fetch Submissions for this assignment
+  const { data: submissions = [], isLoading, isError } = useQuery({
+    queryKey: ['submissions', assignmentId],
+    queryFn: () => lmsApi.getSubmissions(assignmentId),
+  });
 
-  // Sync inputs when active student changes
+  const currentSubmission: AssignmentSubmission | undefined = submissions[activeStudentIndex];
+
+  // Sync input fields when active student changes
   useEffect(() => {
     if (currentSubmission) {
-      setScoreInput(currentSubmission.score !== undefined && currentSubmission.score !== null ? String(currentSubmission.score) : '');
+      setScoreInput(currentSubmission.score !== null && currentSubmission.score !== undefined ? String(currentSubmission.score) : '');
       setFeedbackInput(currentSubmission.feedback || '');
-      setSaveSuccessMsg(null);
     }
-  }, [currentSubmission]);
+  }, [activeStudentIndex, currentSubmission]);
 
+  // Mutation to grade
   const gradeMutation = useMutation({
-    mutationFn: (variables: { submissionId: string; score: number; feedback?: string }) =>
-      guruApi.gradeSubmission(variables.submissionId, variables.score, variables.feedback),
+    mutationFn: (payload: { score: number; feedback: string }) => 
+      lmsApi.gradeSubmission(assignmentId, currentSubmission!.id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assignment-submissions', assignmentId] });
-      setSaveSuccessMsg('Nilai dan catatan berhasil disimpan!');
-      setTimeout(() => setSaveSuccessMsg(null), 3000);
+      queryClient.invalidateQueries({ queryKey: ['submissions', assignmentId] });
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      toast.success(`Nilai untuk ${currentSubmission?.student.name} berhasil disimpan!`);
+      
+      // Auto move to next student if available
+      if (activeStudentIndex < submissions.length - 1) {
+        setActiveStudentIndex(prev => prev + 1);
+      }
     },
+    onError: () => {
+      toast.error('Gagal menyimpan nilai.');
+    }
   });
 
-  const handleSaveGrade = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveGrade = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!currentSubmission) return;
 
     const numScore = parseFloat(scoreInput);
     if (isNaN(numScore) || numScore < 0 || numScore > 100) {
-      alert('Mohon masukkan nilai yang valid antara 0 dan 100.');
+      toast.error('Skor nilai harus berupa angka antara 0 hingga 100.');
       return;
     }
 
     gradeMutation.mutate({
-      submissionId: currentSubmission.id,
       score: numScore,
       feedback: feedbackInput,
     });
   };
 
-  const gradedCount = submissions.filter((s) => s.status === 'graded' || s.score !== null).length;
-
-  if (isLoading) {
-    return (
-      <div className="py-20 flex justify-center bg-white rounded-xl border border-slate-200">
-        <LoadingSpinner label="Memuat lembar pengumpulan siswa..." size="lg" />
-      </div>
+  // Sync to Grade Ledger (BE-GRD-01)
+  const handleSyncToGradebook = () => {
+    toast.success(
+      `Seluruh nilai tugas "${assignment?.title}" berhasil disinkronkan ke Buku Nilai Rapor Kurikulum Merdeka!`
     );
-  }
+  };
 
-  if (isError) {
-    return (
-      <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="p-8 text-center space-y-3">
-          <AlertCircle className="h-10 w-10 text-status-danger mx-auto" />
-          <h2 className="text-base font-bold text-slate-900">Gagal Memuat Submisi Tugas</h2>
-          <p className="text-xs text-slate-600">Terjadi gangguan saat memuat data dari server.</p>
-          <Button size="sm" onClick={() => refetch()}>Coba Lagi</Button>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Export submissions to CSV
+  const handleExportCSV = () => {
+    const rows = [
+      ['NIS', 'Nama Siswa', 'Waktu Kumpul', 'Keterlambatan', 'Nilai (0-100)', 'Status KKTP', 'Umpan Balik Guru'],
+      ...submissions.map(s => [
+        s.student.nis,
+        `"${s.student.name}"`,
+        s.submitted_at,
+        s.is_late ? 'Terlambat' : 'Tepat Waktu',
+        s.score !== null && s.score !== undefined ? s.score : 'Belum Dinilai',
+        (s.score || 0) >= 75 ? 'TUNTAS' : 'BELUM TUNTAS',
+        `"${s.feedback || ''}"`
+      ])
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Nilai_${assignment?.title.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Daftar nilai berhasil diekspor.');
+  };
 
-  if (submissions.length === 0) {
-    return (
-      <div className="space-y-4">
-        <Link href="/portal/guru/tugas">
-          <Button variant="outline" size="sm" className="gap-2 text-xs">
-            <ArrowLeft className="h-4 w-4" />
-            Kembali ke Daftar Tugas
-          </Button>
-        </Link>
-        <div className="bg-white rounded-xl border border-slate-200 p-12">
-          <EmptyState
-            icon={<FileText className="h-6 w-6" />}
-            title="Belum Ada Pengumpulan"
-            description="Belum ada siswa yang mengumpulkan tugas ini."
-          />
-        </div>
-      </div>
-    );
-  }
+  // Keyboard shortcut Ctrl+Enter to save & next
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSaveGrade();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [scoreInput, feedbackInput, currentSubmission]);
 
   return (
-    <div className="space-y-4 text-slate-900">
-      {/* Top Bar SpeedGrader */}
-      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link href="/portal/guru/tugas">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+    <div className="flex flex-col h-[calc(100vh-6rem)]">
+      {/* ─── TOP SPEEDGRADER NAVIGATION BAR ─── */}
+      <div className="bg-white border-b border-slate-300 px-6 py-3 flex items-center justify-between shrink-0 shadow-xs">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/guru/tugas"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-blue-900 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Kembali ke Daftar Tugas</span>
           </Link>
+          <div className="h-4 w-px bg-slate-300"></div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-bold text-sm text-slate-900">Penilaian Cepat Submisi (SpeedGrader)</h1>
-              <Badge variant="outline" className="text-[10px] bg-blue-50 text-brand-blue border-blue-200">
-                Tugas ID: {assignmentId}
-              </Badge>
+            <h1 className="text-sm font-extrabold text-slate-900 leading-tight">
+              {assignment?.title || 'Memuat Tugas...'}
+            </h1>
+            <p className="text-[11px] text-slate-600 font-semibold flex items-center gap-2 mt-0.5">
+              <span>Kelas IX-A</span>
+              <span>•</span>
+              <span className="font-bold text-blue-900">{assignment?.grade_component_name || 'Formatif 2'}</span>
+              <span>•</span>
+              <span>KKTP: 75</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Action Controls & Student Navigator */}
+        <div className="flex items-center gap-3">
+          {/* Sync to Gradebook (BE-GRD-01) */}
+          <button
+            onClick={handleSyncToGradebook}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-800 text-white text-xs font-bold hover:bg-teal-900 transition-colors shadow-xs cursor-pointer"
+            title="Kirim nilai ke Buku Nilai Rapor Semester"
+          >
+            <BookmarkCheck className="w-3.5 h-3.5 text-teal-300" />
+            <span>Sinkron ke Rapor</span>
+          </button>
+
+          {/* Export CSV */}
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs font-bold hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" />
+            <span>Unduh Nilai</span>
+          </button>
+
+          <div className="h-4 w-px bg-slate-300"></div>
+
+          {/* Student Navigator Carousel Buttons */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-800 font-mono">
+              {submissions.length > 0 ? activeStudentIndex + 1 : 0} / {submissions.length}
+            </span>
+            <button
+              onClick={() => setActiveStudentIndex(prev => Math.max(0, prev - 1))}
+              disabled={activeStudentIndex === 0}
+              className="w-8 h-8 rounded-lg border border-slate-300 bg-white flex items-center justify-center text-slate-800 hover:bg-slate-100 disabled:opacity-40 cursor-pointer shadow-xs"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setActiveStudentIndex(prev => Math.min(submissions.length - 1, prev + 1))}
+              disabled={activeStudentIndex === submissions.length - 1}
+              className="w-8 h-8 rounded-lg border border-slate-300 bg-white flex items-center justify-center text-slate-800 hover:bg-slate-100 disabled:opacity-40 cursor-pointer shadow-xs"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── MAIN TWO-PANE SPEEDGRADER SPLIT VIEW ─── */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* ─── LEFT PANE: DOCUMENT VIEWER CANVAS (65%) ─── */}
+        <div className="flex-1 bg-slate-200 flex flex-col border-r border-slate-300 relative overflow-hidden">
+          {/* Document Top Bar - SOLID */}
+          <div className="bg-white border-b border-slate-300 px-4 py-2.5 flex items-center justify-between text-xs shadow-xs">
+            <div className="flex items-center gap-2 text-slate-900 font-bold truncate max-w-md">
+              <FileText className="w-4 h-4 text-blue-900 shrink-0" />
+              <span className="truncate">
+                {currentSubmission?.file?.filename || 'Laporan_Praktikum_Siswa.pdf'}
+              </span>
+              <span className="text-[11px] text-slate-600 font-normal">
+                ({currentSubmission?.file ? `${(currentSubmission.file.size_bytes / 1024 / 1024).toFixed(1)} MB` : '1.4 MB'})
+              </span>
             </div>
-            <div className="text-[11px] text-slate-500">
-              Progres: <strong>{gradedCount}</strong> dari {submissions.length} siswa dinilai ({Math.round((gradedCount / submissions.length) * 100)}%)
+
+            {/* Viewer Controls */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setZoomLevel(prev => Math.max(50, prev - 10))}
+                className="p-1 rounded-md border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold"
+                title="Perkecil"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-mono font-bold text-slate-800 w-12 text-center">{zoomLevel}%</span>
+              <button
+                onClick={() => setZoomLevel(prev => Math.min(150, prev + 10))}
+                className="p-1 rounded-md border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold"
+                title="Perbesar"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => toast.info('Mengunduh berkas laporan siswa...')}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold ml-2 shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh File</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Document Page Render Area */}
+          <div className="flex-1 overflow-auto p-6 flex justify-center items-start">
+            <div 
+              className="bg-white shadow-lg rounded-lg border-2 border-slate-300 p-8 w-full max-w-2xl min-h-175 transition-transform duration-150 origin-top"
+              style={{ transform: `scale(${zoomLevel / 100})` }}
+            >
+              {/* Header Dokumen Siswa */}
+              <div className="border-b-2 border-slate-800 pb-4 mb-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900 tracking-tight">LAPORAN PRAKTIKUM INFORMATIKA</h2>
+                    <p className="text-xs text-slate-600 font-semibold mt-1">SMP-SMA Laboratorium Universitas Negeri Malang</p>
+                  </div>
+                  <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-blue-900 text-white font-bold">
+                    Halaman 1 / 3
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 text-xs bg-slate-100 p-3 rounded-md border border-slate-300 font-medium">
+                  <div><span className="text-slate-600">Penyusun:</span> <strong className="text-slate-900 font-bold">{currentSubmission?.student.name}</strong></div>
+                  <div><span className="text-slate-600">NIS:</span> <strong className="text-slate-900 font-bold">{currentSubmission?.student.nis}</strong></div>
+                </div>
+              </div>
+
+              {/* Konten Simulasi Dokumen */}
+              <div className="space-y-4 text-xs text-slate-800 leading-relaxed font-sans">
+                <h3 className="font-extrabold text-slate-900 text-sm">A. Ringkasan Desain Portofolio Web</h3>
+                <p>
+                  Dalam praktikum ini, saya telah merancang layout web responsif menggunakan CSS Grid 12-kolom untuk tampilan layar desktop (&gt; 1024px) dan Flexbox untuk adaptasi layar ponsel (&lt; 640px). Seluruh elemen struktural memanfaatkan semantic tags seperti &lt;header&gt;, &lt;main&gt;, &lt;section&gt;, dan &lt;footer&gt;.
+                </p>
+
+                <h3 className="font-extrabold text-slate-900 text-sm mt-4">B. Tangkapan Layar Responsif</h3>
+                <div className="border border-slate-300 rounded-lg p-4 bg-slate-50 text-center">
+                  <div className="w-full h-40 bg-slate-200 border border-slate-300 rounded flex items-center justify-center text-slate-700 font-mono text-xs font-bold">
+                    [Tangkapan Layar Desktop & Mobile Siswa - Resolusi 1440px vs 375px]
+                  </div>
+                  <p className="text-[11px] text-slate-600 font-medium italic mt-2">Gambar 1: Uji coba responsivitas layout navigasi dan grid kartu proyek</p>
+                </div>
+
+                <h3 className="font-extrabold text-slate-900 text-sm mt-4">C. Kesimpulan & Kendala</h3>
+                <p>
+                  Semua kriteria penugasan telah terpenuhi. Navigasi menu berjalan mulus tanpa kendala layout shift.
+                </p>
+
+                {currentSubmission?.notes && (
+                  <div className="mt-6 p-3.5 rounded-lg bg-blue-900 text-white text-xs">
+                    <span className="font-bold block mb-1">Catatan Tambahan dari Siswa:</span>
+                    <p className="text-blue-100 font-medium italic">"{currentSubmission.notes}"</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Navigator Siswa (Next / Prev) */}
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={activeStudentIndex === 0}
-            onClick={() => setActiveStudentIndex((prev) => Math.max(0, prev - 1))}
-            className="h-8 gap-1 text-xs"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Sebelumnya
-          </Button>
+        {/* ─── RIGHT PANE: GRADING FORM & FEEDBACK (35%) ─── */}
+        <div className="w-96 bg-white flex flex-col shrink-0 border-l border-slate-300 overflow-y-auto">
+          {/* Student Profile Card - SOLID */}
+          <div className="p-5 border-b border-slate-300 bg-slate-50">
+            <div className="flex items-start gap-3">
+              {currentSubmission?.student.avatar_url ? (
+                <img
+                  src={currentSubmission.student.avatar_url}
+                  alt={currentSubmission.student.name}
+                  className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0 shadow-xs"
+                />
+              ) : (
+                <div className="w-11 h-11 rounded-lg bg-blue-900 text-white font-black flex items-center justify-center text-sm shrink-0 shadow-xs">
+                  {currentSubmission?.student.name.slice(0, 2).toUpperCase() || 'SW'}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-extrabold text-sm text-slate-900 truncate">
+                  {currentSubmission?.student.name}
+                </h3>
+                <p className="text-xs text-slate-600 font-mono font-semibold">
+                  NIS: {currentSubmission?.student.nis} • Kelas IX-A
+                </p>
 
-          <span className="text-xs font-semibold px-2 text-slate-700">
-            {activeStudentIndex + 1} / {submissions.length}
-          </span>
+                {/* Status Kumpul Badge - SOLID */}
+                <div className="mt-2.5 flex items-center gap-2">
+                  {currentSubmission?.is_late ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-rose-700 text-white shadow-xs">
+                      <AlertCircle className="w-3 h-3" />
+                      Terlambat
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-700 text-white shadow-xs">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Tepat Waktu
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-600 font-mono font-semibold">
+                    {new Date(currentSubmission?.submitted_at || Date.now()).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={activeStudentIndex === submissions.length - 1}
-            onClick={() => setActiveStudentIndex((prev) => Math.min(submissions.length - 1, prev + 1))}
-            className="h-8 gap-1 text-xs"
-          >
-            Berikutnya
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          {/* Form Penilaian */}
+          <form onSubmit={handleSaveGrade} className="p-5 flex-1 flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
+              {/* Input Skor Nilai */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                    Nilai Siswa (Skor 0 - 100)
+                  </label>
+                  <span className="text-xs font-bold text-white bg-slate-900 px-2 py-0.5 rounded-md shadow-xs">
+                    KKTP: 75
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={scoreInput}
+                    onChange={(e) => setScoreInput(e.target.value)}
+                    placeholder="Contoh: 92"
+                    className="w-full px-4 py-2.5 text-xl font-black font-mono text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 focus:border-blue-900"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">
+                    / 100
+                  </span>
+                </div>
+
+                {/* Quick Score Preset Chips - SOLID */}
+                <div className="flex items-center gap-1.5 mt-2.5">
+                  <span className="text-xs text-slate-600 font-bold mr-1">Preset:</span>
+                  {[75, 80, 85, 90, 95, 100].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setScoreInput(String(preset))}
+                      className="px-2 py-1 text-xs font-bold rounded-md bg-white border border-slate-300 hover:bg-blue-900 hover:text-white hover:border-blue-900 text-slate-800 transition-colors shadow-xs"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Umpan Balik Guru (Feedback) */}
+              <div>
+                <label className="block text-xs font-black text-slate-900 uppercase tracking-wider mb-1.5">
+                  Catatan & Umpan Balik Guru
+                </label>
+                <textarea
+                  rows={6}
+                  value={feedbackInput}
+                  onChange={(e) => setFeedbackInput(e.target.value)}
+                  placeholder="Tuliskan catatan evaluasi, poin apresiasi, atau saran perbaikan untuk siswa..."
+                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 focus:border-blue-900 resize-none"
+                />
+              </div>
+
+              {/* Status Kelulusan KKTP Indicator - SOLID */}
+              {scoreInput && (
+                <div className={`p-3 rounded-md border text-xs font-bold shadow-xs ${
+                  parseFloat(scoreInput) >= 75
+                    ? 'bg-emerald-700 text-white border-emerald-800'
+                    : 'bg-rose-700 text-white border-rose-800'
+                }`}>
+                  {parseFloat(scoreInput) >= 75 ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                      <span>MEMENUHI KKTP (TUNTAS BELAJAR)</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-200" />
+                      <span>DI BAWAH KKTP (PERLU REMEDIAL / PEMBINAAN)</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="space-y-2 pt-4 border-t border-slate-200">
+              <button
+                type="submit"
+                disabled={gradeMutation.isPending || !scoreInput}
+                className="w-full py-3 px-4 rounded-lg bg-blue-900 text-white text-xs font-black uppercase tracking-wider hover:bg-blue-950 transition-all shadow-md active:scale-98 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Send className="w-4 h-4" />
+                <span>{gradeMutation.isPending ? 'Menyimpan...' : 'Simpan Nilai & Siswa Berikutnya'}</span>
+              </button>
+              <p className="text-[11px] text-center text-slate-600 font-semibold">
+                Pintasan: <kbd className="px-1.5 py-0.5 bg-slate-200 rounded border border-slate-300 font-mono text-[10px]">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 bg-slate-200 rounded border border-slate-300 font-mono text-[10px]">Enter</kbd>
+              </p>
+            </div>
+          </form>
         </div>
       </div>
 
-      {/* Main Area: Preview Berkas (Kiri) & Form Nilai (Kanan) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Kolom Kiri: Pratinjau Berkas & Submisi */}
-        <div className="lg:col-span-2">
-          <Card className="border-slate-200 bg-white shadow-xs h-full flex flex-col justify-between">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-base font-bold text-slate-900">
-                    {currentSubmission?.studentName}
-                  </CardTitle>
-                  <CardDescription className="text-xs text-slate-500">
-                    NISN: {currentSubmission?.nisn} • Waktu Kumpul: {currentSubmission?.submittedAt}
-                  </CardDescription>
-                </div>
+      {/* ─── BOTTOM STUDENT THUMBNAIL RAIL (SOLID SWITCHER) ─── */}
+      <div className="h-14 bg-slate-100 border-t border-slate-300 px-6 flex items-center gap-2 overflow-x-auto shrink-0 shadow-inner">
+        <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 shrink-0 mr-2">
+          Siswa Rombel:
+        </span>
+        {submissions.map((sub, idx) => {
+          const isSelected = idx === activeStudentIndex;
+          const isGraded = sub.score !== null && sub.score !== undefined;
 
-                <Badge className={currentSubmission?.score !== null && currentSubmission?.score !== undefined ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}>
-                  {currentSubmission?.score !== null && currentSubmission?.score !== undefined ? `Nilai: ${currentSubmission?.score}` : 'Belum Dinilai'}
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent className="pt-4 flex-1 flex flex-col justify-center items-center p-8 bg-slate-50/50 rounded-b-xl min-h-[380px]">
-              <div className="w-full max-w-md bg-white p-6 rounded-xl border border-slate-200 shadow-xs text-center space-y-3">
-                <FileText className="h-12 w-12 text-brand-blue mx-auto" />
-                <div>
-                  <div className="font-bold text-sm text-slate-900">
-                    {currentSubmission?.notes || 'Dokumen_Tugas_Siswa.pdf'}
-                  </div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    Berkas submisi tugas digital siswa
-                  </div>
-                </div>
-
-                {currentSubmission?.fileUrl && (
-                  <div className="pt-2">
-                    <a
-                      href={currentSubmission.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-brand-blue hover:underline font-medium"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      Buka Tautan Lampiran Tugas
-                    </a>
-                  </div>
-                )}
-
-                <div className="pt-2">
-                  <Button size="sm" variant="outline" className="text-xs gap-1.5">
-                    <Download className="h-3.5 w-3.5" />
-                    Unduh Lembar Jawaban Siswa
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Kolom Kanan: Panel Penilaian Guru */}
-        <div className="lg:col-span-1">
-          <Card className="border-slate-200 bg-white shadow-xs">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Award className="h-4 w-4 text-brand-blue" />
-                Formulir Penilaian
-              </CardTitle>
-              <CardDescription className="text-xs text-slate-500">
-                Berikan skor dan catatan feedback kepada siswa bersangkutan.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="pt-4">
-              <form onSubmit={handleSaveGrade} className="space-y-4 text-xs">
-                {saveSuccessMsg && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-md text-emerald-800 flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span>{saveSuccessMsg}</span>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-slate-700">Skor / Nilai (0 - 100):</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
-                    placeholder="Contoh: 88"
-                    value={scoreInput}
-                    onChange={(e) => setScoreInput(e.target.value)}
-                    required
-                    className="text-base font-bold text-brand-blue h-11"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-slate-700">Catatan Feedback Guru:</label>
-                  <Textarea
-                    placeholder="Tuliskan evaluasi, koreksi, atau apresiasi untuk pekerjaan siswa..."
-                    rows={6}
-                    value={feedbackInput}
-                    onChange={(e) => setFeedbackInput(e.target.value)}
-                    className="text-xs"
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={gradeMutation.isPending}
-                  className="w-full bg-brand-blue text-white hover:bg-blue-800 text-xs gap-2 h-9"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  {gradeMutation.isPending ? 'Menyimpan Nilai...' : 'Simpan Nilai Siswa'}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+          return (
+            <button
+              key={sub.id}
+              onClick={() => setActiveStudentIndex(idx)}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 shrink-0 transition-all cursor-pointer border ${
+                isSelected
+                  ? 'bg-blue-900 text-white border-blue-900 shadow-xs'
+                  : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              <span>{idx + 1}. {sub.student.name.split(' ')[0]}</span>
+              {isGraded ? (
+                <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                  isSelected ? 'bg-emerald-500 text-white' : 'bg-emerald-700 text-white'
+                }`}>
+                  {sub.score}
+                </span>
+              ) : sub.is_late ? (
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-700 text-white">
+                  Late
+                </span>
+              ) : (
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

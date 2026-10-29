@@ -49,5 +49,14 @@ export default function PortalRootLayout({ children }: { children: React.ReactNo
     return null;
   }
 
+  const isDedicatedPortal =
+    pathname.startsWith('/portal/siswa') ||
+    pathname.startsWith('/portal/guru') ||
+    pathname.startsWith('/portal/ortu');
+
+  if (isDedicatedPortal) {
+    return <>{children}</>;
+  }
+
   return <PortalShell>{children}</PortalShell>;
 }

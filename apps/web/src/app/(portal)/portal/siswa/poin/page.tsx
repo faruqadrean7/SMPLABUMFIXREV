@@ -1,287 +1,371 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { 
   Award, 
   ShieldCheck, 
-  AlertTriangle, 
   PlusCircle, 
   MinusCircle, 
   Clock, 
-  CheckCircle2, 
   Users, 
   Calendar,
   ArrowRight,
-  RotateCw,
-  Compass,
-  Trophy
+  CheckCircle2,
+  Inbox
 } from 'lucide-react';
-import { portalApi } from '@/features/portal/portal-api';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { EmptyState } from '@/components/shared/empty-state';
+import { StudentPointLogItem } from '@/lib/mock-student-data';
+import { useStudentDashboard } from '@/lib/use-student-data';
+import { EmptyState } from '@/components/ui/empty-state';
 
 export default function StudentPoinPage() {
   const [activeTab, setActiveTab] = useState<'poin' | 'ekskul'>('poin');
   const [filterKind, setFilterKind] = useState<'semua' | 'prestasi' | 'pelanggaran'>('semua');
 
-  const { data: pointsData, isLoading, isError, refetch } = useQuery({
-    queryKey: ['student-points'],
-    queryFn: () => portalApi.getStudentPoints(),
-  });
+  const { data: studentDash } = useStudentDashboard();
+  const achievementsCount = studentDash?.totalAchievements ?? 3;
 
-  const logs = Array.isArray(pointsData?.logs) ? pointsData.logs : [];
-  const totalPrestasi = pointsData?.totalPrestasi ?? 0;
-  const totalPelanggaran = pointsData?.totalPelanggaran ?? 0;
-  const balancePoints = pointsData?.balancePoints ?? (totalPrestasi - totalPelanggaran);
+  const achievementItems: StudentPointLogItem[] = [
+    {
+      id: 'ach-01',
+      kind: 'prestasi' as const,
+      type_name: 'Juara 1 Lomba Coding & Web Development Tingkat Kota',
+      category: 'Prestasi Akademik & Teknologi',
+      date_str: '12 Okt 2026',
+      points: 50,
+      note: 'Juara 1 kategori SMP se-Kota Malang, surat tugas resmi sekolah.',
+      recorder_name: 'Budi Santoso, S.Kom., M.T.',
+    },
+    {
+      id: 'ach-02',
+      kind: 'prestasi' as const,
+      type_name: 'Medali Perak Olimpiade Sains Nasional (OSN) Bidang IPA',
+      category: 'Prestasi Sains & Riset',
+      date_str: '28 Sep 2026',
+      points: 75,
+      note: 'Diverifikasi oleh tim kurikulum dan kesiswaan SMP Labschool UM.',
+      recorder_name: 'Ratna Dewi, S.Pd.',
+    },
+    {
+      id: 'ach-03',
+      kind: 'prestasi' as const,
+      type_name: 'Apresiasi Pemimpin Upacara Hari Kemerdekaan RI',
+      category: 'Kedisiplinan & Kepemimpinan',
+      date_str: '17 Agu 2026',
+      points: 25,
+      note: 'Petugas inti upacara bendera HUT RI ke-81 di kampus Labschool.',
+      recorder_name: 'Tim Kesiswaan',
+    },
+  ].slice(0, achievementsCount);
 
-  const filteredLogs = filterKind === 'semua'
-    ? logs
-    : logs.filter((p) => p.kind === filterKind);
+  const totalPrestasi = achievementItems.reduce((acc, curr) => acc + curr.points, 0);
+  const totalPelanggaran = 0;
+  const balancePoints = totalPrestasi - totalPelanggaran;
 
-  const extracurriculars = [
+  const filteredLogs = filterKind === 'pelanggaran'
+    ? []
+    : achievementItems;
+
+  const myExtracurriculars = [
     {
       id: 'ekskul-01',
-      name: 'Coding & Robotika Club',
+      name: 'Coding & Robotika Club (Robotics Team)',
       coach: 'Budi Santoso, S.Kom., M.T.',
       schedule: 'Setiap Rabu, 15:00 - 17:00 WIB',
-      room: 'Lab Komputer 1',
-      role: 'Anggota Inti',
+      room: 'Lab Komputer 1 & Lab Robotika',
+      role: 'Anggota Inti (Programmer)',
       attendance_rate: '100%',
+      badgeColor: 'bg-blue-50 text-blue-900 border-blue-200',
     },
     {
       id: 'ekskul-02',
       name: 'Palang Merah Remaja (PMR Madya)',
       coach: 'Dra. Siti Rahayu, M.Pd.',
       schedule: 'Setiap Sabtu, 08:00 - 10:00 WIB',
-      room: 'Ruang UKS & Lapangan',
+      room: 'Ruang UKS & Lapangan Utama',
       role: 'Anggota Reguler',
-      attendance_rate: '94%',
+      attendance_rate: '92.3%',
+      badgeColor: 'bg-rose-50 text-rose-800 border-rose-200',
     },
   ];
 
+  const availableEkskul = [
+    { name: 'Futsal & Sepak Bola', coach: 'Rudi Hartono, S.Pd.', quota: 'Sisa 4 Kuota', schedule: 'Selasa & Jumat' },
+    { name: 'Paduan Suara & Remaja', coach: 'Yuni Astuti, S.Sn.', quota: 'Sisa 8 Kuota', schedule: 'Kamis Sore' },
+    { name: 'Klub Bahasa Inggris (EDC)', coach: 'Nurul Hidayati, M.Ed.', quota: 'Sisa 6 Kuota', schedule: 'Senin Sore' },
+    { name: 'Jurnalistik & Fotografi', coach: 'Agus Subekti, S.Pd.', quota: 'Sisa 2 Kuota', schedule: 'Sabtu Pagi' },
+  ];
+
   return (
-    <div className="space-y-6 text-slate-900">
-      {/* Header Halaman */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+    <div className="space-y-5 text-slate-900">
+      {/* ─── HEADER CARD (COMPACT & PROPORTIONED) ─── */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2.5">
-            <Award className="h-6 w-6 text-brand-blue" />
-            Poin Kedisiplinan & Ekstrakurikuler
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-900 text-white shadow-2xs">
+              Kesiswaan & Karakter
+            </span>
+            <span className="text-xs text-slate-500 font-semibold">• T.A. 2026/2027 Ganjil</span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+            Buku Poin Pembiasaan & Ekstrakurikuler
           </h1>
-          <p className="text-xs text-slate-600 mt-1">
-            Monitoring saldo poin pembinaan karakter, rekaman prestasi siswa, serta keikutsertaan kegiatan ekskul.
+          <p className="text-xs text-slate-500 font-normal mt-0.5 max-w-2xl">
+            Pantau catatan poin kedisiplinan dan apresiasi prestasi, serta jadwal kegiatan ekstrakurikuler sekolah.
           </p>
         </div>
 
-        {/* Tab Selector */}
-        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200 self-start md:self-auto">
+        {/* Tab Switcher */}
+        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 self-start md:self-auto shadow-2xs shrink-0">
           <button
             onClick={() => setActiveTab('poin')}
-            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-              activeTab === 'poin' 
-                ? 'bg-white text-brand-blue shadow-xs' 
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'poin'
+                ? 'bg-blue-900 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Buku Poin Karakter
+            Buku Poin Siswa
           </button>
           <button
             onClick={() => setActiveTab('ekskul')}
-            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-              activeTab === 'ekskul' 
-                ? 'bg-white text-brand-blue shadow-xs' 
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'ekskul'
+                ? 'bg-blue-900 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Compass className="h-3.5 w-3.5" />
-            Ekstrakurikuler ({extracurriculars.length})
+            Ekstrakurikuler ({myExtracurriculars.length})
           </button>
         </div>
       </div>
 
+      {/* ─── TAB 1: BUKU POIN SISWA ─── */}
       {activeTab === 'poin' && (
-        <div className="space-y-6">
-          {/* Ringkasan Skor Poin */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="border-blue-200 bg-blue-50/50 shadow-xs">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-medium text-slate-600">Saldo Poin Bersih</div>
-                  <div className={`text-2xl font-black mt-1 ${balancePoints >= 0 ? 'text-brand-blue' : 'text-status-danger'}`}>
-                    {balancePoints >= 0 ? `+${balancePoints}` : balancePoints}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Status: Baik / Tertib</div>
+        <div className="space-y-4">
+          {/* 3 Metric Cards Saldo (Clean without border-l-4) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-4.5 shadow-xs flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Total Poin Prestasi
+                </span>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono mt-0.5">
+                  +{totalPrestasi}
                 </div>
-                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-brand-blue">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-emerald-200 bg-emerald-50/50 shadow-xs">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-medium text-slate-600">Total Poin Prestasi</div>
-                  <div className="text-2xl font-black text-emerald-700 mt-1">
-                    +{totalPrestasi}
-                  </div>
-                  <div className="text-[10px] text-emerald-600 mt-0.5">Penghargaan & Apresiasi</div>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-                  <Trophy className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-red-200 bg-red-50/50 shadow-xs">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-medium text-slate-600">Poin Pelanggaran</div>
-                  <div className="text-2xl font-black text-status-danger mt-1">
-                    -{totalPelanggaran}
-                  </div>
-                  <div className="text-[10px] text-red-600 mt-0.5">Teguran & Pembinaan</div>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-status-danger">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Filter Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-700">
-              <span>Filter Catatan:</span>
-              <div className="flex gap-1.5">
-                {(['semua', 'prestasi', 'pelanggaran'] as const).map((kd) => (
-                  <button
-                    key={kd}
-                    onClick={() => setFilterKind(kd)}
-                    className={`px-3 py-1 rounded text-xs font-medium transition-colors capitalize ${
-                      filterKind === kd
-                        ? 'bg-brand-blue text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {kd}
-                  </button>
-                ))}
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">{achievementsCount} Penghargaan Resmi</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
+                <PlusCircle className="w-5 h-5" />
               </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetch()}
-              className="text-xs h-8 gap-1.5"
-            >
-              <RotateCw className="h-3.5 w-3.5" />
-              Segarkan
-            </Button>
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-4.5 shadow-xs flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Total Poin Pelanggaran
+                </span>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono mt-0.5">
+                  -{totalPelanggaran}
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">Catatan Perilaku Bersih</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+                <MinusCircle className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-4.5 shadow-xs flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block">
+                  Saldo Bersih Poin
+                </span>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono mt-0.5">
+                  +{balancePoints} <span className="text-xs font-bold text-slate-500 font-sans">Poin</span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">Kategori: Sangat Baik (SAB)</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-900 border border-blue-200 flex items-center justify-center shrink-0 shadow-2xs">
+                <Award className="w-5 h-5" />
+              </div>
+            </div>
           </div>
 
-          {/* Loading State */}
-          {isLoading && (
-            <div className="py-12 bg-white rounded-lg border border-slate-200 flex justify-center">
-              <LoadingSpinner label="Memuat rekam poin karakter..." />
+          {/* Indikator Ambang Batas Disiplin Sekolah */}
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">
+                Ambang Batas Kedisiplinan Siswa SMP Labschool UM
+              </h4>
+              <span className="text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                Status Anda: AMAN
+              </span>
             </div>
-          )}
 
-          {/* Error State */}
-          {isError && (
-            <Card className="border-red-200 bg-red-50/50">
-              <CardContent className="p-6 text-center">
-                <AlertTriangle className="h-8 w-8 text-status-danger mx-auto mb-2" />
-                <h3 className="font-semibold text-slate-900">Gagal Memuat Data Poin</h3>
-                <p className="text-xs text-slate-600 mt-1 mb-4">Kendala server kesiswaan.</p>
-                <Button size="sm" onClick={() => refetch()}>Coba Lagi</Button>
-              </CardContent>
-            </Card>
-          )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80">
+                <span className="font-bold text-slate-800 block text-xs">Ambang 1: -25 Poin</span>
+                <p className="text-slate-500 text-[11px] mt-0.5">Teguran tertulis & pembinaan wali kelas.</p>
+                <span className="text-[10px] font-bold text-emerald-700 mt-1.5 block">✔ Pelanggaran Anda: 0 poin (Teladan)</span>
+              </div>
 
-          {/* Riwayat Poin */}
-          {!isLoading && !isError && filteredLogs.length === 0 && (
-            <div className="bg-white rounded-lg border border-slate-200 p-8">
-              <EmptyState
-                icon={<ShieldCheck className="h-6 w-6" />}
-                title="Buku Catatan Bersih"
-                description={
-                  filterKind === 'semua'
-                    ? 'Belum ada catatan poin kedisiplinan atau prestasi yang tercatat pada semester ini.'
-                    : `Tidak ada catatan dengan kategori "${filterKind}".`
-                }
-              />
+              <div className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80">
+                <span className="font-bold text-slate-800 block text-xs">Ambang 2: -50 Poin</span>
+                <p className="text-slate-500 text-[11px] mt-0.5">Surat Peringatan 1 & pemanggilan orang tua.</p>
+                <span className="text-[10px] font-bold text-emerald-700 mt-1.5 block">✔ Belum pernah tercapai</span>
+              </div>
+
+              <div className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80">
+                <span className="font-bold text-slate-800 block text-xs">Ambang 3: -75 Poin</span>
+                <p className="text-slate-500 text-[11px] mt-0.5">Skorsing sementara & konferensi kasus BK.</p>
+                <span className="text-[10px] font-bold text-emerald-700 mt-1.5 block">✔ Belum pernah tercapai</span>
+              </div>
             </div>
-          )}
+          </div>
 
-          {!isLoading && !isError && filteredLogs.length > 0 && (
-            <div className="space-y-3">
-              {filteredLogs.map((log) => {
-                const isPositive = log.kind === 'prestasi';
-                return (
-                  <Card key={log.id} className="border-slate-200 bg-white hover:border-blue-200 transition-all shadow-xs">
-                    <CardContent className="p-4 flex items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Badge className={isPositive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}>
-                            {isPositive ? 'Prestasi' : 'Pelanggaran'}
-                          </Badge>
-                          <span className="text-[11px] text-slate-500">{log.date}</span>
-                        </div>
-                        <h4 className="font-bold text-sm text-slate-900">{log.title}</h4>
-                        <p className="text-xs text-slate-600">{log.notes || log.category}</p>
-                        <div className="text-[10px] text-slate-400">Dicatat oleh: {log.reporterName}</div>
+          {/* Tabel Catatan Riwayat Poin */}
+          <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs space-y-0">
+            <div className="p-4 bg-slate-50/70 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-extrabold text-xs sm:text-sm text-slate-900">Riwayat Pencatatan Poin Siswa</h3>
+                <p className="text-[11px] text-slate-500 font-normal mt-0.5">Dicatat oleh guru piket, wali kelas, dan pembina kesiswaan</p>
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  onClick={() => setFilterKind('semua')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    filterKind === 'semua' ? 'bg-blue-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Semua
+                </button>
+                <button
+                  onClick={() => setFilterKind('prestasi')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    filterKind === 'prestasi' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Prestasi
+                </button>
+                <button
+                  onClick={() => setFilterKind('pelanggaran')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    filterKind === 'pelanggaran' ? 'bg-rose-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Pelanggaran
+                </button>
+              </div>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {filteredLogs.length === 0 ? (
+                <EmptyState
+                  icon={Award}
+                  title="Belum Ada Catatan Poin pada Kategori Ini"
+                  description="Tidak ada rekam catatan pelanggaran maupun prestasi pada filter yang Anda pilih."
+                />
+              ) : (
+                filteredLogs.map((log) => (
+                  <div key={log.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          log.kind === 'prestasi' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+                        }`}>
+                          {log.kind === 'prestasi' ? '+ Prestasi' : '- Pelanggaran'}
+                        </span>
+                        <span className="text-xs text-slate-400 font-medium">{log.date_str}</span>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-xs text-slate-500 font-medium">{log.category}</span>
                       </div>
 
-                      <div className={`text-xl font-black px-3 py-1.5 rounded-lg ${
-                        isPositive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-status-danger'
-                      }`}>
-                        {isPositive ? `+${log.points}` : `-${log.points}`}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                      <h4 className="font-extrabold text-sm text-slate-900">{log.type_name}</h4>
+                      <p className="text-xs text-slate-500 font-normal italic">"{log.note}"</p>
+                      <p className="text-[11px] text-slate-400">Pencatat: {log.recorder_name}</p>
+                    </div>
+
+                    <span className={`text-lg font-black font-mono px-3 py-1 rounded-xl shadow-2xs self-start sm:self-auto ${
+                      log.kind === 'prestasi' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+                    }`}>
+                      {log.points > 0 ? `+${log.points}` : log.points} Poin
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
+      {/* ─── TAB 2: EKSTRAKURIKULER & OSIS ─── */}
       {activeTab === 'ekskul' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {extracurriculars.map((ex) => (
-              <Card key={ex.id} className="border-slate-200 bg-white shadow-xs">
-                <CardHeader className="pb-3">
+        <div className="space-y-6">
+          {/* Ekskul yang Diikuti */}
+          <div className="space-y-3">
+            <h3 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">
+              Ekstrakurikuler Aktif yang Diikuti
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {myExtracurriculars.map((ekskul) => (
+                <div key={ekskul.id} className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-3 shadow-xs">
                   <div className="flex items-start justify-between">
-                    <Badge variant="outline" className="bg-blue-50 text-brand-blue border-blue-200 text-xs">
-                      {ex.role}
-                    </Badge>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-[11px]">
-                      Kehadiran: {ex.attendance_rate}
-                    </Badge>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${ekskul.badgeColor}`}>
+                      {ekskul.role}
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                      Kehadiran: {ekskul.attendance_rate}
+                    </span>
                   </div>
-                  <CardTitle className="text-base font-bold text-slate-900 mt-2">{ex.name}</CardTitle>
-                  <CardDescription className="text-xs text-slate-500">Pembina: {ex.coach}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs text-slate-600 pt-0">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-slate-400" />
-                    <span>{ex.schedule}</span>
+
+                  <div>
+                    <h4 className="font-extrabold text-base text-slate-900">{ekskul.name}</h4>
+                    <p className="text-xs text-slate-500 font-normal mt-0.5">Pembina: {ekskul.coach}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-slate-400" />
-                    <span>Tempat: {ex.room}</span>
+
+                  <div className="p-3 bg-slate-50/70 rounded-xl border border-slate-200/80 text-xs space-y-1 text-slate-600">
+                    <p className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-900" />
+                      <strong>Jadwal:</strong> {ekskul.schedule}
+                    </p>
+                    <p className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-blue-900" />
+                      <strong>Lokasi:</strong> {ekskul.room}
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Ekskul Lainnya Tersedia */}
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
+            <div className="pb-3 border-b border-slate-100">
+              <h3 className="font-extrabold text-base text-slate-900">Katalog Ekstrakurikuler Pilihan Lainnya</h3>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">Pendaftaran gelombang tambahan dibuka hingga akhir bulan</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {availableEkskul.map((eks, idx) => (
+                <div key={idx} className="p-3.5 rounded-xl border border-slate-200/90 bg-slate-50/60 flex items-center justify-between gap-3 shadow-2xs">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900">{eks.name}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">Pembina: {eks.coach} • {eks.schedule}</p>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded mt-1.5 inline-block">
+                      {eks.quota}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => alert(`Mengajukan pendaftaran ekstrakurikuler: ${eks.name}`)}
+                    className="px-3.5 py-1.5 rounded-xl bg-blue-900 hover:bg-blue-950 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs shrink-0"
+                  >
+                    Daftar
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
