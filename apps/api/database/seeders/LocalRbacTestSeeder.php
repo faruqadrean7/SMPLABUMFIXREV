@@ -268,7 +268,7 @@ class LocalRbacTestSeeder extends Seeder
                 ]
             );
 
-            PPDBTrack::firstOrCreate(
+            $track = PPDBTrack::firstOrCreate(
                 ['wave_id' => $wave->id, 'code' => 'reguler'],
                 [
                     'name' => 'Jalur Reguler',
@@ -519,6 +519,15 @@ class LocalRbacTestSeeder extends Seeder
             $staffBendahara->position = 'Bendahara Operasional';
             $staffBendahara->unit = 'Keuangan';
             $staffBendahara->save();
+
+            // (15b) Staf Administrasi / Umum
+            $userStafUmum = $upsertUser('staf', 'staf@labschool.sch.id', ['staff']);
+            $staffUmum = Staff::firstOrNew(['user_id' => $userStafUmum->id]);
+            $staffUmum->school_id = $schoolId;
+            $staffUmum->full_name = 'Staf Administrasi Sekolah';
+            $staffUmum->position = 'Staf Tenaga Kependidikan';
+            $staffUmum->unit = 'Administrasi Umum';
+            $staffUmum->save();
 
             // (16) Siswa Aktif
             $userSiswa = $upsertUser('siswa', 'siswa.ahmad@labschool.sch.id', ['student']);
