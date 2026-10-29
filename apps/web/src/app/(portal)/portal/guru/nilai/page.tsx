@@ -53,6 +53,8 @@ export default function BukuNilaiPage() {
 
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const selectedClassName = teacherClasses.find((c) => c.id === selectedClassId)?.name || 'Kelas';
+  const selectedSubjectName = teacherSubjects.find((s) => s.id === selectedSubjectId)?.name || 'Mata Pelajaran';
 
   React.useEffect(() => {
     if (!selectedClassId && teacherClasses.length > 0) {
@@ -156,7 +158,7 @@ export default function BukuNilaiPage() {
   const tuntasCount = localGrades.filter(s => s.is_tuntas).length;
   const remedialCount = totalStudents - tuntasCount;
   const classAverage = totalStudents > 0 
-    ? (localGrades.reduce((acc, curr) => acc + curr.final_score, 0) / totalStudents).toFixed(1)
+    ? (localGrades.reduce((acc, curr) => acc + (curr.final_score ?? 0), 0) / totalStudents).toFixed(1)
     : '0.0';
 
   // Filtered rows
@@ -202,7 +204,7 @@ export default function BukuNilaiPage() {
             <span className="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-900 text-white shadow-2xs">
               Buku Nilai & Asesmen
             </span>
-            <span className="text-xs text-slate-500 font-semibold">• {selectedClassId === 'cls-7a' ? 'Kelas VII-A (Wali Kelas)' : selectedClassId === 'cls-7b' ? 'Kelas VII-B' : selectedClassId === 'cls-8a' ? 'Kelas VIII-A' : 'Kelas IX-A'} ({selectedSubjectId === 'sbj-mat' ? 'Matematika' : selectedSubjectId === 'sbj-inf' ? 'Informatika' : 'Pemrograman Web'})</span>
+            <span className="text-xs text-slate-500 font-semibold">• {selectedClassName} ({selectedSubjectName})</span>
           </div>
           <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
             Ledger Buku Nilai Guru & Ketercapaian KKTP
@@ -607,8 +609,8 @@ export default function BukuNilaiPage() {
 
                         {/* Nilai Akhir (Calculated) */}
                         <td className="py-2.5 px-3 text-center border-l border-slate-300 bg-slate-50 font-black text-sm">
-                          <span className={student.final_score >= 75 ? 'text-emerald-800' : 'text-rose-700'}>
-                            {student.final_score.toFixed(1)}
+                          <span className={(student.final_score ?? 0) >= 75 ? 'text-emerald-800' : 'text-rose-700'}>
+                            {(student.final_score ?? 0).toFixed(1)}
                           </span>
                         </td>
 
