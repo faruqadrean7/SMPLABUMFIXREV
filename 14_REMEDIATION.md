@@ -103,6 +103,7 @@ SISTLABUM/
 │  ├─ api/     # Laravel 13 REST API (backend utama)
 │  ├─ web/     # Next.js 14 — website publik + PPDB + portal + admin (SATU app)
 │  └─ mobile/  # Flutter (DITUNDA — kerangka dipertahankan)
+├─ legacy/portal-prototype/  # arsip prototipe portal lama (referensi, tidak dijalankan)
 ├─ docs/       # kontrak API (Bruno), desain auth, rbac-matrix, dll
 ├─ package.json  # root: 2 perintah (api, web)
 ├─ 00..13_*.md   # paket PRD
