@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\TeachingAssignment;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -135,6 +136,35 @@ class TeacherDashboardController extends Controller
             'nis' => $s->nis ?? '',
             'status' => 'present',
             'notes' => null,
+        ]);
+
+        return $this->successResponse($data);
+    }
+
+    /**
+     * GET /api/v1/me/teacher/subjects
+     * Mengembalikan daftar mata pelajaran yang diampu guru (dari penugasan & jadwal).
+     */
+    public function subjects(Request $request): JsonResponse
+    {
+        $teacher = $this->getTeacher($request);
+        if (! $teacher) {
+            return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $subjectIds = TeachingAssignment::where('teacher_id', $teacher->id)
+            ->pluck('subject_id')
+            ->merge(Schedule::where('teacher_id', $teacher->id)->pluck('subject_id'))
+            ->filter()
+            ->unique();
+
+        $subjects = Subject::whereIn('id', $subjectIds)->orderBy('name')->get();
+
+        $data = $subjects->map(fn (Subject $s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+            'code' => $s->code,
+            'subject_group' => $s->subject_group,
         ]);
 
         return $this->successResponse($data);

@@ -50,6 +50,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Portal Guru
     Route::prefix('me/teacher')->group(function () {
         Route::get('/dashboard', [MeTeacherController::class, 'dashboard']);
+        Route::get('/subjects', [MeTeacherController::class, 'subjects']);
+        Route::get('/assignments/{id}', [MeTeacherController::class, 'showAssignment']);
         Route::get('/classes', [MeTeacherController::class, 'classes']);
         Route::get('/schedules', [MeTeacherController::class, 'schedules']);
         Route::get('/classes/{classId}/students', [MeTeacherController::class, 'classStudents']);

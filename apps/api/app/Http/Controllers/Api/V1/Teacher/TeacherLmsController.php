@@ -309,4 +309,47 @@ class TeacherLmsController extends Controller
 
         return $this->successResponse(['message' => 'Nilai dan feedback berhasil diberikan.']);
     }
+
+    /**
+     * GET /api/v1/me/teacher/assignments/{id}
+     * Detail satu tugas milik guru yang bersangkutan.
+     */
+    public function showAssignment(Request $request, string $id): JsonResponse
+    {
+        $teacher = $this->getTeacher($request);
+        if (! $teacher) {
+            return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        if (! Str::isUuid($id)) {
+            return $this->errorResponse('Format ID tugas tidak valid.', 'VALIDATION_ERROR', 422);
+        }
+
+        $assignment = Assignment::with(['class', 'subject'])
+            ->where('teacher_id', $teacher->id)
+            ->withCount('submissions')
+            ->find($id);
+
+        if (! $assignment) {
+            return $this->errorResponse('Tugas tidak ditemukan.', 'NOT_FOUND', 404);
+        }
+
+        return $this->successResponse([
+            'id' => $assignment->id,
+            'title' => $assignment->title,
+            'subjectId' => $assignment->subject_id,
+            'subject_id' => $assignment->subject_id,
+            'subjectName' => $assignment->subject?->name ?? 'Mata Pelajaran',
+            'classId' => $assignment->class_id,
+            'class_id' => $assignment->class_id,
+            'className' => $assignment->class?->name ?? 'Kelas',
+            'dueDate' => $assignment->due_at?->toISOString() ?? now()->addDays(7)->toISOString(),
+            'due_at' => $assignment->due_at?->toISOString() ?? now()->addDays(7)->toISOString(),
+            'totalStudents' => $assignment->class?->students()->count() ?? 0,
+            'submittedCount' => $assignment->submissions_count,
+            'gradedCount' => 0,
+            'description' => $assignment->description ?? '',
+            'createdAt' => $assignment->created_at?->toISOString() ?? now()->toISOString(),
+        ]);
+    }
 }

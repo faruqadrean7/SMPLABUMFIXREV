@@ -262,4 +262,14 @@ class MeTeacherController extends Controller
     {
         return app(TeacherHomeroomController::class)->storeTicket($request);
     }
+
+    public function subjects(Request $request): JsonResponse
+    {
+        return app(TeacherDashboardController::class)->subjects($request);
+    }
+
+    public function showAssignment(Request $request, string $id): JsonResponse
+    {
+        return app(TeacherLmsController::class)->showAssignment($request, $id);
+    }
 }
