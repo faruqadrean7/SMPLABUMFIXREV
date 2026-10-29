@@ -88,7 +88,7 @@ Seluruh aturan integritas sebelumnya hanya ada di `prisma/native_extensions_and_
 - `apps/api/.env.example` sudah format Laravel (APP_KEY, DB pgsql, Sanctum, CORS) — dipertahankan.
 
 ### 3.6 Konsolidasi Frontend (satu app, satu port)
-- **Dihapus**: `apps/admin` (stub kosong) & `apps/portal` (aplikasi Next.js terpisah lama di port 3001).
+- `apps/admin` (stub kosong) dihapus. `apps/portal` (aplikasi Next.js terpisah lama, port 3001) ditarik dari `apps/` dan diarsipkan sebagai referensi desain di `legacy/portal-prototype/` (bukan aplikasi yang dijalankan).
 - `apps/web` menjadi satu-satunya frontend; route group `(public)`, `(auth)`, `(portal)`, `(admin)` sudah mencakup seluruh peran. Routing lama `/guru /siswa /ortu` tetap jalan via redirect ke `/portal/*`.
 
 ### 3.7 Root Runner
