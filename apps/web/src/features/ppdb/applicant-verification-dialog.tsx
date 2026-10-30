@@ -19,7 +19,6 @@ import {
   XCircle,
   AlertCircle,
   FileText,
-  ExternalLink,
   User,
   History,
   Phone,
@@ -29,6 +28,9 @@ import {
   ShieldCheck,
   RotateCcw,
   Check,
+  Eye,
+  Download,
+  Loader2,
 } from 'lucide-react';
 
 export interface ApplicantVerificationDialogProps {
@@ -56,6 +58,65 @@ export function ApplicantVerificationDialog({
 
   // Authenticated file download state
   const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null);
+
+  // In-dialog document preview state
+  const [preview, setPreview] = useState<{
+    url: string;
+    mime: string;
+    name: string;
+  } | null>(null);
+  const [previewingDocId, setPreviewingDocId] = useState<string | null>(null);
+
+  const closePreview = React.useCallback(() => {
+    setPreview((prev) => {
+      if (prev) {
+        try {
+          URL.revokeObjectURL(prev.url);
+        } catch {
+          // abaikan
+        }
+      }
+      return null;
+    });
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      // bersihkan object URL saat komponen dilepas
+      setPreview((prev) => {
+        if (prev) {
+          try {
+            URL.revokeObjectURL(prev.url);
+          } catch {
+            // abaikan
+          }
+        }
+        return null;
+      });
+    };
+  }, []);
+
+  const handlePreviewDoc = async (docId: string, filename?: string, mime?: string) => {
+    if (!applicantId) return;
+    try {
+      setPreviewingDocId(docId);
+      const blob = await ppdbApi.downloadDocument(applicantId, docId);
+      const objectUrl = URL.createObjectURL(blob);
+      closePreview();
+      setPreview({
+        url: objectUrl,
+        mime: mime || blob.type || 'application/octet-stream',
+        name: filename || `dokumen_${docId}`,
+      });
+    } catch {
+      setFeedbackMessage({
+        type: 'error',
+        text: 'Gagal memuat pratinjau dokumen. Pastikan sesi login aktif.',
+      });
+    } finally {
+      setPreviewingDocId(null);
+    }
+  };
 
   const [feedbackMessage, setFeedbackMessage] = useState<{
     type: 'success' | 'error';
@@ -192,6 +253,7 @@ export function ApplicantVerificationDialog({
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="relative flex h-[90vh] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
         {/* Header */}
@@ -432,17 +494,44 @@ export function ApplicantVerificationDialog({
                               )}
                             </div>
 
-                            {/* View / Download File Button */}
+                            {/* Preview & Download File Buttons */}
                             {doc.file?.id && (
-                              <button
-                                type="button"
-                                onClick={() => handleDownloadDoc(doc.id, doc.file?.original_name || doc.file?.filename)}
-                                disabled={downloadingDocId === doc.id}
-                                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-emerald-600 transition disabled:opacity-50"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                                {downloadingDocId === doc.id ? 'Mengunduh...' : 'Buka File'}
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handlePreviewDoc(
+                                      doc.id,
+                                      doc.file?.original_name || doc.file?.filename,
+                                      doc.file?.mime_type
+                                    )
+                                  }
+                                  disabled={previewingDocId === doc.id}
+                                  className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-emerald-600 transition disabled:opacity-50"
+                                >
+                                  {previewingDocId === doc.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Eye className="h-3.5 w-3.5" />
+                                  )}
+                                  {previewingDocId === doc.id ? 'Memuat...' : 'Lihat'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDownloadDoc(doc.id, doc.file?.original_name || doc.file?.filename)
+                                  }
+                                  disabled={downloadingDocId === doc.id}
+                                  title="Unduh berkas"
+                                  className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1.5 text-gray-500 hover:bg-gray-50 hover:text-emerald-600 transition disabled:opacity-50"
+                                >
+                                  {downloadingDocId === doc.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Download className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                              </div>
                             )}
                           </div>
 
@@ -607,5 +696,70 @@ export function ApplicantVerificationDialog({
         </div>
       </div>
     </div>
+
+    {preview && (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+        onClick={closePreview}
+      >
+        <div
+          className="relative flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-gray-800">
+              <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span className="truncate">{preview.name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={preview.url}
+                download={preview.name}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-emerald-600"
+              >
+                <Download className="h-3.5 w-3.5" /> Unduh
+              </a>
+              <button
+                type="button"
+                onClick={closePreview}
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto bg-gray-100">
+            {preview.mime.startsWith('image/') ? (
+              <div className="flex min-h-full items-center justify-center p-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={preview.url}
+                  alt={preview.name}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
+            ) : preview.mime === 'application/pdf' ? (
+              <iframe src={preview.url} title={preview.name} className="h-full w-full" />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-sm text-gray-500">
+                <FileText className="h-10 w-10 text-gray-300" />
+                <p>
+                  Pratinjau tidak tersedia untuk tipe berkas ini (
+                  {preview.mime || 'tidak diketahui'}).
+                </p>
+                <a
+                  href={preview.url}
+                  download={preview.name}
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-emerald-600"
+                >
+                  <Download className="h-3.5 w-3.5" /> Unduh berkas
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

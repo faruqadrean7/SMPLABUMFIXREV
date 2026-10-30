@@ -100,3 +100,9 @@ Agent mengeksekusi Fase 8, 9, 10 (`16_FASE_PERBAIKAN.md`) + keputusan finance, p
 - Test unit `tests/Unit/Ppdb/ApplicantDetailMappingTest.php` (3 kasus) mengunci pemetaan biodata, nama+relasi ortu, dan objek file dokumen.
 
 **Dampak:** Admin kini melihat seluruh biodata & data ortu yang diisi pendaftar, gender benar, dan bisa menekan "Buka File" untuk mengunduh dokumen yang diunggah (endpoint download sudah ada).
+
+---
+
+## 2026-10-30 — Verifikasi PPDB: preview berkas tanpa unduh
+
+Pada dialog verifikasi pendaftar, dokumen kini bisa **dipratinjau langsung** di modal (PDF via iframe, gambar via img) lewat tombol "Lihat", dengan tombol "Unduh" terpisah bila ingin menyimpan. Berkas tetap diambil via endpoint download terotentikasi (blob → object URL, di-revoke saat ditutup/unmount). Tombol lama "Buka File" (paksa unduh) diganti. File: `apps/web/src/features/ppdb/applicant-verification-dialog.tsx`.
