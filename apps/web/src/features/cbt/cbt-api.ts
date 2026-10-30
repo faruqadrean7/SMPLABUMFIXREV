@@ -119,6 +119,35 @@ export const cbtApi = {
     return res.data;
   },
 
+  // BE-CBT-12: Unggah media gambar butir soal
+  uploadQuestionMedia: async (
+    bankId: string,
+    file: File
+  ): Promise<{ fileId: string; mimeType: string; previewUrl: string }> => {
+    const formData = new FormData();
+    formData.append('bank_id', bankId);
+    formData.append('file', file);
+
+    const res = await apiClient.post<
+      ApiResponse<{
+        file_id: string;
+        mime_type: string;
+        preview_url: string;
+      }>
+    >('/cbt/question-media', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    const data = res.data.data;
+    return {
+      fileId: data.file_id,
+      mimeType: data.mime_type,
+      previewUrl: data.preview_url,
+    };
+  },
+
   // =========================================================================
   // 3. Manajemen Ujian (BE-CBT-02, BE-CBT-03 / ADM-CBT-02, ADM-CBT-03)
   // =========================================================================
