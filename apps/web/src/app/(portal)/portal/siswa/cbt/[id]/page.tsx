@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -22,11 +22,28 @@ import {
 import { CBT_ACTIVE_EXAM_QUESTIONS, CBTQuestionDetail } from '@/lib/mock-student-data';
 import { useStudentExams, useStudentDashboard } from '@/lib/use-student-data';
 import { apiClient } from '@/lib/api-client';
+import { RichContent } from '@/features/cbt/rich-editor/RichContent';
 
-export default function CBTExamWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
+export default function CBTExamWorkspacePage({ params }: { params: { id: string } | Promise<{ id: string }> }) {
   const router = useRouter();
-  const resolvedParams = use(params);
-  const examId = resolvedParams.id;
+  const [paramId, setParamId] = useState<string>(() => {
+    if (params && typeof (params as any).id === 'string') {
+      return (params as any).id;
+    }
+    return '';
+  });
+
+  useEffect(() => {
+    if (params && typeof (params as any).then === 'function') {
+      Promise.resolve(params).then((p) => {
+        if (p?.id) setParamId(p.id);
+      });
+    } else if (params && (params as any).id) {
+      setParamId((params as any).id);
+    }
+  }, [params]);
+
+  const examId = paramId || (params as any)?.id || 'exam-1';
 
   const { data: apiExams } = useStudentExams();
   const { data: studentDash } = useStudentDashboard();
@@ -437,7 +454,7 @@ export default function CBTExamWorkspacePage({ params }: { params: Promise<{ id:
             <div className="max-w-3xl xl:max-w-4xl mx-auto space-y-6">
               {/* Prompt Text */}
               <div className={`${promptFontClass} font-bold text-slate-900 leading-relaxed space-y-3.5`}>
-                <p>{currentQ.prompt}</p>
+                <RichContent html={(currentQ as any).body?.content || currentQ.prompt} />
 
                 {/* KaTeX Math Formula */}
                 {currentQ.formula && (
@@ -469,7 +486,9 @@ export default function CBTExamWorkspacePage({ params }: { params: Promise<{ id:
                           }`}>
                             {opt.key}
                           </span>
-                          <span className={`${optionFontClass} leading-normal text-slate-900`}>{opt.label}</span>
+                          <span className={`${optionFontClass} leading-normal text-slate-900`}>
+                            <RichContent html={(opt as any).body?.content || (opt as any).text || opt.label} className="inline-block" />
+                          </span>
                         </div>
 
                         {isSelected ? (
@@ -520,7 +539,9 @@ export default function CBTExamWorkspacePage({ params }: { params: Promise<{ id:
                             onChange={() => {}}
                             className="w-5 h-5 text-blue-900 rounded border-slate-300 focus:ring-0 cursor-pointer shrink-0"
                           />
-                          <span className={`${optionFontClass} leading-normal text-slate-900`}>{opt.label}</span>
+                          <span className={`${optionFontClass} leading-normal text-slate-900`}>
+                            <RichContent html={(opt as any).body?.content || (opt as any).text || opt.label} className="inline-block" />
+                          </span>
                         </div>
                       </button>
                     );
@@ -545,7 +566,9 @@ export default function CBTExamWorkspacePage({ params }: { params: Promise<{ id:
                           const currentVal = answers[currentQ.id]?.[sIdx];
                           return (
                             <tr key={sIdx} className="hover:bg-slate-50/60 transition-colors">
-                              <td className="p-4 text-slate-800 font-medium leading-relaxed">{stmt.text}</td>
+                              <td className="p-4 text-slate-800 font-medium leading-relaxed">
+                                <RichContent html={(stmt as any).body?.content || stmt.text} className="inline-block" />
+                              </td>
                               <td className="p-4 text-center">
                                 <button
                                   type="button"
