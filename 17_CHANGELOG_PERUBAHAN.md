@@ -58,3 +58,26 @@ Agent mengeksekusi Fase 8, 9, 10 (`16_FASE_PERBAIKAN.md`) + keputusan finance, p
 2. **Fase 7 (push & rapikan branch) 🔄** — develop 61 commit di depan origin, branch tim belum dihapus; menunggu auth git di Mac (ISS-20).
 3. **Verifikasi runtime dari mesin ini** — belum bisa (tanpa PHP/PostgreSQL/Redis); jumlah berkas test 140 tetapi hijau/merah belum terkonfirmasi lokal. Jalankan `php artisan test`.
 4. **Invalidasi cache permission** — pastikan `user_perm_cache:{id}` di-flush saat peran/izin user berubah, agar tidak stale 5 menit.
+
+---
+
+## 2026-10-30 — Login Admin: "Percayai Perangkat 30 Hari" (pengganti 2FA wajib tiap login)
+
+**Latar:** 2FA/TOTP wajib di tiap login admin terasa merepotkan saat pengembangan & operasional harian. Keputusan: pertahankan 2FA (tetap aman) tapi tambahkan opsi *trusted device* — sekali verifikasi 2FA di satu browser, 30 hari berikutnya browser itu melewati 2FA.
+
+**Backend (`apps/api`)**
+- Migration `2026_10_30_000040_create_admin_trusted_devices_table` — tabel `admin_trusted_devices` (user_id, token_hash sha256, expires_at, last_used_at, ip, user_agent). Token disimpan sebagai **hash**, bukan plaintext.
+- `App\Models\AdminTrustedDevice`.
+- `App\Services\TrustedDeviceService` — `issue()` menerbitkan token (expiry 30 hari, dapat diatur `ADMIN_TRUSTED_DEVICE_DAYS`), `isTrusted()` memvalidasi + bump `last_used_at`, `revokeAll()`.
+- `AdminAuthController`:
+  - Saat verifikasi password, jika `trusted_device_token` valid untuk user tsb → **lewati 2FA**, langsung login (audit `method=trusted_device`). Token terikat ke user; token milik user lain / kedaluwarsa tetap diminta 2FA.
+  - Saat verifikasi 2FA sukses dengan `remember_device=true` → terbitkan token, kembalikan di `data.trusted_device_token` (+ `trusted_device_expires_at`).
+- Command `php artisan admin:2fa-code <username> [--uri]` — cetak kode TOTP yang berlaku saat ini (untuk login pertama sebelum trusted device aktif) dan opsional otpauth URI.
+- Test `tests/Feature/Auth/AdminTrustedDeviceTest.php` (5 kasus): remember menerbitkan token (tersimpan hash), token valid melewati 2FA, token invalid/kedaluwarsa/milik user lain tetap minta 2FA.
+
+**Frontend (`apps/web`)**
+- `admin-login-form.tsx` — checkbox "Percayai perangkat ini selama 30 hari" (default tercentang) di layar verifikasi 2FA; kirim `remember_device`.
+- `auth-provider.tsx` — otomatis melampirkan token tersimpan (`localStorage: sistlabum_tdt`) pada login admin, dan menyimpan token baru dari server.
+- `types/auth.ts` — `LoginPayload` + `remember_device`, `trusted_device_token`.
+
+**Catatan keamanan:** token bersifat rahasia (setara bearer) dan hanya melewati 2FA pada browser yang sama; jangan centang di komputer publik. Ganti password / insiden → panggil `TrustedDeviceService::revokeAll()` untuk mencabut semua perangkat.

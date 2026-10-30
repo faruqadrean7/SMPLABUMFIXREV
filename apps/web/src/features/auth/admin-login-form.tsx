@@ -42,6 +42,7 @@ export function AdminLoginForm() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState('');
   const [isVerifyingMfa, setIsVerifyingMfa] = useState(false);
+  const [rememberDevice, setRememberDevice] = useState(true);
 
   // Mandatory 2FA Enrollment State (Super Admin / Bendahara)
   const [enrollment, setEnrollment] = useState<EnrollmentData | null>(null);
@@ -126,6 +127,7 @@ export function AdminLoginForm() {
         mfa_token: mfaToken,
         totp_code: isRecovery ? undefined : totpCode.trim(),
         recovery_code: isRecovery ? totpCode.trim() : undefined,
+        remember_device: rememberDevice,
         platform: 'web',
         isAdminLogin: true,
       });
@@ -310,6 +312,19 @@ export function AdminLoginForm() {
             autoFocus
           />
         </div>
+
+        <label className="flex items-start gap-2.5 cursor-pointer select-none rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <input
+            type="checkbox"
+            checked={rememberDevice}
+            onChange={(e) => setRememberDevice(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+          />
+          <span className="text-xs text-slate-600">
+            <span className="font-semibold text-slate-800">Percayai perangkat ini selama 30 hari.</span>{' '}
+            Di perangkat & browser ini, Anda tidak akan diminta kode 2FA lagi hingga masa berlaku habis. Jangan centang di komputer publik/bersama.
+          </span>
+        </label>
 
         <div className="flex gap-2">
           <Button

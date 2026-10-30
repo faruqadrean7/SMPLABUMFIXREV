@@ -112,20 +112,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       const endpoint = payload.isAdminLogin ? '/auth/admin/login' : '/auth/login';
+
+      const requestBody: Record<string, unknown> = {
+        ...payload,
+        platform: payload.platform || 'web',
+      };
+
+      // Perangkat tepercaya: lampirkan token tersimpan agar admin melewati 2FA (berlaku 30 hari)
+      if (payload.isAdminLogin && !requestBody.trusted_device_token && typeof window !== 'undefined') {
+        try {
+          const storedTdt = window.localStorage.getItem('sistlabum_tdt');
+          if (storedTdt) requestBody.trusted_device_token = storedTdt;
+        } catch {
+          // abaikan akses storage yang gagal
+        }
+      }
+
       const res = await apiClient.post<
         ApiResponse<{
           user?: User;
           tokens?: { accessToken: string; refreshToken?: string };
+          trusted_device_token?: string;
+          trusted_device_expires_at?: string;
         }> & {
           mfa_required?: boolean;
           mfa_token?: string;
           mfa_enrollment_required?: boolean;
           enrollment_token?: string;
         }
-      >(endpoint, {
-        ...payload,
-        platform: payload.platform || 'web',
-      });
+      >(endpoint, requestBody);
 
       if (res.data.mfa_enrollment_required && res.data.enrollment_token) {
         return {
@@ -151,6 +166,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const loggedUser = responseData.user;
       const tokens = responseData.tokens;
+
+      // Simpan token perangkat tepercaya bila dikembalikan server (fitur "percayai perangkat 30 hari")
+      if (typeof window !== 'undefined' && responseData.trusted_device_token) {
+        try {
+          window.localStorage.setItem('sistlabum_tdt', responseData.trusted_device_token);
+        } catch {
+          // abaikan akses storage yang gagal
+        }
+      }
 
       // Simpan token & profil pengguna
       tokenStorage.setTokens(tokens.accessToken, tokens.refreshToken);

@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\AuthService;
 use App\Services\TwoFactorAuthService;
+use App\Services\TrustedDeviceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -28,7 +29,8 @@ class AdminAuthController extends Controller
 
     public function __construct(
         protected AuthService $authService,
-        protected TwoFactorAuthService $twoFactorService
+        protected TwoFactorAuthService $twoFactorService,
+        protected TrustedDeviceService $trustedDeviceService
     ) {}
 
     public function login(Request $request): JsonResponse
@@ -39,6 +41,8 @@ class AdminAuthController extends Controller
             'totp_code' => 'nullable|string',
             'recovery_code' => 'nullable|string',
             'mfa_token' => 'nullable|string',
+            'trusted_device_token' => 'nullable|string',
+            'remember_device' => 'nullable|boolean',
         ]);
 
         $ip = $request->ip();
@@ -149,6 +153,29 @@ class AdminAuthController extends Controller
 
         // Check 2FA challenge
         if ($user->two_factor_confirmed_at !== null) {
+            // Perangkat tepercaya: lewati 2FA bila token "remember device" masih valid
+            if ($this->trustedDeviceService->isTrusted($user, (string) $request->input('trusted_device_token'), $request)) {
+                RateLimiter::clear($rateLimitKey);
+                $user->last_login_at = now();
+                $user->saveQuietly();
+
+                $this->logAudit(
+                    $user->id,
+                    'auth.admin_login',
+                    'User',
+                    $user->id,
+                    ['identifier' => $identifier, 'method' => 'trusted_device'],
+                    $request
+                );
+
+                $authData = $this->authService->issueTokensForUser($user, $request);
+
+                return response()->json([
+                    'message' => 'Login admin berhasil (perangkat tepercaya).',
+                    'data' => $authData,
+                ], 200);
+            }
+
             // Check if user provided totp_code or recovery_code in same request
             if ($request->filled('totp_code') || $request->filled('recovery_code')) {
                 return $this->verifyTwoFactorAndLogin($user, $request);
@@ -262,6 +289,13 @@ class AdminAuthController extends Controller
         );
 
         $authData = $this->authService->issueTokensForUser($user, $request);
+
+        // Perangkat tepercaya: terbitkan token agar login berikutnya di perangkat ini melewati 2FA
+        if ($request->boolean('remember_device')) {
+            $trusted = $this->trustedDeviceService->issue($user, $request);
+            $authData['trusted_device_token'] = $trusted['token'];
+            $authData['trusted_device_expires_at'] = $trusted['expires_at'];
+        }
 
         return response()->json([
             'message' => 'Verifikasi 2FA berhasil.',

@@ -70,6 +70,8 @@ export interface LoginPayload {
   totp_code?: string;
   recovery_code?: string;
   mfa_token?: string;
+  remember_device?: boolean;
+  trusted_device_token?: string;
   isAdminLogin?: boolean;
 }
 
