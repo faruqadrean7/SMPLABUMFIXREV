@@ -321,7 +321,7 @@ class MeStudentController extends Controller
      */
     public function counselingRequests(Request $request): JsonResponse
     {
-        $student = $this->getStudent($request);
+        $student = $this->resolveCounselingSubject($request);
         if (! $student) {
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
@@ -369,7 +369,7 @@ class MeStudentController extends Controller
      */
     public function storeCounselingRequest(Request $request): JsonResponse
     {
-        $student = $this->getStudent($request);
+        $student = $this->resolveCounselingSubject($request);
         if (! $student) {
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
@@ -397,7 +397,7 @@ class MeStudentController extends Controller
         $counseling = CounselingRequest::create([
             'student_id' => $student->id,
             'requested_by' => $request->user()->id,
-            'requester_role' => 'student',
+            'requester_role' => ($request->user()->student ? 'student' : 'guardian'),
             'topic' => $topic,
             'notes' => $validated['reason'] ?? null,
             'preferred_date' => $validated['preferred_date'] ?? null,
@@ -430,5 +430,30 @@ class MeStudentController extends Controller
             6 => 'Sabtu',
             default => 'Minggu',
         };
+    }
+
+    /**
+     * Resolve subjek konseling: siswa sendiri, atau anak milik wali (ortu).
+     * Wali hanya dapat mengakses anak yang benar-benar miliknya (anti-IDOR),
+     * opsional difilter student_id; default anak pertama.
+     */
+    protected function resolveCounselingSubject(Request $request): ?Student
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+        if ($user->student) {
+            return $user->student;
+        }
+        $guardian = $user->guardian;
+        if ($guardian) {
+            $childId = $request->input('student_id');
+            if ($childId) {
+                return $guardian->students()->where('students.id', $childId)->first();
+            }
+            return $guardian->students()->first();
+        }
+        return null;
     }
 }

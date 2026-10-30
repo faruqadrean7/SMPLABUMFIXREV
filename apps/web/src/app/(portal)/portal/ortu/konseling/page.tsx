@@ -61,10 +61,11 @@ export default function GuardianKonselingPage() {
 
   // Dynamic Homeroom Teacher Photo
   const getHomeroomPhoto = () => {
-    return 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=256';
+    return '';
   };
 
-  const bkPhoto = 'https://images.unsplash.com/photo-1580894732444-8ecded7900cd?auto=format&fit=crop&q=80&w=256';
+  const bkPhoto = '';
+  const getInitials = (n?: string) => (n || '').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'GR';
 
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,14 +137,7 @@ export default function GuardianKonselingPage() {
         <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-xs flex items-center justify-between hover:border-slate-300 transition-all">
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 relative shadow-2xs">
-              <Image
-                src={getHomeroomPhoto()}
-                alt={activeChild.homeroom_teacher}
-                fill
-                sizes="48px"
-                className="object-cover"
-                unoptimized
-              />
+              <span className="w-full h-full flex items-center justify-center bg-blue-900 text-white font-bold text-sm">{getInitials(activeChild.homeroom_teacher)}</span>
             </div>
             <div className="min-w-0">
               <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-800 text-white uppercase">
@@ -173,14 +167,7 @@ export default function GuardianKonselingPage() {
         <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-xs flex items-center justify-between hover:border-slate-300 transition-all">
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 relative shadow-2xs">
-              <Image
-                src={bkPhoto}
-                alt="Ibu Ratna Dewi"
-                fill
-                sizes="48px"
-                className="object-cover"
-                unoptimized
-              />
+              <span className="w-full h-full flex items-center justify-center bg-blue-900 text-white font-bold text-sm">{getInitials('Ratna Dewi')}</span>
             </div>
             <div className="min-w-0">
               <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-teal-800 text-white uppercase">
