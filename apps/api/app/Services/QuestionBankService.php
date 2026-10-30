@@ -8,6 +8,7 @@ use App\Models\Question;
 use App\Models\QuestionBank;
 use App\Models\QuestionOption;
 use App\Models\User;
+use App\Services\Cbt\QuestionContentSanitizer;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -183,10 +184,14 @@ class QuestionBankService
     public function createQuestion(array $data, Request $request): Question
     {
         return DB::transaction(function () use ($data, $request) {
+            $body = isset($data['body']) && is_array($data['body'])
+                ? QuestionContentSanitizer::sanitizeBody($data['body'])
+                : $data['body'];
+
             $question = Question::create([
                 'bank_id' => $data['bank_id'],
                 'question_type' => $data['question_type'],
-                'body' => $data['body'],
+                'body' => $body,
                 'cp_code' => $data['cp_code'] ?? null,
                 'cognitive_level' => $data['cognitive_level'] ?? 'MOTS',
                 'difficulty' => $data['difficulty'] ?? 3,
@@ -198,10 +203,14 @@ class QuestionBankService
 
             if (! empty($data['options']) && is_array($data['options'])) {
                 foreach ($data['options'] as $opt) {
+                    $optBody = isset($opt['body']) && is_array($opt['body'])
+                        ? QuestionContentSanitizer::sanitizeBody($opt['body'])
+                        : ($opt['body'] ?? null);
+
                     QuestionOption::create([
                         'question_id' => $question->id,
                         'label' => $opt['label'],
-                        'body' => $opt['body'],
+                        'body' => $optBody,
                         'is_correct' => (bool) ($opt['is_correct'] ?? false),
                         'match_key' => $opt['match_key'] ?? null,
                     ]);
@@ -241,12 +250,16 @@ class QuestionBankService
         $isUsedInExam = ExamQuestion::where('question_id', $id)->exists();
 
         return DB::transaction(function () use ($existing, $isUsedInExam, $data, $request) {
+            $body = isset($data['body']) && is_array($data['body'])
+                ? QuestionContentSanitizer::sanitizeBody($data['body'])
+                : ($data['body'] ?? $existing->body);
+
             if ($isUsedInExam) {
                 // Buat versi baru untuk menjaga integritas data ujian yang sedang berjalan/arsip
                 $newQuestion = Question::create([
                     'bank_id' => $data['bank_id'] ?? $existing->bank_id,
                     'question_type' => $data['question_type'] ?? $existing->question_type,
-                    'body' => $data['body'] ?? $existing->body,
+                    'body' => $body,
                     'cp_code' => array_key_exists('cp_code', $data) ? $data['cp_code'] : $existing->cp_code,
                     'cognitive_level' => $data['cognitive_level'] ?? $existing->cognitive_level,
                     'difficulty' => $data['difficulty'] ?? $existing->difficulty,
@@ -258,10 +271,14 @@ class QuestionBankService
 
                 $optionsToSave = $data['options'] ?? $existing->options->toArray();
                 foreach ($optionsToSave as $opt) {
+                    $optBody = isset($opt['body']) && is_array($opt['body'])
+                        ? QuestionContentSanitizer::sanitizeBody($opt['body'])
+                        : ($opt['body'] ?? null);
+
                     QuestionOption::create([
                         'question_id' => $newQuestion->id,
                         'label' => $opt['label'],
-                        'body' => $opt['body'],
+                        'body' => $optBody,
                         'is_correct' => (bool) ($opt['is_correct'] ?? false),
                         'match_key' => $opt['match_key'] ?? null,
                     ]);
@@ -284,7 +301,7 @@ class QuestionBankService
             $existing->update([
                 'bank_id' => $data['bank_id'] ?? $existing->bank_id,
                 'question_type' => $data['question_type'] ?? $existing->question_type,
-                'body' => $data['body'] ?? $existing->body,
+                'body' => $body,
                 'cp_code' => array_key_exists('cp_code', $data) ? $data['cp_code'] : $existing->cp_code,
                 'cognitive_level' => $data['cognitive_level'] ?? $existing->cognitive_level,
                 'difficulty' => $data['difficulty'] ?? $existing->difficulty,
@@ -296,10 +313,14 @@ class QuestionBankService
             if (isset($data['options']) && is_array($data['options'])) {
                 $existing->options()->delete();
                 foreach ($data['options'] as $opt) {
+                    $optBody = isset($opt['body']) && is_array($opt['body'])
+                        ? QuestionContentSanitizer::sanitizeBody($opt['body'])
+                        : ($opt['body'] ?? null);
+
                     QuestionOption::create([
                         'question_id' => $existing->id,
                         'label' => $opt['label'],
-                        'body' => $opt['body'],
+                        'body' => $optBody,
                         'is_correct' => (bool) ($opt['is_correct'] ?? false),
                         'match_key' => $opt['match_key'] ?? null,
                     ]);
