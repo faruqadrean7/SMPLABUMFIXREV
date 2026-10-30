@@ -78,6 +78,7 @@ class PPDBApplicationService
             'documents.file',
             'documents.verifier',
             'statusHistory.actor',
+            'user',
         ])->findOrFail($id);
 
         // IDOR check: must be owner or have ppdb.applicant.read permission
@@ -114,7 +115,7 @@ class PPDBApplicationService
             'nisn' => $personal['nisn'] ?? null,
             'nik' => $personal['nik'] ?? null,
             'school_origin' => $school['origin_school'] ?? ($personal['school_origin'] ?? null),
-            'phone' => $personal['phone'] ?? ($school['phone'] ?? null),
+            'phone' => $personal['phone'] ?? ($a->user?->phone ?? ($school['phone'] ?? null)),
             'address' => $personal['address'] ?? null,
             'religion' => $personal['religion'] ?? null,
             'status' => $a->status,
