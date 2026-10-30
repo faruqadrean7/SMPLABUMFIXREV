@@ -6,11 +6,24 @@ export type QuestionType =
   | 'isian'
   | 'uraian';
 
+export interface QuestionBody {
+  content: string;
+  formula?: string;
+  media_url?: string;
+  text?: string;
+}
+
 export interface QuestionOptionItem {
   id: string;
   question_id?: string;
   label: string;
   text: string;
+  body?: {
+    content?: string;
+    text?: string;
+    media_url?: string;
+    image_url?: string;
+  };
   is_correct?: boolean;
   match_key?: string | null;
 }
@@ -20,6 +33,7 @@ export interface QuestionItem {
   bank_id: string;
   question_type: QuestionType;
   stem: string;
+  body?: QuestionBody;
   weight: number;
   options?: QuestionOptionItem[];
   created_at?: string;
