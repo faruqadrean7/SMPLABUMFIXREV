@@ -46,12 +46,12 @@ describe('FE-CBT-11: useImageUpload & cbtApi.uploadQuestionMedia', () => {
     const { result } = renderHook(() => useImageUpload('bank-uuid-456'));
     const pdfFile = new File(['%PDF-1.4'], 'tugas.pdf', { type: 'application/pdf' });
 
-    let thrownError: Error | null = null;
+    let thrownError: any = null;
     await act(async () => {
       try {
         await result.current.uploadAndGetNode(pdfFile);
       } catch (e) {
-        thrownError = e as Error;
+        thrownError = e;
       }
     });
 
@@ -65,12 +65,12 @@ describe('FE-CBT-11: useImageUpload & cbtApi.uploadQuestionMedia', () => {
     // Buat file 3 MB
     const largeFile = new File([new Uint8Array(3 * 1024 * 1024)], 'large.jpg', { type: 'image/jpeg' });
 
-    let thrownError: Error | null = null;
+    let thrownError: any = null;
     await act(async () => {
       try {
         await result.current.uploadAndGetNode(largeFile);
       } catch (e) {
-        thrownError = e as Error;
+        thrownError = e;
       }
     });
 
