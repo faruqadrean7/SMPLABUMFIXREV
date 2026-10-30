@@ -106,3 +106,26 @@ Agent mengeksekusi Fase 8, 9, 10 (`16_FASE_PERBAIKAN.md`) + keputusan finance, p
 ## 2026-10-30 — Verifikasi PPDB: preview berkas tanpa unduh
 
 Pada dialog verifikasi pendaftar, dokumen kini bisa **dipratinjau langsung** di modal (PDF via iframe, gambar via img) lewat tombol "Lihat", dengan tombol "Unduh" terpisah bila ingin menyimpan. Berkas tetap diambil via endpoint download terotentikasi (blob → object URL, di-revoke saat ditutup/unmount). Tombol lama "Buka File" (paksa unduh) diganti. File: `apps/web/src/features/ppdb/applicant-verification-dialog.tsx`.
+
+---
+
+## 2026-10-30 — CBT: Editor Soal Kaya (Rich Text Editor), Tabel, dan Media Gambar (BE-CBT-11/12/13 & FE-CBT-11/12/13/14)
+
+**Tujuan & Lingkup:** Guru dan administrator dapat menyunting teks soal dan opsi jawaban evaluasi pembelajaran CBT dengan editor kaya (WYSIWYG format teks, tabel terstruktur, dan unggah gambar via tombol/drag-drop/paste). Siswa melihat tampilan soal dan opsi ter-render secara aman dengan URL gambar sementara bertanda-tangan (signed URL). Kunci jawaban tidak pernah dikirim ke klien siswa.
+
+**Backend (`apps/api`):**
+- `BE-CBT-11`: Sanitasi HTML deny-by-default via `App\Services\Cbt\QuestionContentSanitizer` dengan whitelist tag `p, br, strong, em, u, s, ul, ol, li, table, thead, tbody, tr, td, th, img, span`. Atribut `src` pada tag `img` dibersihkan pada penyimpanan basis data dan hanya atribut `data-file-id` yang dipertahankan.
+- `BE-CBT-12`: Layanan `App\Services\Cbt\QuestionMediaService` dan endpoint `POST /api/v1/cbt/question-media` (permission `cbt.bank.write`). Verifikasi magic bytes berkas (`getimagesize`), batas ukuran 2 MB, tipe mime terbatas (JPEG, PNG, WebP, GIF), dan validasi anti-IDOR kepemilikan bank soal.
+- `BE-CBT-13`: Resolusi media saat dibaca oleh pembaca terotorisasi (`QuestionBankService@getQuestion`, `listQuestions`, `ExamSessionService@getSessionQuestions`). Backend secara otomatis menyuntikkan signed URL ke atribut `src` pada `<img data-file-id>`. Payload sesi siswa diuji secara ketat bebas dari `is_correct`, `match_key`, dan `explanation`.
+
+**Frontend (`apps/web`):**
+- `FE-CBT-11`: Komponen renderer baca `RichContent` (DOMPurify lapis dua) dan `RichQuestionEditor` (TipTap + StarterKit + Table + CustomImage dengan dukungan `data-file-id`). Hook `useImageUpload` untuk unggah gambar secara mulus via picker berkas, drag-drop, dan tempel (paste).
+- `FE-CBT-12`: Integrasi editor kaya pada modul bank soal administrator (`apps/web/src/app/(admin)/admin/cbt/questions/page.tsx`). Pratinjau soal dan opsi jawaban menggunakan `RichContent`.
+- `FE-CBT-13`: Integrasi editor kaya pada modul bank soal mandiri guru (`apps/web/src/app/(portal)/portal/guru/ujian/page.tsx`).
+- `FE-CBT-14`: Integrasi perenderan konten kaya pada ruang kerja pengerjaan CBT siswa (`apps/web/src/app/(portal)/portal/siswa/cbt/[id]/page.tsx`).
+
+**Pengujian & Verifikasi:**
+- Backend: Uji unit dan fitur berawalan ID lulus 100% (`BeCbt11SanitizerTest`, `BeCbt11StoreQuestionTest`, `BeCbt12MediaServiceTest`, `BeCbt12UploadEndpointTest`, `BeCbt13ShowResolveTest`, `BeCbt13SessionQuestionsTest` — 27 tests, 95 assertions).
+- Frontend: Uji unit dan integrasi lulus 100% (`fe-cbt-11-rich-content.test.tsx`, `fe-cbt-11-upload.test.ts`, `fe-cbt-11-editor.test.tsx`, `fe-cbt-12-admin-questions.test.tsx`, `fe-cbt-13-guru-questions.test.tsx`, `fe-cbt-14-siswa-render.test.tsx`).
+- E2E: Spesifikasi Playwright `apps/web/e2e/20-cbt-rich-editor.spec.ts`.
+
