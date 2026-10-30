@@ -9,6 +9,7 @@ use App\Models\QuestionBank;
 use App\Models\QuestionOption;
 use App\Models\User;
 use App\Services\Cbt\QuestionContentSanitizer;
+use App\Services\Cbt\QuestionMediaService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -175,7 +176,10 @@ class QuestionBankService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        $paginator = $query->paginate((int) ($filters['per_page'] ?? 15));
+        $paginator->getCollection()->transform(fn ($q) => $this->resolveQuestionMedia($q));
+
+        return $paginator;
     }
 
     /**
@@ -236,8 +240,37 @@ class QuestionBankService
      */
     public function getQuestion(string $id): Question
     {
-        return Question::with(['bank.subject', 'bank.gradeLevel', 'options'])
+        $question = Question::with(['bank.subject', 'bank.gradeLevel', 'options'])
             ->findOrFail($id);
+
+        return $this->resolveQuestionMedia($question);
+    }
+
+    /**
+     * BE-CBT-13: Menyuntikkan atribut src bertanda-tangan ke tag <img> pada body dan opsi butir soal.
+     */
+    public function resolveQuestionMedia(Question $question, int $ttlMin = 15): Question
+    {
+        /** @var QuestionMediaService $mediaService */
+        $mediaService = app(QuestionMediaService::class);
+
+        if (is_array($question->body) && isset($question->body['content'])) {
+            $body = $question->body;
+            $body['content'] = $mediaService->resolveMediaInHtml($body['content'], $ttlMin);
+            $question->body = $body;
+        }
+
+        if ($question->relationLoaded('options')) {
+            foreach ($question->options as $opt) {
+                if (is_array($opt->body) && isset($opt->body['content'])) {
+                    $optBody = $opt->body;
+                    $optBody['content'] = $mediaService->resolveMediaInHtml($optBody['content'], $ttlMin);
+                    $opt->body = $optBody;
+                }
+            }
+        }
+
+        return $question;
     }
 
     /**
