@@ -81,3 +81,22 @@ Agent mengeksekusi Fase 8, 9, 10 (`16_FASE_PERBAIKAN.md`) + keputusan finance, p
 - `types/auth.ts` — `LoginPayload` + `remember_device`, `trusted_device_token`.
 
 **Catatan keamanan:** token bersifat rahasia (setara bearer) dan hanya melewati 2FA pada browser yang sama; jangan centang di komputer publik. Ganti password / insiden → panggil `TrustedDeviceService::revokeAll()` untuk mencabut semua perangkat.
+
+---
+
+## 2026-10-30 — Detail Pendaftar PPDB (admin): biodata/ortu kosong & dokumen tak bisa dibuka
+
+**Gejala:** Di halaman verifikasi pendaftar admin, NISN/NIK/tempat lahir/asal sekolah/alamat tampil "-", nama ayah/ibu hilang, gender salah (default "Perempuan"), dan dokumen hanya "File: dokumen" tanpa tombol buka — padahal data sudah diisi.
+
+**Akar masalah (bukan data hilang, tapi pemetaan):** Endpoint detail `GET /ppdb/applications/{id}` mengembalikan **model mentah**, sedangkan:
+- Field biodata (nisn, nik, birth_place, gender, address) disimpan di kolom `step_data` (jsonb), bukan kolom atas → FE membaca `applicant.nisn` dkk = kosong.
+- Nama ortu ada di kolom `name` + `parent_type`, tetapi FE membaca `full_name` + `relationship`.
+- Relasi `file` pada dokumen tidak di-eager-load → tombol "Buka File" tersembunyi (butuh `doc.file.id`).
+
+**Perbaikan (`apps/api`, tanpa migrasi — langsung aktif):**
+- `PPDBApplicationService::getApplication()` kini eager-load `documents.file` + `documents.verifier`.
+- Tambah `PPDBApplicationService::presentDetail()` — memetakan model ke kontrak FE: biodata dari `step_data.personal`, asal sekolah dari `step_data.school.origin_school`, ortu `name→full_name` & `parent_type→relationship`, dokumen menyertakan objek `file` (`id`, `filename` dari `object_key`, `mime_type`, `size`).
+- `PPDBApplicationController::show()` mengembalikan hasil `presentDetail()`.
+- Test unit `tests/Unit/Ppdb/ApplicantDetailMappingTest.php` (3 kasus) mengunci pemetaan biodata, nama+relasi ortu, dan objek file dokumen.
+
+**Dampak:** Admin kini melihat seluruh biodata & data ortu yang diisi pendaftar, gender benar, dan bisa menekan "Buka File" untuk mengunduh dokumen yang diunggah (endpoint download sudah ada).

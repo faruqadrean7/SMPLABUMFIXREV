@@ -75,7 +75,8 @@ class PPDBApplicationService
             'wave',
             'track.requirements',
             'parents',
-            'documents',
+            'documents.file',
+            'documents.verifier',
             'statusHistory.actor',
         ])->findOrFail($id);
 
@@ -85,6 +86,92 @@ class PPDBApplicationService
         }
 
         return $applicant;
+    }
+
+    /**
+     * Petakan model Applicant ke kontrak JSON yang diharapkan portal admin.
+     * Field biodata (nisn/nik/tempat lahir/gender/alamat) tersimpan di step_data,
+     * nama ortu di kolom `name`/`parent_type`, dan dokumen butuh relasi file.
+     */
+    public function presentDetail(Applicant $a): array
+    {
+        $step = $a->step_data ?? [];
+        $personal = is_array($step['personal'] ?? null) ? $step['personal'] : [];
+        $school = is_array($step['school'] ?? null) ? $step['school'] : [];
+
+        return [
+            'id' => $a->id,
+            'user_id' => $a->user_id,
+            'wave_id' => $a->wave_id,
+            'wave' => $a->wave,
+            'track_id' => $a->track_id,
+            'track' => $a->track,
+            'registration_no' => $a->registration_no,
+            'full_name' => $a->full_name,
+            'gender' => $personal['gender'] ?? 'L',
+            'birth_place' => $personal['birth_place'] ?? null,
+            'birth_date' => $a->birth_date,
+            'nisn' => $personal['nisn'] ?? null,
+            'nik' => $personal['nik'] ?? null,
+            'school_origin' => $school['origin_school'] ?? ($personal['school_origin'] ?? null),
+            'phone' => $personal['phone'] ?? ($school['phone'] ?? null),
+            'address' => $personal['address'] ?? null,
+            'religion' => $personal['religion'] ?? null,
+            'status' => $a->status,
+            'score' => $a->score,
+            'rank' => $a->rank,
+            'decision' => $a->decision,
+            'created_at' => $a->created_at,
+            'updated_at' => $a->updated_at,
+            'step_data' => $a->step_data,
+            'parents' => $a->parents->map(fn ($p) => [
+                'id' => $p->id,
+                'applicant_id' => $p->applicant_id,
+                'relationship' => $p->parent_type,
+                'full_name' => $p->name,
+                'phone' => $p->phone,
+                'occupation' => $p->occupation,
+                'income' => $p->income_range,
+            ])->values(),
+            'documents' => $a->documents->map(fn ($d) => [
+                'id' => $d->id,
+                'applicant_id' => $d->applicant_id,
+                'document_type' => $d->document_type,
+                'file_id' => $d->file_id,
+                'status' => $d->status,
+                'reject_reason' => $d->reject_reason,
+                'verified_by' => $d->verified_by,
+                'file' => $d->file ? [
+                    'id' => $d->file->id,
+                    'filename' => basename((string) $d->file->object_key),
+                    'original_name' => basename((string) $d->file->object_key),
+                    'mime_type' => $d->file->mime_type,
+                    'size' => $d->file->size_bytes,
+                    'path' => $d->file->object_key,
+                ] : null,
+                'verifier' => $d->verifier ? [
+                    'id' => $d->verifier->id,
+                    'name' => $d->verifier->username,
+                    'email' => $d->verifier->email,
+                ] : null,
+                'created_at' => $d->created_at,
+                'updated_at' => $d->updated_at,
+            ])->values(),
+            'statusHistory' => $a->statusHistory->map(fn ($h) => [
+                'id' => $h->id,
+                'applicant_id' => $h->applicant_id,
+                'from_status' => $h->from_status,
+                'to_status' => $h->to_status,
+                'note' => $h->note,
+                'actor_id' => $h->actor_id,
+                'actor' => $h->actor ? [
+                    'id' => $h->actor->id,
+                    'name' => $h->actor->username,
+                    'email' => $h->actor->email,
+                ] : null,
+                'created_at' => $h->created_at,
+            ])->values(),
+        ];
     }
 
     /**

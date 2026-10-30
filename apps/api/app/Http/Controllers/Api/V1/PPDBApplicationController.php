@@ -78,7 +78,7 @@ class PPDBApplicationController extends Controller
         try {
             $application = $this->service->getApplication($id, $request);
 
-            return $this->successResponse($application);
+            return $this->successResponse($this->service->presentDetail($application));
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Data pendaftaran tidak ditemukan', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
