@@ -341,11 +341,12 @@ export interface ChildSubjectGrade {
   subject_name: string;
   teacher_name: string;
   kktp: number;
-  formative_avg: number;
-  summative_avg: number;
-  sts_score: number;
-  final_score: number;
-  predicate: 'A' | 'B+' | 'B' | 'C' | 'D';
+  // null = backend belum menyediakan rincian nyata; JANGAN mengisi dengan angka karangan.
+  formative_avg: number | null;
+  summative_avg: number | null;
+  sts_score: number | null;
+  final_score: number | null;
+  predicate: 'A' | 'B+' | 'B' | 'C' | 'D' | null;
   status: 'Tuntas' | 'Perlu Pendampingan';
   competency_desc: string;
 }

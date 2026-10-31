@@ -23,6 +23,7 @@ import {
   SchoolFeeItem,
   ChildScheduleItem,
 } from './mock-guardian-data';
+import { buildChildSubjectGrades } from './guardian-grades';
 
 interface GuardianContextType {
   guardian: GuardianProfile;
@@ -305,55 +306,11 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user, childrenData, activeChildId, childDetail, attendanceData, gradesData]);
 
-  // Active Grades from live API
-  const activeGrades = useMemo<ChildSubjectGrade[]>(() => {
-    const rawList = Array.isArray(gradesData)
-      ? gradesData
-      : Array.isArray((gradesData as any)?.grades)
-      ? (gradesData as any).grades
-      : [];
-
-    if (rawList.length > 0) {
-      return rawList.map((g: any) => {
-        const score = Number(g.finalScore ?? g.score ?? 85);
-        const kkm = g.passingGrade ?? g.kkm ?? 75;
-        const isPassed = g.isPassed ?? g.is_passed ?? (score >= kkm);
-        const subName = g.subjectName || g.subject_name || 'Mata Pelajaran';
-        const subCode = (g.subjectCode || g.subject_code || g.subjectId || 'MAPEL').substring(0, 8);
-        return {
-          subject_code: subCode,
-          subject_name: subName,
-          teacher_name: g.teacherName || g.teacher_name || 'Guru Pengampu',
-          kktp: kkm,
-          formative_avg: Math.min(100, Math.round(score * 1.02 * 10) / 10),
-          summative_avg: Math.round(score * 10) / 10,
-          sts_score: score,
-          final_score: score,
-          predicate: (g.letterGrade || g.letter_grade || (score >= 88 ? 'A' : score >= 75 ? 'B' : score >= 65 ? 'C' : 'D')) as 'A' | 'B+' | 'B' | 'C' | 'D',
-          status: isPassed ? 'Tuntas' : 'Perlu Pendampingan',
-          competency_desc: g.description || `Menunjukkan capaian pemahaman yang sangat baik dalam asesmen kompetensi ${subName}.`,
-        };
-      });
-    }
-
-    if (reportCardData?.grades && reportCardData.grades.length > 0) {
-      return reportCardData.grades.map((rg, idx) => ({
-        subject_code: `MAPEL-0${idx + 1}`,
-        subject_name: rg.subject,
-        teacher_name: 'Guru Mata Pelajaran',
-        kktp: 75,
-        formative_avg: rg.score,
-        summative_avg: rg.score,
-        sts_score: rg.score,
-        final_score: rg.score,
-        predicate: (rg.predicate || 'A') as 'A' | 'B+' | 'B' | 'C' | 'D',
-        status: (rg.score >= 75 ? 'Tuntas' : 'Perlu Pendampingan') as 'Tuntas' | 'Perlu Pendampingan',
-        competency_desc: rg.description,
-      }));
-    }
-
-    return [];
-  }, [gradesData, reportCardData]);
+  // Active Grades from live API — pemetaan jujur (tanpa rekayasa) di buildChildSubjectGrades.
+  const activeGrades = useMemo<ChildSubjectGrade[]>(
+    () => buildChildSubjectGrades(gradesData, reportCardData),
+    [gradesData, reportCardData],
+  );
 
   // Active Attendance from live API
   const activeAttendance = useMemo<AttendanceCalendarDay[]>(() => {
