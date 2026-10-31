@@ -21,6 +21,7 @@ class StoreStudentRequest extends BaseApiRequest
             'photo_file_id' => ['nullable', 'string', 'exists:files,id'],
             'entry_date' => ['required', 'date'],
             'status' => ['nullable', 'in:aktif,lulus,pindah,keluar'],
+            'program_type' => ['nullable', 'in:reguler,tahfidz,icp,inklusi'],
         ];
     }
 

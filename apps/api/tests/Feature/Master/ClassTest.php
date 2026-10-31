@@ -217,6 +217,46 @@ class ClassTest extends TestCase
         ]);
     }
 
+    public function test_be_mst_05_admin_can_set_and_update_class_program_type(): void
+    {
+        // Create dengan program_type icp
+        $createResp = $this->actingAs($this->adminUser)
+            ->postJson('/api/v1/classes', [
+                'academic_year_id' => $this->academicYear->id,
+                'grade_level_id' => $this->gradeLevel10->id,
+                'name' => 'VII-C ICP',
+                'capacity' => 30,
+                'program_type' => 'icp',
+            ]);
+
+        $createResp->assertStatus(201)->assertJsonPath('data.program_type', 'icp');
+        $classId = $createResp->json('data.id');
+        $this->assertDatabaseHas('classes', ['id' => $classId, 'program_type' => 'icp']);
+
+        // Default reguler bila tidak dikirim
+        $defaultResp = $this->actingAs($this->adminUser)
+            ->postJson('/api/v1/classes', [
+                'academic_year_id' => $this->academicYear->id,
+                'grade_level_id' => $this->gradeLevel10->id,
+                'name' => 'VII-A Reguler',
+                'capacity' => 32,
+            ]);
+        $defaultResp->assertStatus(201)->assertJsonPath('data.program_type', 'reguler');
+
+        // Update ke tahfidz
+        $this->actingAs($this->adminUser)
+            ->putJson("/api/v1/classes/{$classId}", ['program_type' => 'tahfidz'])
+            ->assertOk()
+            ->assertJsonPath('data.program_type', 'tahfidz');
+        $this->assertDatabaseHas('classes', ['id' => $classId, 'program_type' => 'tahfidz']);
+
+        // Nilai ilegal ditolak
+        $this->actingAs($this->adminUser)
+            ->putJson("/api/v1/classes/{$classId}", ['program_type' => 'bilingual'])
+            ->assertStatus(400)
+            ->assertJsonValidationErrors(['program_type']);
+    }
+
     /**
      * BE-MST-05: Class validation errors (missing fields, duplicate name per academic year)
      */
