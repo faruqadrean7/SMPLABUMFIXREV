@@ -252,6 +252,50 @@ class MeStudentDashboardMultiProgramTest extends TestCase
     }
 
     /**
+     * BE-PORTAL-STUDENT-02B: Siswa non-Inklusi ditolak (403) saat check-in mood & tak membuat profil.
+     */
+    public function test_non_inklusi_student_cannot_submit_mood(): void
+    {
+        [$user, $student] = $this->createStudentWithProgram('reguler');
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/me/program/mood', [
+                'mood' => 'happy',
+                'note' => 'Coba akses lintas program',
+            ]);
+
+        $response->assertStatus(403)
+            ->assertJsonPath('error.code', 'FORBIDDEN');
+
+        $this->assertDatabaseMissing('student_program_profiles', [
+            'student_id' => $student->id,
+        ]);
+    }
+
+    /**
+     * BE-PORTAL-STUDENT-02B: Siswa non-Tahfidz ditolak (403) saat isi mutabaah & tak membuat profil.
+     */
+    public function test_non_tahfidz_student_cannot_submit_mutabaah(): void
+    {
+        [$user, $student] = $this->createStudentWithProgram('icp');
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/me/program/mutabaah', [
+                'sholat_fardhu' => 5,
+                'tilawah_pages' => 6,
+                'dhuha' => true,
+                'tahajud' => false,
+            ]);
+
+        $response->assertStatus(403)
+            ->assertJsonPath('error.code', 'FORBIDDEN');
+
+        $this->assertDatabaseMissing('student_program_profiles', [
+            'student_id' => $student->id,
+        ]);
+    }
+
+    /**
      * BE-PORTAL-STUDENT-02B: Endpoint program menolak akses guest (401).
      */
     public function test_program_endpoints_require_authentication(): void

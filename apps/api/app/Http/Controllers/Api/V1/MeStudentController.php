@@ -38,6 +38,17 @@ class MeStudentController extends Controller
     }
 
     /**
+     * Resolusi program belajar efektif siswa.
+     * Prioritas: student.program_type -> class.program_type -> 'reguler'.
+     */
+    protected function resolveProgramType(Student $student): string
+    {
+        $student->loadMissing('classes');
+
+        return $student->program_type ?? $student->classes->first()?->program_type ?? 'reguler';
+    }
+
+    /**
      * GET /api/v1/me/student-dashboard
      * Ringkasan beranda siswa aktif.
      */
@@ -52,7 +63,7 @@ class MeStudentController extends Controller
         $currentClass = $student->classes->first();
 
         // Resolusi program belajar (prioritas: student.program_type -> class.program_type -> 'reguler')
-        $programType = $student->program_type ?? $currentClass?->program_type ?? 'reguler';
+        $programType = $this->resolveProgramType($student);
         $programBadges = [
             'tahfidz' => "Siswa Program Tahfidz Al-Qur'an",
             'icp' => 'International Class Program (Cambridge)',
@@ -135,6 +146,10 @@ class MeStudentController extends Controller
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
+        if ($this->resolveProgramType($student) !== 'inklusi') {
+            return $this->errorResponse('Fitur check-in mood hanya untuk siswa program Inklusi.', 'FORBIDDEN', 403);
+        }
+
         $validated = $request->validate([
             'mood' => ['required', 'string', 'in:happy,calm,tired,anxious'],
             'note' => ['nullable', 'string', 'max:255'],
@@ -142,7 +157,7 @@ class MeStudentController extends Controller
 
         $profile = StudentProgramProfile::firstOrNew(['student_id' => $student->id]);
         if (! $profile->exists) {
-            $profile->program_type = $student->program_type ?? 'inklusi';
+            $profile->program_type = 'inklusi';
         }
 
         $meta = $profile->meta_data ?? [];
@@ -177,6 +192,10 @@ class MeStudentController extends Controller
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
+        if ($this->resolveProgramType($student) !== 'tahfidz') {
+            return $this->errorResponse('Fitur mutabaah yaumiyah hanya untuk siswa program Tahfidz.', 'FORBIDDEN', 403);
+        }
+
         $validated = $request->validate([
             'sholat_fardhu' => ['required', 'integer', 'min:0', 'max:5'],
             'tilawah_pages' => ['required', 'integer', 'min:0', 'max:100'],
@@ -186,7 +205,7 @@ class MeStudentController extends Controller
 
         $profile = StudentProgramProfile::firstOrNew(['student_id' => $student->id]);
         if (! $profile->exists) {
-            $profile->program_type = $student->program_type ?? 'tahfidz';
+            $profile->program_type = 'tahfidz';
         }
 
         $meta = $profile->meta_data ?? [];
