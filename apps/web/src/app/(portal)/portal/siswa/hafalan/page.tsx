@@ -34,7 +34,7 @@ export default function StudentHafalanPage() {
             <BookOpen className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-extrabold tracking-tight">Hafalan & Tasmi' Al-Qur'an</h1>
+            <h1 className="text-lg font-extrabold tracking-tight">Hafalan &amp; Tasmi&apos; Al-Qur&apos;an</h1>
             <p className="text-xs text-slate-500">Program Khusus Tahfidz SMP Laboratorium UM</p>
           </div>
         </div>

@@ -55,7 +55,7 @@ export function TahfidzWidget({ profile }: TahfidzWidgetProps) {
             <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">
               Capaian Tahfidz & Ibadah Harian
             </h2>
-            <p className="text-[11px] text-slate-500">Program Khusus Halaqah Al-Qur'an</p>
+            <p className="text-[11px] text-slate-500">Program Khusus Halaqah Al-Qur&apos;an</p>
           </div>
         </div>
         <Link
@@ -118,7 +118,7 @@ export function TahfidzWidget({ profile }: TahfidzWidgetProps) {
           <div>
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                Mutaba'ah Hari Ini
+                Mutaba&apos;ah Hari Ini
               </span>
               <Flame className="w-3.5 h-3.5 text-amber-500" />
             </div>
