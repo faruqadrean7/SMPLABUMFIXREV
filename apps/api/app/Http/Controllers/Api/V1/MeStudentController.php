@@ -17,6 +17,7 @@ use App\Models\Grade;
 use App\Models\Schedule;
 use App\Models\Student;
 use App\Models\StudentProgramProfile;
+use App\Services\AuditLogService;
 use App\Services\LmsService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -54,9 +55,9 @@ class MeStudentController extends Controller
         $programType = $student->program_type ?? $currentClass?->program_type ?? 'reguler';
         $programBadges = [
             'tahfidz' => "Siswa Program Tahfidz Al-Qur'an",
-            'icp' => "International Class Program (Cambridge)",
-            'inklusi' => "Siswa Program Inklusi",
-            'reguler' => "Siswa Program Reguler",
+            'icp' => 'International Class Program (Cambridge)',
+            'inklusi' => 'Siswa Program Inklusi',
+            'reguler' => 'Siswa Program Reguler',
         ];
         $programBadge = $programBadges[$programType] ?? 'Siswa Program Reguler';
         $programProfile = $student->programProfile?->meta_data ?? [];
@@ -153,6 +154,15 @@ class MeStudentController extends Controller
         $profile->meta_data = $meta;
         $profile->save();
 
+        app(AuditLogService::class)->record(
+            action: 'portal.program.mood.checkin',
+            entity: 'StudentProgramProfile',
+            entityId: $profile->id,
+            newValues: $meta['daily_mood'],
+            request: $request,
+            isAuthoritative: true
+        );
+
         return $this->successResponse($meta['daily_mood'], 200, ['message' => 'Mood harian berhasil dicatat.']);
     }
 
@@ -189,6 +199,15 @@ class MeStudentController extends Controller
         ];
         $profile->meta_data = $meta;
         $profile->save();
+
+        app(AuditLogService::class)->record(
+            action: 'portal.program.mutabaah.update',
+            entity: 'StudentProgramProfile',
+            entityId: $profile->id,
+            newValues: $meta['mutabaah_today'],
+            request: $request,
+            isAuthoritative: true
+        );
 
         return $this->successResponse($meta['mutabaah_today'], 200, ['message' => 'Checklist mutabaah berhasil disimpan.']);
     }
@@ -537,8 +556,10 @@ class MeStudentController extends Controller
             if ($childId) {
                 return $guardian->students()->where('students.id', $childId)->first();
             }
+
             return $guardian->students()->first();
         }
+
         return null;
     }
 }

@@ -19,7 +19,9 @@ class MeStudentDashboardMultiProgramTest extends TestCase
     use RefreshDatabase;
 
     protected AcademicYear $academicYear;
+
     protected GradeLevel $gradeLevel;
+
     protected Role $studentRole;
 
     protected function setUp(): void
@@ -45,8 +47,8 @@ class MeStudentDashboardMultiProgramTest extends TestCase
     {
         $unique = (string) rand(10000, 99999);
         $user = User::create([
-            'username' => 'siswa_' . $programType . '_' . $unique,
-            'email' => 'siswa_' . $programType . '_' . $unique . '@labschool.sch.id',
+            'username' => 'siswa_'.$programType.'_'.$unique,
+            'email' => 'siswa_'.$programType.'_'.$unique.'@labschool.sch.id',
             'password_hash' => Hash::make('Password123!'),
             'status' => 'active',
         ]);
@@ -55,9 +57,9 @@ class MeStudentDashboardMultiProgramTest extends TestCase
         $student = Student::create([
             'user_id' => $user->id,
             'nis' => $unique,
-            'nisn' => '00' . $unique,
-            'nik_enc' => '35730101' . str_pad($unique, 8, '0', STR_PAD_LEFT),
-            'full_name' => 'Siswa ' . ucfirst($programType) . ' ' . $unique,
+            'nisn' => '00'.$unique,
+            'nik_enc' => '35730101'.str_pad($unique, 8, '0', STR_PAD_LEFT),
+            'full_name' => 'Siswa '.ucfirst($programType).' '.$unique,
             'gender' => 'L',
             'birth_place' => 'Malang',
             'birth_date' => '2012-05-10',
@@ -69,7 +71,7 @@ class MeStudentDashboardMultiProgramTest extends TestCase
         $class = SchoolClass::create([
             'academic_year_id' => $this->academicYear->id,
             'grade_level_id' => $this->gradeLevel->id,
-            'name' => 'VII-' . strtoupper($programType),
+            'name' => 'VII-'.strtoupper($programType),
             'capacity' => 30,
             'program_type' => $programType,
         ]);
@@ -80,7 +82,7 @@ class MeStudentDashboardMultiProgramTest extends TestCase
             'joined_at' => '2024-07-15',
         ]);
 
-        if (!empty($metaData)) {
+        if (! empty($metaData)) {
             StudentProgramProfile::create([
                 'student_id' => $student->id,
                 'program_type' => $programType,
@@ -188,6 +190,13 @@ class MeStudentDashboardMultiProgramTest extends TestCase
             'student_id' => $student->id,
             'program_type' => 'inklusi',
         ]);
+
+        // Aksi sensitif harus terekam pada audit_logs (AGENTS.md §4 & §6.5).
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'portal.program.mood.checkin',
+            'entity' => 'StudentProgramProfile',
+            'actor_id' => $user->id,
+        ]);
     }
 
     /**
@@ -232,6 +241,13 @@ class MeStudentDashboardMultiProgramTest extends TestCase
         $this->assertDatabaseHas('student_program_profiles', [
             'student_id' => $student->id,
             'program_type' => 'tahfidz',
+        ]);
+
+        // Aksi sensitif harus terekam pada audit_logs (AGENTS.md §4 & §6.5).
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'portal.program.mutabaah.update',
+            'entity' => 'StudentProgramProfile',
+            'actor_id' => $user->id,
         ]);
     }
 
