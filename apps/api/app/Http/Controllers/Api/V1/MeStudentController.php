@@ -16,6 +16,7 @@ use App\Models\ExamSession;
 use App\Models\Grade;
 use App\Models\Schedule;
 use App\Models\Student;
+use App\Models\StudentProgramProfile;
 use App\Services\LmsService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -46,8 +47,19 @@ class MeStudentController extends Controller
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        $student->loadMissing(['classes.academicYear']);
+        $student->loadMissing(['classes.academicYear', 'programProfile']);
         $currentClass = $student->classes->first();
+
+        // Resolusi program belajar (prioritas: student.program_type -> class.program_type -> 'reguler')
+        $programType = $student->program_type ?? $currentClass?->program_type ?? 'reguler';
+        $programBadges = [
+            'tahfidz' => "Siswa Program Tahfidz Al-Qur'an",
+            'icp' => "International Class Program (Cambridge)",
+            'inklusi' => "Siswa Program Inklusi",
+            'reguler' => "Siswa Program Reguler",
+        ];
+        $programBadge = $programBadges[$programType] ?? 'Siswa Program Reguler';
+        $programProfile = $student->programProfile?->meta_data ?? [];
 
         // Presensi
         $totalAtt = Attendance::where('student_id', $student->id)->count();
@@ -99,6 +111,9 @@ class MeStudentController extends Controller
             'nis' => $student->nis ?? '',
             'nisn' => $student->nisn ?? '',
             'className' => $currentClass?->name ?? 'Belum ada kelas',
+            'programType' => $programType,
+            'programBadge' => $programBadge,
+            'programProfile' => $programProfile,
             'photoFileId' => $student->photo_file_id,
             'photoUrl' => $student->photoFile?->url,
             'todaySchedule' => $todaySchedules,
@@ -106,6 +121,76 @@ class MeStudentController extends Controller
             'attendanceRate' => $attendanceRate,
             'totalAchievements' => $achievementsCount,
         ]);
+    }
+
+    /**
+     * POST /api/v1/me/program/mood
+     * Check-in kondisi perasaan / sensori harian (khususnya untuk siswa program Inklusi).
+     */
+    public function submitDailyMood(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $validated = $request->validate([
+            'mood' => ['required', 'string', 'in:happy,calm,tired,anxious'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $profile = StudentProgramProfile::firstOrNew(['student_id' => $student->id]);
+        if (! $profile->exists) {
+            $profile->program_type = $student->program_type ?? 'inklusi';
+        }
+
+        $meta = $profile->meta_data ?? [];
+        $meta['daily_mood'] = [
+            'mood' => $validated['mood'],
+            'note' => $validated['note'] ?? null,
+            'timestamp' => now()->toISOString(),
+        ];
+        $profile->meta_data = $meta;
+        $profile->save();
+
+        return $this->successResponse($meta['daily_mood'], 200, ['message' => 'Mood harian berhasil dicatat.']);
+    }
+
+    /**
+     * POST /api/v1/me/program/mutabaah
+     * Simpan catatan ibadah harian / mutabaah yaumiyah (khususnya untuk siswa program Tahfidz).
+     */
+    public function submitMutabaah(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $validated = $request->validate([
+            'sholat_fardhu' => ['required', 'integer', 'min:0', 'max:5'],
+            'tilawah_pages' => ['required', 'integer', 'min:0', 'max:100'],
+            'dhuha' => ['required', 'boolean'],
+            'tahajud' => ['required', 'boolean'],
+        ]);
+
+        $profile = StudentProgramProfile::firstOrNew(['student_id' => $student->id]);
+        if (! $profile->exists) {
+            $profile->program_type = $student->program_type ?? 'tahfidz';
+        }
+
+        $meta = $profile->meta_data ?? [];
+        $meta['mutabaah_today'] = [
+            'sholat_fardhu' => (int) $validated['sholat_fardhu'],
+            'tilawah_pages' => (int) $validated['tilawah_pages'],
+            'dhuha' => (bool) $validated['dhuha'],
+            'tahajud' => (bool) $validated['tahajud'],
+            'updated_at' => now()->toISOString(),
+        ];
+        $profile->meta_data = $meta;
+        $profile->save();
+
+        return $this->successResponse($meta['mutabaah_today'], 200, ['message' => 'Checklist mutabaah berhasil disimpan.']);
     }
 
     /**

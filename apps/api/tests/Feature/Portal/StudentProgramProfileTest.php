@@ -34,8 +34,7 @@ class StudentProgramProfileTest extends TestCase
 
         $this->gradeLevel = GradeLevel::create([
             'name' => 'Kelas VII',
-            'level' => 7,
-            'order' => 1,
+            'sort_order' => 1,
         ]);
     }
 

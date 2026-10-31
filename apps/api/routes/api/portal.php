@@ -39,6 +39,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/tasks/{id}/submit', [MeStudentController::class, 'submitTask']);
         Route::get('/counseling-requests', [MeStudentController::class, 'counselingRequests']);
         Route::post('/counseling-requests', [MeStudentController::class, 'storeCounselingRequest']);
+        Route::post('/program/mood', [MeStudentController::class, 'submitDailyMood']);
+        Route::post('/program/mutabaah', [MeStudentController::class, 'submitMutabaah']);
         // Keuangan (GAP-FIN-01)
         Route::get('/invoices', [MeFinanceController::class, 'myInvoices']);
         Route::get('/invoices/{id}', [MeFinanceController::class, 'showInvoice']);
