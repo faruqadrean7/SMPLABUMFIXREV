@@ -39,7 +39,7 @@ export default function GuruTugasPage() {
   const [title, setTitle] = useState('');
   const [classId, setClassId] = useState('');
   const [subjectId, setSubjectId] = useState('');
-  const [gradeComponentName, setGradeComponentName] = useState('Tugas Formatif 1');
+  const [gradeComponentId, setGradeComponentId] = useState('');
   const [dueDate, setDueDate] = useState('2026-10-28T23:59');
   const [maxScore, setMaxScore] = useState(100);
   const [allowLate, setAllowLate] = useState(true);
@@ -58,6 +58,13 @@ export default function GuruTugasPage() {
       setSubjectId(teacherSubjects[0].id);
     }
   }, [teacherSubjects, subjectId]);
+
+  // Komponen buku nilai untuk kelas+mapel terpilih (agar nilai tugas bisa tersinkron ke rapor)
+  const { data: gradeComponents = [] } = useQuery({
+    queryKey: ['grade-components', classId, subjectId],
+    queryFn: () => lmsApi.getGradeComponents(classId, subjectId),
+    enabled: !!classId && !!subjectId,
+  });
 
   // Fetch assignments
   const { data: assignments = [], isLoading, isError, refetch } = useQuery({
@@ -114,14 +121,20 @@ export default function GuruTugasPage() {
       description: string;
       due_at: string;
       max_score: number;
+      grade_component_id?: string;
       file?: File;
     }) => lmsApi.createAssignment(payload),
     onSuccess: (newAsg) => {
-      newAsg.grade_component_name = gradeComponentName;
+      newAsg.grade_component_name =
+        gradeComponents.find((c) => c.id === gradeComponentId)?.name ?? '';
       newAsg.allow_late = allowLate;
       newAsg.is_locked = lockAfterDue;
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      toast.success('Tugas baru berhasil diterbitkan & ditautkan ke Buku Nilai Rapor!');
+      toast.success(
+        gradeComponentId
+          ? 'Tugas baru berhasil diterbitkan & ditautkan ke Buku Nilai Rapor!'
+          : 'Tugas baru berhasil diterbitkan.'
+      );
       setIsModalOpen(false);
       // Reset form
       setTitle('');
@@ -146,6 +159,7 @@ export default function GuruTugasPage() {
       description,
       due_at: new Date(dueDate).toISOString(),
       max_score: Number(maxScore) || 0,
+      grade_component_id: gradeComponentId || undefined,
       file: selectedFile || undefined,
     });
   };
@@ -617,27 +631,24 @@ export default function GuruTugasPage() {
               {/* Tautkan ke Komponen Nilai Rapor (PRD BE-GRD-01 Integration) */}
               <div>
                 <label className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                  <span>Komponen Buku Nilai Rapor <span className="text-rose-600">*</span></span>
+                  <span>Komponen Buku Nilai Rapor</span>
                   <span className="text-[10px] font-normal text-blue-900">Kurikulum Merdeka</span>
                 </label>
                 <select
-                  value={gradeComponentName}
-                  onChange={(e) => setGradeComponentName(e.target.value)}
+                  value={gradeComponentId}
+                  onChange={(e) => setGradeComponentId(e.target.value)}
                   className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-semibold"
                 >
-                  {[
-                    'Tugas Formatif 1',
-                    'Tugas Formatif 2',
-                    'Tugas Formatif 3',
-                    'Sumatif Tengah Semester',
-                    'Sumatif Akhir Semester',
-                    'Proyek Penguatan Profil Pelajar Pancasila',
-                  ].map((name) => (
-                    <option key={name} value={name}>
-                      {name}
+                  <option value="">Tanpa tautan buku nilai</option>
+                  {gradeComponents.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Bila ditautkan, nilai tugas otomatis masuk ke buku nilai pada komponen ini.
+                </p>
               </div>
 
               {/* Deadline & Max Score */}
@@ -682,7 +693,7 @@ export default function GuruTugasPage() {
                     onChange={(e) => setAllowLate(e.target.checked)}
                     className="w-4 h-4 rounded border-slate-300 text-blue-900 focus:ring-blue-900"
                   />
-                  <span>Izinkan siswa mengumpulkan terlambat (diberi tanda khusus "Terlambat")</span>
+                  <span>Izinkan siswa mengumpulkan terlambat (diberi tanda khusus &quot;Terlambat&quot;)</span>
                 </label>
 
                 <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800">
