@@ -37,6 +37,20 @@ import {
   Search,
 } from 'lucide-react';
 
+/** Warna chip program belajar siswa pada daftar perwalian. */
+function programBadgeClass(programType?: string): string {
+  switch (programType) {
+    case 'tahfidz':
+      return 'bg-emerald-100 text-emerald-700';
+    case 'icp':
+      return 'bg-indigo-100 text-indigo-700';
+    case 'inklusi':
+      return 'bg-amber-100 text-amber-700';
+    default:
+      return 'bg-slate-100 text-slate-500';
+  }
+}
+
 export default function TeacherHomeroomPage() {
   const { user } = useAuth();
 
@@ -395,7 +409,16 @@ export default function TeacherHomeroomPage() {
                           #{st.rank}
                         </div>
                         <div>
-                          <h4 className="font-bold text-sm text-slate-900">{st.name}</h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-sm text-slate-900">{st.name}</h4>
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${programBadgeClass(
+                                st.programType,
+                              )}`}
+                            >
+                              {st.programLabel || 'Reguler'}
+                            </span>
+                          </div>
                           <p className="text-[11px] text-slate-400">NISN: {st.nisn} • NIS: {st.nis}</p>
                         </div>
                       </div>
