@@ -556,6 +556,11 @@ export const lmsApi = {
     return res.data;
   },
 
+  async getFacilities(params?: { per_page?: number; q?: string }) {
+    const res = await apiClient.get('/facilities', { params: { per_page: 100, ...params } });
+    return res.data;
+  },
+
   async getFacilityBookings(params?: {
     status?: string;
     start_date?: string;

@@ -53,6 +53,16 @@ export default function SarprasGuruPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'booking' | 'tiket'>('booking');
 
+  // Daftar fasilitas nyata dari backend (BE-SAR-01) untuk booking yang valid.
+  const { data: facilitiesResp } = useQuery({
+    queryKey: ['facilities'],
+    queryFn: () => lmsApi.getFacilities(),
+  });
+  const facilities = React.useMemo<Array<{ id: string; name: string; location?: string; capacity?: number }>>(
+    () => (facilitiesResp?.data ?? facilitiesResp ?? []) as any[],
+    [facilitiesResp]
+  );
+
   const { data: apiBookings = [] } = useQuery({
     queryKey: ['facility-bookings'],
     queryFn: () => lmsApi.getFacilityBookings(),
@@ -73,11 +83,19 @@ export default function SarprasGuruPage() {
   // Booking Form State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState<boolean>(false);
   const [bookingFacility, setBookingFacility] = useState<string>('Lab Komputer 1 (Lantai 2)');
+  const [bookingFacilityId, setBookingFacilityId] = useState<string>('');
   const [bookingDate, setBookingDate] = useState<string>('2026-10-16');
   const [bookingTimeSlot, setBookingTimeSlot] = useState<string>('07:30 - 09:45 (Jam Ke 1-3)');
   const [bookingPurpose, setBookingPurpose] = useState<string>('Praktikum Evaluasi Pemrograman Web Kelas IX-A');
   const [bookingCount, setBookingCount] = useState<number>(32);
   const [bookingNotes, setBookingNotes] = useState<string>('Mohon pastikan 32 unit PC terhubung jaringan lokal CBT');
+
+  // Default pilihan fasilitas ke fasilitas pertama yang tersedia.
+  React.useEffect(() => {
+    if (!bookingFacilityId && facilities.length > 0) {
+      setBookingFacilityId(facilities[0].id);
+    }
+  }, [facilities, bookingFacilityId]);
 
   // Ticket Form State
   const [isTicketModalOpen, setIsTicketModalOpen] = useState<boolean>(false);
@@ -88,7 +106,7 @@ export default function SarprasGuruPage() {
   const [ticketDescription, setTicketDescription] = useState<string>('PC Meja 08 mengalami blue screen berulang saat booting ke sistem ujian browser.');
 
   // Mock Bookings
-  const [bookings, setBookings] = useState<BookingRecord[]>([
+  const [bookings] = useState<BookingRecord[]>([
     {
       id: 'bk-1',
       facility: 'Lab Komputer 1 (Lantai 2)',
@@ -169,31 +187,24 @@ export default function SarprasGuruPage() {
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!bookingFacilityId) {
+      toast.error('Silakan pilih fasilitas yang akan dipinjam terlebih dahulu.');
+      return;
+    }
     try {
       await bookingMutation.mutateAsync({
-        facility_id: '00000000-0000-0000-0000-000000000001',
+        facility_id: bookingFacilityId,
         start_at: `${bookingDate}T08:00:00`,
         end_at: `${bookingDate}T10:00:00`,
         purpose: bookingPurpose,
         attendees_count: Number(bookingCount) || 0,
       });
       toast.success(`Pengajuan peminjaman ${bookingFacility} berhasil diajukan!`);
-    } catch {
-      const newBooking: BookingRecord = {
-        id: `bk-${Date.now()}`,
-        facility: bookingFacility,
-        date: bookingDate,
-        timeSlot: bookingTimeSlot,
-        purpose: bookingPurpose,
-        participantCount: Number(bookingCount),
-        status: 'menunggu',
-        notes: bookingNotes || 'Menunggu verifikasi tim Sarpras'
-      };
-
-      setBookings([newBooking, ...bookings]);
-      toast.success(`Pengajuan peminjaman ${bookingFacility} dicatat.`);
+      setIsBookingModalOpen(false);
+    } catch (err: any) {
+      // Jangan menyamarkan kegagalan sebagai sukses: tampilkan error sebenarnya.
+      toast.error(err?.message || 'Gagal mengajukan peminjaman fasilitas. Silakan coba lagi.');
     }
-    setIsBookingModalOpen(false);
   };
 
   const handleCreateTicket = async (e: React.FormEvent) => {
@@ -561,14 +572,25 @@ export default function SarprasGuruPage() {
               <div>
                 <label className="font-bold text-slate-800 block mb-1">Pilih Fasilitas / Ruangan:</label>
                 <select
-                  value={bookingFacility}
-                  onChange={(e) => setBookingFacility(e.target.value)}
+                  value={bookingFacilityId}
+                  onChange={(e) => {
+                    setBookingFacilityId(e.target.value);
+                    const f = facilities.find((item) => item.id === e.target.value);
+                    setBookingFacility(f?.name ?? '');
+                  }}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-900"
+                  required
                 >
-                  <option value="Lab Komputer 1 (Lantai 2)">Lab Komputer 1 (Lantai 2 - 36 PC)</option>
-                  <option value="Lab Multimedia (Lantai 3)">Lab Multimedia (Lantai 3 - 32 PC)</option>
-                  <option value="Lab Bahasa Digital (Lantai 2)">Lab Bahasa Digital (Lantai 2 - 32 PC)</option>
-                  <option value="Aula Graha Saraswati (Lantai 1)">Aula Graha Saraswati (Lantai 1 - 250 Kursi)</option>
+                  {facilities.length === 0 && (
+                    <option value="">Tidak ada fasilitas tersedia</option>
+                  )}
+                  {facilities.map((facility) => (
+                    <option key={facility.id} value={facility.id}>
+                      {facility.name}
+                      {facility.location ? ` - ${facility.location}` : ''}
+                      {facility.capacity ? ` (${facility.capacity})` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
 
