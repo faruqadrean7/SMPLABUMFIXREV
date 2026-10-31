@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTeacherExams, guruApi, TeacherQuestionBankItem } from '@/features/portal/guru';
+import { useTeacherSubjects } from '@/lib/use-teacher-data';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,8 +41,12 @@ export default function TeacherExamsPage() {
   const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
 
+  // Mata pelajaran yang diampu guru (untuk scope bank soal).
+  const { data: teacherSubjects = [] } = useTeacherSubjects();
+
   // Form Bank Soal Baru
   const [bankName, setBankName] = useState('');
+  const [bankSubjectId, setBankSubjectId] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -69,14 +74,25 @@ export default function TeacherExamsPage() {
     }
   }, [activeTab]);
 
+  // Default ke mapel pertama yang diampu guru.
+  useEffect(() => {
+    if (!bankSubjectId && teacherSubjects.length > 0) {
+      setBankSubjectId(teacherSubjects[0].id);
+    }
+  }, [teacherSubjects, bankSubjectId]);
+
   const handleCreateBank = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankName.trim()) return;
+    if (!bankSubjectId) {
+      setErrorMsg('Mata pelajaran belum dipilih. Pastikan Anda memiliki penugasan mengajar.');
+      return;
+    }
     setErrorMsg(null);
     try {
       const newBank = await guruApi.createQuestionBank({
         name: bankName,
-        subject_id: '00000000-0000-0000-0000-000000000001', // Fallback handled by backend
+        subject_id: bankSubjectId,
       });
       setBanks((prev) => [newBank, ...prev]);
       setBankName('');
@@ -337,6 +353,25 @@ export default function TeacherExamsPage() {
               </button>
             </div>
             <form onSubmit={handleCreateBank} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Mata Pelajaran</label>
+                <select
+                  value={bankSubjectId}
+                  onChange={(e) => setBankSubjectId(e.target.value)}
+                  className="w-full h-9 rounded-md border border-slate-200 px-2 text-xs"
+                  required
+                >
+                  {teacherSubjects.length === 0 && (
+                    <option value="">Tidak ada mata pelajaran yang diampu</option>
+                  )}
+                  {teacherSubjects.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.name}
+                      {subject.code ? ` (${subject.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Nama Bank Soal</label>
                 <Input
