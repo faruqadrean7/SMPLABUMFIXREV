@@ -3,6 +3,8 @@
 namespace Tests\Feature\Portal;
 
 use App\Models\AcademicYear;
+use App\Models\Assignment;
+use App\Models\AssignmentSubmission;
 use App\Models\Attendance;
 use App\Models\ClassStudent;
 use App\Models\GradeComponent;
@@ -303,6 +305,133 @@ class MeTeacherJournalApiTest extends TestCase
             'class_id' => $this->class->id,
             'title' => 'Latihan Soal SPLDV 1',
         ]);
+    }
+
+    /**
+     * BE-LMS-03: Tugas portal menyimpan max_score & tautan komponen nilai.
+     */
+    public function test_portal_create_assignment_persists_max_score_and_component(): void
+    {
+        $response = $this->actingAs($this->teacherUser)
+            ->postJson('/api/v1/me/teacher/assignments', [
+                'title' => 'Proyek Statistika',
+                'classId' => $this->class->id,
+                'subjectId' => $this->subject->id,
+                'dueDate' => '2026-10-20',
+                'max_score' => 80,
+                'grade_component_id' => $this->component->id,
+            ]);
+
+        $response->assertStatus(201);
+
+        $this->assertDatabaseHas('assignments', [
+            'title' => 'Proyek Statistika',
+            'max_score' => 80,
+            'grade_component_id' => $this->component->id,
+        ]);
+    }
+
+    /**
+     * BE-LMS-03: Komponen nilai dari mapel lain ditolak (cegah tautan silang mapel).
+     */
+    public function test_portal_create_assignment_rejects_component_of_other_subject(): void
+    {
+        $otherSubject = Subject::create(['code' => 'IPA-7', 'name' => 'IPA', 'subject_group' => 'wajib']);
+        $otherComponent = GradeComponent::create([
+            'semester_id' => $this->semester->id,
+            'subject_id' => $otherSubject->id,
+            'name' => 'UH IPA',
+            'code' => 'UH-IPA',
+            'weight' => 20,
+        ]);
+
+        $response = $this->actingAs($this->teacherUser)
+            ->postJson('/api/v1/me/teacher/assignments', [
+                'title' => 'Tugas Salah Komponen',
+                'classId' => $this->class->id,
+                'subjectId' => $this->subject->id,
+                'dueDate' => '2026-10-20',
+                'grade_component_id' => $otherComponent->id,
+            ]);
+
+        $response->assertStatus(422);
+    }
+
+    /**
+     * BE-LMS-03: Menilai tugas lewat portal guru ikut menulis ke buku nilai (grades).
+     */
+    public function test_portal_grade_submission_syncs_to_gradebook(): void
+    {
+        $assignment = Assignment::create([
+            'teacher_id' => $this->teacher->id,
+            'class_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'title' => 'Tugas Tersinkron',
+            'due_at' => '2026-10-20 23:59:00',
+            'max_score' => 100,
+            'grade_component_id' => $this->component->id,
+        ]);
+
+        $submission = AssignmentSubmission::create([
+            'assignment_id' => $assignment->id,
+            'student_id' => $this->student->id,
+            'notes' => 'Terlampir',
+            'submitted_at' => '2026-10-19 10:00:00',
+        ]);
+
+        $response = $this->actingAs($this->teacherUser)
+            ->postJson('/api/v1/me/teacher/submissions/'.$submission->id.'/grade', [
+                'score' => 88,
+                'feedback' => 'Kerja bagus.',
+            ]);
+
+        $response->assertOk();
+
+        // Skor tersimpan di submission...
+        $this->assertDatabaseHas('assignment_submissions', [
+            'id' => $submission->id,
+            'score' => 88,
+        ]);
+
+        // ...dan ikut masuk buku nilai pada komponen & periode yang sesuai.
+        $this->assertDatabaseHas('grades', [
+            'student_id' => $this->student->id,
+            'component_id' => $this->component->id,
+            'period_id' => $this->period->id,
+            'value' => 88,
+        ]);
+    }
+
+    /**
+     * BE-LMS-03: Daftar tugas guru melaporkan jumlah yang sudah dinilai (bukan 0 statis).
+     */
+    public function test_portal_assignment_list_reports_graded_count(): void
+    {
+        $assignment = Assignment::create([
+            'teacher_id' => $this->teacher->id,
+            'class_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'title' => 'Tugas Hitung Dinilai',
+            'due_at' => '2026-10-20 23:59:00',
+            'max_score' => 100,
+        ]);
+
+        AssignmentSubmission::create([
+            'assignment_id' => $assignment->id,
+            'student_id' => $this->student->id,
+            'notes' => 'A',
+            'submitted_at' => '2026-10-19 10:00:00',
+            'score' => 90,
+        ]);
+
+        $response = $this->actingAs($this->teacherUser)
+            ->getJson('/api/v1/me/teacher/assignments');
+
+        $response->assertOk();
+        $item = collect($response->json('data'))->firstWhere('id', $assignment->id);
+        $this->assertNotNull($item);
+        $this->assertSame(1, $item['gradedCount']);
+        $this->assertSame(1, $item['submittedCount']);
     }
 
     /**
