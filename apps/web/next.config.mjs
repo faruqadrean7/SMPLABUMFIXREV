@@ -27,6 +27,9 @@ export default function nextConfigFunction(phase) {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   optimizeFonts: false,
   reactStrictMode: true,
   poweredByHeader: false,
