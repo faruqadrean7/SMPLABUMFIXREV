@@ -8,6 +8,10 @@ import { useStudentDashboard, useStudentTasks, useSchoolAnnouncements } from '@/
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { TahfidzWidget } from './student-programs/tahfidz-widget';
+import { IcpWidget } from './student-programs/icp-widget';
+import { InklusiWidget } from './student-programs/inklusi-widget';
+import { RegulerWidget } from './student-programs/reguler-widget';
 
 function formatDate(value?: string): string {
   if (!value) return '';
@@ -37,12 +41,31 @@ export function StudentDashboardView() {
 
   return (
     <div className="flex flex-col gap-3.5 text-slate-900">
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-xl bg-blue-900 text-white font-extrabold flex items-center justify-center text-base shrink-0">{initials}</div>
-        <div className="min-w-0">
-          <h1 className="text-lg font-extrabold tracking-tight truncate">{name}</h1>
-          <p className="text-xs text-slate-600 mt-0.5">{className} &middot; NIS {data?.nis || '-'}</p>
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between gap-3.5">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-12 h-12 rounded-xl bg-blue-900 text-white font-extrabold flex items-center justify-center text-base shrink-0">{initials}</div>
+          <div className="min-w-0">
+            <h1 className="text-lg font-extrabold tracking-tight truncate">{name}</h1>
+            <p className="text-xs text-slate-600 mt-0.5">{className} &middot; NIS {data?.nis || '-'}</p>
+          </div>
         </div>
+        {data?.programBadge && (
+          <div className="shrink-0 hidden sm:block">
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                data.programType === 'tahfidz'
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : data.programType === 'icp'
+                  ? 'bg-blue-50 text-blue-900 border-blue-300'
+                  : data.programType === 'inklusi'
+                  ? 'bg-purple-50 text-purple-900 border-purple-300'
+                  : 'bg-slate-100 text-slate-800 border-slate-300'
+              }`}
+            >
+              {data.programBadge}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -51,6 +74,12 @@ export function StudentDashboardView() {
         <MetricCard icon={<MonitorPlay className="w-3.5 h-3.5" />} label="Ujian Mendatang" value={String(upcomingExams.length)} sub="Terjadwal" href="/siswa/cbt" cta="Lihat ujian" />
         <MetricCard icon={<Award className="w-3.5 h-3.5" />} label="Prestasi" value={String(data?.totalAchievements ?? 0)} sub="Poin prestasi" href="/siswa/poin" cta="Lihat poin" />
       </div>
+
+      {/* Widget Khusus Program Belajar Siswa */}
+      {data?.programType === 'tahfidz' && <TahfidzWidget profile={data.programProfile} />}
+      {data?.programType === 'icp' && <IcpWidget profile={data.programProfile} />}
+      {data?.programType === 'inklusi' && <InklusiWidget profile={data.programProfile} />}
+      {(!data?.programType || data?.programType === 'reguler') && <RegulerWidget profile={data?.programProfile} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
         <div className="lg:col-span-7 flex flex-col gap-3">

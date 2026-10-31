@@ -4,11 +4,90 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './api-client';
 import { ApiResponse } from '@/types/auth';
 
+export type StudentProgramType = 'reguler' | 'tahfidz' | 'icp' | 'inklusi';
+
+export interface TahfidzProfileData {
+  target_juz?: number;
+  current_juz?: number;
+  current_surah?: string;
+  last_tasmi_date?: string;
+  last_tasmi_grade?: string;
+  tasmi_evaluator?: string;
+  mutabaah_today?: {
+    sholat_fardhu: number;
+    tilawah_pages: number;
+    dhuha: boolean;
+    tahajud: boolean;
+    updated_at?: string;
+  };
+}
+
+export interface IcpProfileData {
+  cambridge_candidate_id?: string;
+  checkpoint_readiness?: Record<string, { score: number; target?: number; status: string }>;
+  vocab_of_day?: {
+    word: string;
+    phonetic?: string;
+    definition: string;
+    subject?: string;
+  };
+  upcoming_events?: Array<{
+    title: string;
+    date: string;
+    type: string;
+  }>;
+}
+
+export interface InklusiProfileData {
+  gpk?: {
+    id?: string;
+    name: string;
+    contact_phone?: string;
+    room?: string;
+  };
+  ppi_milestones?: Array<{
+    id: string;
+    title: string;
+    is_completed: boolean;
+  }>;
+  daily_mood?: {
+    mood: 'happy' | 'calm' | 'tired' | 'anxious';
+    timestamp?: string;
+    note?: string;
+  };
+}
+
+export interface RegulerProfileData {
+  kktp_summary?: {
+    total_subjects: number;
+    tuntas_count: number;
+    remedial_count: number;
+    average_score: number;
+  };
+  p5_project?: {
+    title: string;
+    theme: string;
+    phase: string;
+    group_name: string;
+    deadline: string;
+  };
+  ekskul?: Array<{
+    name: string;
+    day: string;
+    time: string;
+  }>;
+}
+
+export type StudentProgramProfileData = TahfidzProfileData & IcpProfileData & InklusiProfileData & RegulerProfileData;
+
 export interface StudentDashboardData {
   name: string;
   nis: string;
   nisn: string;
   className: string;
+  programType?: StudentProgramType;
+  programBadge?: string;
+  programProfile?: StudentProgramProfileData | Record<string, any>;
   photoFileId: string | null;
   photoUrl: string | null;
   todaySchedule: Array<{
@@ -267,6 +346,37 @@ export function useTeachingMaterials() {
       return res.data.data;
     },
     staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useSubmitDailyMood() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { mood: 'happy' | 'calm' | 'tired' | 'anxious'; note?: string }) => {
+      const res = await apiClient.post<ApiResponse<any>>('/me/program/mood', payload);
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+    },
+  });
+}
+
+export function useSubmitMutabaah() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      sholat_fardhu: number;
+      tilawah_pages: number;
+      dhuha: boolean;
+      tahajud: boolean;
+    }) => {
+      const res = await apiClient.post<ApiResponse<any>>('/me/program/mutabaah', payload);
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+    },
   });
 }
 

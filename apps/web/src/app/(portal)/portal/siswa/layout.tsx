@@ -23,6 +23,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { RoleGuard } from '@/components/role-guard';
+import { getStudentNavLinks } from '@/lib/student-navigation';
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -58,55 +59,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         .toUpperCase()
     : 'SW';
 
-  const navLinks = [
-    {
-      name: 'Ringkasan & Beranda',
-      href: '/siswa/dashboard',
-      icon: LayoutDashboard,
-    },
-    {
-      name: 'Ujian CBT Web',
-      href: '/siswa/cbt',
-      icon: MonitorPlay,
-      badge: '1 Aktif',
-      badgeColor: 'bg-rose-700 text-white',
-    },
-    {
-      name: 'Jadwal & Kalender',
-      href: '/siswa/jadwal',
-      icon: Calendar,
-      badge: 'Hari Ini',
-      badgeColor: 'bg-blue-900 text-white',
-    },
-    {
-      name: 'Modul & Tugas LMS',
-      href: '/siswa/tugas',
-      icon: CheckSquare,
-      badge: '2 Tugas',
-      badgeColor: 'bg-blue-900 text-white',
-    },
-    {
-      name: 'Capaian Nilai & Rapor',
-      href: '/siswa/nilai',
-      icon: FileSpreadsheet,
-      badge: 'KKTP 75',
-      badgeColor: 'bg-slate-800 text-white',
-    },
-    {
-      name: 'Poin & Ekstrakurikuler',
-      href: '/siswa/poin',
-      icon: Award,
-      badge: '+30 Poin',
-      badgeColor: 'bg-emerald-800 text-white',
-    },
-    {
-      name: 'Konseling & Bantuan',
-      href: '/siswa/konseling',
-      icon: HeartHandshake,
-      badge: 'Privat',
-      badgeColor: 'bg-teal-800 text-white',
-    },
-  ];
+  const navLinks = getStudentNavLinks(studentDash?.programType, studentDash?.programProfile);
 
   return (
     <RoleGuard allowedRoles={['student']} portalName="Portal Siswa">
@@ -146,6 +99,25 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               </div>
             </div>
             
+            {/* Status Program Belajar */}
+            <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium">Program:</span>
+              <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] tracking-wide border ${
+                studentDash?.programType === 'tahfidz'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : studentDash?.programType === 'icp'
+                  ? 'bg-blue-50 text-blue-900 border-blue-200'
+                  : studentDash?.programType === 'inklusi'
+                  ? 'bg-purple-50 text-purple-900 border-purple-200'
+                  : 'bg-slate-100 text-slate-800 border-slate-200'
+              }`}>
+                {studentDash?.programType === 'tahfidz' && 'Tahfidz'}
+                {studentDash?.programType === 'icp' && 'ICP Cambridge'}
+                {studentDash?.programType === 'inklusi' && 'Inklusi'}
+                {(!studentDash?.programType || studentDash?.programType === 'reguler') && 'Reguler'}
+              </span>
+            </div>
+
             {/* Status Presensi Siswa */}
             <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
               <span className="text-slate-500 font-medium">Tingkat Hadir:</span>

@@ -47,15 +47,21 @@ class TeacherHomeroomController extends Controller
             return $this->errorResponse('Akses ditolak: Anda bukan wali kelas pada periode ini.', 'FORBIDDEN', 403);
         }
 
-        $students = $homeroomClass->students->map(fn (Student $s, $idx) => [
-            'id' => $s->id,
-            'name' => $s->full_name,
-            'nisn' => $s->nisn ?? '',
-            'nis' => $s->nis ?? '',
-            'attendanceRate' => 98.0,
-            'averageScore' => 86.5,
-            'rank' => $idx + 1,
-        ]);
+        $students = $homeroomClass->students->map(function (Student $s, $idx) use ($homeroomClass) {
+            $program = $this->resolveStudentProgram($s, $homeroomClass);
+
+            return [
+                'id' => $s->id,
+                'name' => $s->full_name,
+                'nisn' => $s->nisn ?? '',
+                'nis' => $s->nis ?? '',
+                'programType' => $program['type'],
+                'programLabel' => $program['label'],
+                'attendanceRate' => 98.0,
+                'averageScore' => 86.5,
+                'rank' => $idx + 1,
+            ];
+        });
 
         return $this->successResponse([
             'class_id' => $homeroomClass->id,

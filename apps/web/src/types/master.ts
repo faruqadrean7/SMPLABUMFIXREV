@@ -61,6 +61,8 @@ export interface AcademicYearFormValues {
 // ============================================================================
 
 export type StudentStatus = 'aktif' | 'lulus' | 'pindah' | 'keluar';
+
+export type ProgramType = 'reguler' | 'tahfidz' | 'icp' | 'inklusi';
 export type Gender = 'L' | 'P';
 
 export interface StudentItem {
@@ -84,6 +86,7 @@ export interface StudentItem {
   } | null;
   photo_url?: string | null;
   status: StudentStatus;
+  program_type?: ProgramType;
   entry_date: string;
   graduated_at?: string | null;
   classes?: Array<{
@@ -129,6 +132,7 @@ export interface StudentFormValues {
   address?: string;
   entry_date: string;
   status?: StudentStatus;
+  program_type?: ProgramType;
   photo_file_id?: string | null;
 }
 
@@ -292,6 +296,7 @@ export interface SchoolClassItem {
   homeroom_teacher_id?: string | null;
   name: string;
   capacity: number;
+  program_type?: ProgramType;
   active_students_count?: number;
   academicYear?: {
     id: string;
@@ -316,6 +321,7 @@ export interface ClassFormValues {
   homeroom_teacher_id?: string;
   name: string;
   capacity: number;
+  program_type?: ProgramType;
 }
 
 export interface ClassStudentItem {

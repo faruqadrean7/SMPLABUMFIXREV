@@ -194,6 +194,8 @@ export interface TeacherHomeroomData {
     name: string;
     nisn: string;
     nis: string;
+    programType?: 'reguler' | 'tahfidz' | 'icp' | 'inklusi';
+    programLabel?: string;
     attendanceRate: number;
     averageScore: number;
     rank: number;

@@ -628,4 +628,50 @@ class MeTeacherJournalApiTest extends TestCase
             ]);
         $resMaterial->assertStatus(201);
     }
+
+    /**
+     * BE-PORTAL-GURU: Roster kelas menampilkan program belajar siswa (prioritas program siswa).
+     */
+    public function test_class_students_roster_exposes_student_program(): void
+    {
+        $this->student->update(['program_type' => 'tahfidz']);
+
+        $response = $this->actingAs($this->teacherUser)
+            ->getJson('/api/v1/me/teacher/classes/'.$this->class->id.'/students');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.programType', 'tahfidz')
+            ->assertJsonPath('data.0.programLabel', 'Tahfidz');
+    }
+
+    /**
+     * BE-PORTAL-GURU: Roster memakai program rombel sebagai fallback via helper (prioritas program siswa).
+     */
+    public function test_class_students_roster_reflects_icp_program(): void
+    {
+        $this->student->update(['program_type' => 'icp']);
+
+        $response = $this->actingAs($this->teacherUser)
+            ->getJson('/api/v1/me/teacher/classes/'.$this->class->id.'/students');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.programType', 'icp')
+            ->assertJsonPath('data.0.programLabel', 'ICP');
+    }
+
+    /**
+     * BE-PORTAL-GURU: Daftar perwalian (homeroom) menampilkan program tiap siswa.
+     */
+    public function test_homeroom_roster_exposes_student_program(): void
+    {
+        $this->class->update(['homeroom_teacher_id' => $this->teacher->id]);
+        $this->student->update(['program_type' => 'inklusi']);
+
+        $response = $this->actingAs($this->teacherUser)
+            ->getJson('/api/v1/me/teacher/homeroom');
+
+        $response->assertOk()
+            ->assertJsonPath('data.students.0.programType', 'inklusi')
+            ->assertJsonPath('data.students.0.programLabel', 'Inklusi');
+    }
 }

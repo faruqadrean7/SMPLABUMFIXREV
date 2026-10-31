@@ -129,14 +129,20 @@ class TeacherDashboardController extends Controller
             return $this->errorResponse('Kelas tidak ditemukan.', 'NOT_FOUND', 404);
         }
 
-        $data = $schoolClass->students->map(fn (Student $s) => [
-            'studentId' => $s->id,
-            'studentName' => $s->full_name,
-            'nisn' => $s->nisn ?? '',
-            'nis' => $s->nis ?? '',
-            'status' => 'present',
-            'notes' => null,
-        ]);
+        $data = $schoolClass->students->map(function (Student $s) use ($schoolClass) {
+            $program = $this->resolveStudentProgram($s, $schoolClass);
+
+            return [
+                'studentId' => $s->id,
+                'studentName' => $s->full_name,
+                'nisn' => $s->nisn ?? '',
+                'nis' => $s->nis ?? '',
+                'programType' => $program['type'],
+                'programLabel' => $program['label'],
+                'status' => 'present',
+                'notes' => null,
+            ];
+        });
 
         return $this->successResponse($data);
     }

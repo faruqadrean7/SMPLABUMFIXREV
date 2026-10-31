@@ -26,6 +26,7 @@ class UpdateStudentRequest extends BaseApiRequest
             'status' => ['nullable', 'in:aktif,lulus,pindah,keluar'],
             'status_reason' => ['nullable', 'string'],
             'status_effective_date' => ['nullable', 'date'],
+            'program_type' => ['nullable', 'in:reguler,tahfidz,icp,inklusi'],
         ];
     }
 
