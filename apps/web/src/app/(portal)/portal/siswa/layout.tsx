@@ -32,7 +32,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const { data: studentDash } = useStudentDashboard();
 
   // Distraction-free full-screen kiosk mode for active CBT exam session
-  const isExamTakingSession = pathname.startsWith('/siswa/cbt/') && pathname !== '/siswa/cbt';
+  const isExamTakingSession =
+    (pathname.startsWith('/siswa/cbt/') && pathname !== '/siswa/cbt') ||
+    (pathname.startsWith('/portal/siswa/cbt/') && pathname !== '/portal/siswa/cbt') ||
+    (pathname.startsWith('/siswa/ujian/') && pathname !== '/siswa/ujian') ||
+    (pathname.startsWith('/portal/siswa/ujian/') && pathname !== '/portal/siswa/ujian');
   if (isExamTakingSession) {
     return (
       <RoleGuard allowedRoles={['student']} portalName="Portal Siswa">

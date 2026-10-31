@@ -26,6 +26,7 @@ import { useStudentExams, useStudentDashboard } from '@/lib/use-student-data';
 import { ExamListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { cbtApi } from '@/features/cbt/cbt-api';
 
 export default function StudentCBTListPage() {
   const router = useRouter();
@@ -33,6 +34,7 @@ export default function StudentCBTListPage() {
   const [tokenInput, setTokenInput] = useState('');
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [isVerifyingToken, setIsVerifyingToken] = useState(false);
 
   const { data: apiExams, isLoading, isError, refetch } = useStudentExams();
   const { data: studentDash } = useStudentDashboard();
@@ -92,18 +94,35 @@ export default function StudentCBTListPage() {
     setTokenError(null);
   };
 
-  const handleVerifyTokenAndProceed = (e: React.FormEvent) => {
+  const handleVerifyTokenAndProceed = async (e: React.FormEvent) => {
     e.preventDefault();
     const exam = allExams.find(ex => ex.id === selectedExamId);
     if (!exam) return;
 
-    if (tokenInput.trim().toUpperCase() !== exam.token_required?.toUpperCase()) {
-      setTokenError(`Token tidak valid! Pastikan Anda memasukkan token yang tertulis di papan pengawas lab (contoh: ${exam.token_required})`);
+    const trimmedToken = tokenInput.trim().toUpperCase();
+    if (!trimmedToken) {
+      setTokenError('Token ruang ujian wajib dimasukkan.');
       return;
     }
 
-    // Masuk ke exam workspace
-    router.push(`/siswa/cbt/${exam.id}`);
+    setIsVerifyingToken(true);
+    setTokenError(null);
+
+    try {
+      // FE-CBT-UJIAN-01: Panggil startStudentSession dengan token nyata ke backend
+      await cbtApi.startStudentSession(exam.id, { token: trimmedToken });
+
+      // Masuk ke ruang ujian CBT kanonis
+      router.push(`/portal/siswa/ujian/${exam.id}`);
+    } catch (err: any) {
+      const serverMessage =
+        err?.message ||
+        err?.response?.data?.message ||
+        'Token tidak valid atau tidak cocok dengan ruang ujian. Pastikan token sesuai dengan yang tertera di papan pengawas.';
+      setTokenError(serverMessage);
+    } finally {
+      setIsVerifyingToken(false);
+    }
   };
 
   // ─── DYNAMIC SUMMARY CARDS (HANYA MUNCUL JIKA DATANYA ADA) ───
@@ -830,17 +849,28 @@ export default function StudentCBTListPage() {
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
+                  disabled={isVerifyingToken}
                   onClick={() => setSelectedExamId(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-blue-900 hover:bg-blue-950 text-white text-xs font-bold tracking-wider uppercase transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  disabled={isVerifyingToken}
+                  className="px-5 py-2.5 rounded-xl bg-blue-900 hover:bg-blue-950 disabled:opacity-70 text-white text-xs font-bold tracking-wider uppercase transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>Verifikasi & Masuk Ujian</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-white" />
+                  {isVerifyingToken ? (
+                    <>
+                      <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                      <span>Memverifikasi...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Verifikasi & Masuk Ujian</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-white" />
+                    </>
+                  )}
                 </button>
               </div>
             </form>
