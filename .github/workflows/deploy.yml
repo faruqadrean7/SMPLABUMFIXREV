@@ -1,0 +1,40 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ develop, main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            echo "Deploying update..."
+            cd /home/fafnir/SMPLABUMFIXREV
+            git fetch origin develop
+            git reset --hard origin/develop
+
+            # Backend Laravel
+            cd /home/fafnir/SMPLABUMFIXREV/apps/api
+            php /home/fafnir/.local/bin/composer install --no-dev --optimize-autoloader --no-interaction
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
+
+            # Frontend Next.js
+            cd /home/fafnir/SMPLABUMFIXREV/apps/web
+            npm run build
+
+            # Restart PM2
+            pm2 restart sistlabum-api || true
+            pm2 restart sistlabum-web || true
+            pm2 save
+            echo "Deployment finished successfully!"

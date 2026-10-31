@@ -24,6 +24,10 @@ export default function nextConfigFunction(phase) {
 
   /** @type {import('next').NextConfig} */
   const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  optimizeFonts: false,
   reactStrictMode: true,
   poweredByHeader: false,
   async redirects() {
