@@ -24,6 +24,7 @@ class SchoolClass extends Model
         'major_id',
         'homeroom_teacher_id',
         'name',
+        'program_type',
         'capacity',
     ];
 
