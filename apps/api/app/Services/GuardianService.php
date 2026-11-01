@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\Guardian;
+use App\Models\Role;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -67,9 +69,42 @@ class GuardianService
     public function createGuardian(array $data, Request $request): Guardian
     {
         return DB::transaction(function () use ($data, $request) {
+            $schoolId = $data['school_id'] ?? $request->user()?->school_id;
+            $userId = $data['user_id'] ?? null;
+
+            if (empty($userId) && (! empty($data['create_user_account']) || ! empty($data['username']))) {
+                $rawUsername = ! empty($data['username']) ? $data['username'] : Str::slug($data['full_name'], '');
+                $username = strtolower(trim((string) $rawUsername));
+                if (empty($username)) {
+                    $username = 'ortu_'.preg_replace('/\D/', '', $data['phone']);
+                }
+
+                $baseUsername = $username;
+                $counter = 1;
+                while (User::where('username', $username)->exists()) {
+                    $username = $baseUsername.$counter;
+                    $counter++;
+                }
+
+                $password = ! empty($data['password']) ? $data['password'] : 'Password123!';
+                $user = User::create([
+                    'school_id' => $schoolId,
+                    'username' => $username,
+                    'email' => ! empty($data['email']) ? strtolower(trim($data['email'])) : null,
+                    'phone' => $data['phone'],
+                    'password_hash' => Hash::make($password),
+                    'status' => 'active',
+                    'must_change_password' => false,
+                ]);
+
+                $role = Role::firstOrCreate(['code' => 'guardian'], ['name' => 'Orang Tua / Wali Murid', 'is_system' => true]);
+                $user->roles()->syncWithoutDetaching([$role->id]);
+                $userId = $user->id;
+            }
+
             $guardian = Guardian::create([
-                'school_id' => $data['school_id'] ?? $request->user()?->school_id,
-                'user_id' => $data['user_id'] ?? null,
+                'school_id' => $schoolId,
+                'user_id' => $userId,
                 'full_name' => $data['full_name'],
                 'phone' => $data['phone'],
                 'occupation' => $data['occupation'] ?? null,
@@ -86,7 +121,76 @@ class GuardianService
                 $request
             );
 
-            return $guardian;
+            return $guardian->load(['user', 'students']);
+        });
+    }
+
+    /**
+     * BE-MST-04: Buat atau Reset Akun Login Pengguna untuk Orang Tua / Wali.
+     */
+    public function createOrResetAccount(string $id, array $data, Request $request): Guardian
+    {
+        return DB::transaction(function () use ($id, $data, $request) {
+            $guardian = Guardian::with('user')->findOrFail($id);
+            $schoolId = $guardian->school_id ?? $request->user()?->school_id;
+
+            $password = ! empty($data['password']) ? $data['password'] : 'Password123!';
+            $role = Role::firstOrCreate(['code' => 'guardian'], ['name' => 'Orang Tua / Wali Murid', 'is_system' => true]);
+
+            if ($guardian->user) {
+                // Reset password akun yang sudah ada
+                $user = $guardian->user;
+                $user->password_hash = Hash::make($password);
+                if (! empty($data['username'])) {
+                    $user->username = strtolower(trim($data['username']));
+                }
+                if (isset($data['email'])) {
+                    $user->email = ! empty($data['email']) ? strtolower(trim($data['email'])) : null;
+                }
+                $user->save();
+                $user->roles()->syncWithoutDetaching([$role->id]);
+            } else {
+                // Buat akun user baru
+                $rawUsername = ! empty($data['username']) ? $data['username'] : Str::slug($guardian->full_name, '');
+                $username = strtolower(trim((string) $rawUsername));
+                if (empty($username)) {
+                    $username = 'ortu_'.preg_replace('/\D/', '', $guardian->phone);
+                }
+
+                $baseUsername = $username;
+                $counter = 1;
+                while (User::where('username', $username)->exists()) {
+                    $username = $baseUsername.$counter;
+                    $counter++;
+                }
+
+                $user = User::create([
+                    'school_id' => $schoolId,
+                    'username' => $username,
+                    'email' => ! empty($data['email']) ? strtolower(trim($data['email'])) : null,
+                    'phone' => $guardian->phone,
+                    'password_hash' => Hash::make($password),
+                    'status' => 'active',
+                    'must_change_password' => false,
+                ]);
+
+                $user->roles()->syncWithoutDetaching([$role->id]);
+
+                $guardian->user_id = $user->id;
+                $guardian->save();
+            }
+
+            $this->logAudit(
+                $request->user()?->id,
+                'guardian.account_provisioned',
+                'Guardian',
+                $guardian->id,
+                null,
+                ['user_id' => $user->id, 'username' => $user->username],
+                $request
+            );
+
+            return $guardian->load(['user', 'students']);
         });
     }
 

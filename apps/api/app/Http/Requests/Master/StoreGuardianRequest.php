@@ -14,6 +14,10 @@ class StoreGuardianRequest extends BaseApiRequest
             'occupation' => ['nullable', 'string', 'max:100'],
             'address' => ['nullable', 'string'],
             'user_id' => ['nullable', 'string', 'exists:users,id', 'unique:guardians,user_id'],
+            'create_user_account' => ['nullable', 'boolean'],
+            'username' => ['nullable', 'string', 'max:50', 'unique:users,username'],
+            'email' => ['nullable', 'email', 'max:100', 'unique:users,email'],
+            'password' => ['nullable', 'string', 'min:6'],
         ];
     }
 
@@ -23,6 +27,9 @@ class StoreGuardianRequest extends BaseApiRequest
             'full_name.required' => 'Nama lengkap orang tua/wali wajib diisi',
             'phone.required' => 'Nomor telepon/HP wajib diisi',
             'user_id.unique' => 'Akun user sudah terhubung dengan data orang tua/wali lain',
+            'username.unique' => 'Username ini sudah digunakan akun lain',
+            'email.unique' => 'Email ini sudah digunakan akun lain',
+            'password.min' => 'Kata sandi minimal 6 karakter',
         ];
     }
 }

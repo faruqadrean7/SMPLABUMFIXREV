@@ -439,6 +439,10 @@ export interface GuardianFormValues {
   occupation?: string;
   address?: string;
   user_id?: string;
+  create_user_account?: boolean;
+  username?: string;
+  email?: string;
+  password?: string;
 }
 
 export interface AttachStudentGuardianFormValues {
