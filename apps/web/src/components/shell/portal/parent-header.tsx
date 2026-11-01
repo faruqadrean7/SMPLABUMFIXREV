@@ -25,8 +25,8 @@ export function ParentHeader() {
   const navItems = [
     { title: 'Beranda', href: '/portal/ortu', icon: Users },
     { title: 'Presensi KBM', href: '/portal/ortu/presensi', icon: CalendarCheck },
-    { title: 'Izin & Sakit', href: '/portal/ortu/izin', icon: FileSpreadsheet },
-    { title: 'E-Rapor Anak', href: '/portal/ortu/rapor', icon: FileText },
+    { title: 'Izin & Sakit', href: '/portal/ortu/presensi', icon: FileSpreadsheet },
+    { title: 'E-Rapor Anak', href: '/portal/ortu/nilai', icon: FileText },
     { title: 'Catatan Karakter', href: '/portal/ortu/poin', icon: ShieldAlert },
   ];
 
