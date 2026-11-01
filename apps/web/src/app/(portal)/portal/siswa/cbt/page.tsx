@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { StudentCBTExamItem } from '@/lib/mock-student-data';
 import { useStudentExams, useStudentDashboard } from '@/lib/use-student-data';
+import { cbtApi } from '@/features/cbt/cbt-api';
 import { ExamListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -92,18 +93,27 @@ export default function StudentCBTListPage() {
     setTokenError(null);
   };
 
-  const handleVerifyTokenAndProceed = (e: React.FormEvent) => {
+  const handleVerifyTokenAndProceed = async (e: React.FormEvent) => {
     e.preventDefault();
     const exam = allExams.find(ex => ex.id === selectedExamId);
     if (!exam) return;
 
-    if (tokenInput.trim().toUpperCase() !== exam.token_required?.toUpperCase()) {
-      setTokenError(`Token tidak valid! Pastikan Anda memasukkan token yang tertulis di papan pengawas lab (contoh: ${exam.token_required})`);
+    const enteredToken = tokenInput.trim();
+    if (!enteredToken) {
+      setTokenError('Masukkan token sesi ujian yang diumumkan di ruang lab.');
       return;
     }
 
-    // Masuk ke exam workspace
-    router.push(`/siswa/cbt/${exam.id}`);
+    try {
+      await cbtApi.startStudentSession(exam.id, { token: enteredToken.toUpperCase() });
+      router.push(`/portal/siswa/ujian/${exam.id}`);
+    } catch (err: any) {
+      if (enteredToken.toUpperCase() === exam.token_required?.toUpperCase()) {
+        router.push(`/portal/siswa/ujian/${exam.id}`);
+      } else {
+        setTokenError(err?.message || `Token tidak valid! Pastikan Anda memasukkan token yang tertulis di papan pengawas lab.`);
+      }
+    }
   };
 
   // ─── DYNAMIC SUMMARY CARDS (HANYA MUNCUL JIKA DATANYA ADA) ───

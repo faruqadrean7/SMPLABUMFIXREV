@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { 
   MonitorPlay, 
   Clock, 
@@ -23,10 +23,16 @@ import { CBT_ACTIVE_EXAM_QUESTIONS, CBTQuestionDetail } from '@/lib/mock-student
 import { useStudentExams, useStudentDashboard } from '@/lib/use-student-data';
 import { apiClient } from '@/lib/api-client';
 
-export default function CBTExamWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
+export default function CBTExamWorkspacePage() {
   const router = useRouter();
-  const resolvedParams = use(params);
-  const examId = resolvedParams.id;
+  const routeParams = useParams();
+  const examId = (routeParams?.id as string) || '';
+
+  useEffect(() => {
+    if (examId) {
+      router.replace(`/portal/siswa/ujian/${examId}`);
+    }
+  }, [examId, router]);
 
   const { data: apiExams } = useStudentExams();
   const { data: studentDash } = useStudentDashboard();
