@@ -20,6 +20,8 @@ export interface QuestionItem {
   bank_id: string;
   question_type: QuestionType;
   stem: string;
+  media_url?: string;
+  body?: any;
   weight: number;
   options?: QuestionOptionItem[];
   created_at?: string;

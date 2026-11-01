@@ -21,7 +21,16 @@ class UpdateQuestionRequest extends FormRequest
             }
             $currentBody['content'] = (string) $this->input('stem');
             $currentBody['text'] = (string) $this->input('stem');
+            if ($this->has('media_url')) {
+                $currentBody['media_url'] = (string) $this->input('media_url');
+            }
             $merge['body'] = $currentBody;
+        } elseif ($this->has('media_url')) {
+            $currentBody = $this->input('body', []);
+            if (is_array($currentBody)) {
+                $currentBody['media_url'] = (string) $this->input('media_url');
+                $merge['body'] = $currentBody;
+            }
         }
 
         if ($this->has('options') && is_array($this->input('options'))) {

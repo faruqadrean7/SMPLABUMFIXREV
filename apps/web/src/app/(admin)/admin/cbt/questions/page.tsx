@@ -18,6 +18,9 @@ import {
   AlertCircle,
   Save,
   X,
+  Image as ImageIcon,
+  UploadCloud,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cbtApi } from '@/features/cbt/cbt-api';
+import { storageApi } from '@/features/storage/storage-api';
 import { subjectsApi } from '@/features/master/subjects-api';
 import { QuestionBankItem, QuestionItem, QuestionType } from '@/types/cbt';
 import { SubjectItem } from '@/types/master';
@@ -61,6 +65,7 @@ export default function QuestionBanksPage() {
   const [questionForm, setQuestionForm] = useState<{
     question_type: QuestionType;
     stem: string;
+    media_url?: string;
     weight: number;
     options: Array<{
       id?: string;
@@ -72,6 +77,7 @@ export default function QuestionBanksPage() {
   }>({
     question_type: 'pg',
     stem: '',
+    media_url: '',
     weight: 1.0,
     options: [
       { label: 'A', text: '', is_correct: true },
@@ -80,6 +86,39 @@ export default function QuestionBanksPage() {
       { label: 'D', text: '', is_correct: false },
     ],
   });
+
+  const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setFeedbackMsg({ type: 'error', text: 'Berkas harus berupa gambar (PNG, JPG, WebP, GIF).' });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setFeedbackMsg({ type: 'error', text: 'Ukuran gambar maksimal 5MB.' });
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const fileItem = await storageApi.uploadFileDirect({
+        file,
+        visibility: 'publik',
+        purpose: 'cbt_stimulus',
+      });
+      const url = fileItem.download_url || fileItem.url || `/api/v1/files/${fileItem.id}/download`;
+      setQuestionForm((prev) => ({ ...prev, media_url: url }));
+      setFeedbackMsg({ type: 'success', text: 'Gambar stimulus berhasil diunggah!' });
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal mengunggah berkas gambar.' });
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -161,6 +200,7 @@ export default function QuestionBanksPage() {
     setQuestionForm({
       question_type: 'pg',
       stem: '',
+      media_url: '',
       weight: 1.0,
       options: [
         { label: 'A', text: '', is_correct: true },
@@ -177,6 +217,7 @@ export default function QuestionBanksPage() {
     setQuestionForm({
       question_type: q.question_type,
       stem: q.stem,
+      media_url: q.media_url || q.body?.media_url || q.body?.image_url || '',
       weight: q.weight,
       options: q.options?.map((opt) => ({
         id: opt.id,
@@ -201,6 +242,7 @@ export default function QuestionBanksPage() {
         await cbtApi.updateQuestion(editingQuestion.id, {
           question_type: questionForm.question_type,
           stem: questionForm.stem,
+          media_url: questionForm.media_url || undefined,
           weight: questionForm.weight,
           options: questionForm.options,
         });
@@ -210,6 +252,7 @@ export default function QuestionBanksPage() {
           bank_id: selectedBankId,
           question_type: questionForm.question_type,
           stem: questionForm.stem,
+          media_url: questionForm.media_url || undefined,
           weight: questionForm.weight,
           options: questionForm.options,
         });
@@ -641,6 +684,72 @@ export default function QuestionBanksPage() {
                   className="text-xs mt-1"
                   required
                 />
+              </div>
+
+              {/* Upload Gambar Stimulus / Ilustrasi Soal */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/70">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <ImageIcon className="h-3.5 w-3.5 text-blue-600" />
+                    Gambar / Ilustrasi Stimulus Soal (Opsional)
+                  </label>
+                  {questionForm.media_url && (
+                    <button
+                      type="button"
+                      onClick={() => setQuestionForm({ ...questionForm, media_url: '' })}
+                      className="text-xs text-rose-600 hover:text-rose-700 font-medium flex items-center gap-1"
+                    >
+                      <Trash2 className="h-3 w-3" /> Hapus Gambar
+                    </button>
+                  )}
+                </div>
+
+                {questionForm.media_url ? (
+                  <div className="relative mt-2 p-2 bg-white rounded-lg border border-slate-200">
+                    <img
+                      src={questionForm.media_url}
+                      alt="Preview Stimulus"
+                      className="max-h-48 rounded object-contain mx-auto"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1 truncate text-center">
+                      {questionForm.media_url}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center gap-2 mt-1">
+                    <label className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-xs w-full sm:w-auto">
+                      {isUploadingImage ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                          <span>Mengunggah...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="h-3.5 w-3.5 text-slate-500" />
+                          <span>Unggah Gambar (JPG/PNG/WebP)</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        className="hidden"
+                        disabled={isUploadingImage}
+                        onChange={handleImageUpload}
+                      />
+                    </label>
+                    <span className="text-xs text-slate-400">atau tautan URL:</span>
+                    <Input
+                      type="url"
+                      placeholder="https://..."
+                      value={questionForm.media_url || ''}
+                      onChange={(e) => setQuestionForm({ ...questionForm, media_url: e.target.value })}
+                      className="text-xs flex-1 h-8"
+                    />
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-400">
+                  Mendukung gambar grafik, diagram geometri, peta, atau bacaan ilustrasi (maksimal 5MB).
+                </p>
               </div>
 
               {/* Dynamic Option Builder based on Type */}

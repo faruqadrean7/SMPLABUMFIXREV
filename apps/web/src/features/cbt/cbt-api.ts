@@ -83,6 +83,7 @@ export const cbtApi = {
     bank_id: string;
     question_type: string;
     stem: string;
+    media_url?: string;
     weight?: number;
     options?: Array<{
       label: string;
@@ -100,6 +101,7 @@ export const cbtApi = {
     data: {
       question_type?: string;
       stem?: string;
+      media_url?: string;
       weight?: number;
       options?: Array<{
         id?: string;

@@ -914,6 +914,17 @@ export default function StudentCbtPlayerPage() {
                   {currentQ.stem}
                 </div>
 
+                {/* Question Stimulus Media / Image */}
+                {(currentQ.body?.media_url || currentQ.body?.image_url || (currentQ as any).media_url) && (
+                  <div className="my-3 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 p-2 max-w-xl">
+                    <img
+                      src={currentQ.body?.media_url || currentQ.body?.image_url || (currentQ as any).media_url}
+                      alt="Gambar / Stimulus Soal"
+                      className="w-full h-auto max-h-80 object-contain rounded-lg mx-auto"
+                    />
+                  </div>
+                )}
+
                 {/* Question Options Renderer (6 Models) */}
                 <div className="space-y-3 pt-2">
                   {/* Model 1: Pilihan Ganda Tunggal (PG) */}
