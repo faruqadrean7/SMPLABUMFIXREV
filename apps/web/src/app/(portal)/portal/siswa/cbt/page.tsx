@@ -27,7 +27,6 @@ import { cbtApi } from '@/features/cbt/cbt-api';
 import { ExamListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
-import { cbtApi } from '@/features/cbt/cbt-api';
 
 export default function StudentCBTListPage() {
   const router = useRouter();
@@ -127,7 +126,6 @@ export default function StudentCBTListPage() {
       }
     } finally {
       setIsVerifyingToken(false);
-    }
     }
   };
 
