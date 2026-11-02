@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './api-client';
 import { ApiResponse } from '@/types/auth';
+import { useAuth } from '@/lib/auth-context';
 
 export type StudentProgramType = 'reguler' | 'tahfidz' | 'icp' | 'inklusi';
 
@@ -207,46 +208,58 @@ export interface SubmitTaskPayload {
 }
 
 export function useStudentDashboard() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
   return useQuery({
-    queryKey: ['student-dashboard'],
+    queryKey: ['student-dashboard', userKey],
     queryFn: async () => {
       const res = await apiClient.get<ApiResponse<StudentDashboardData>>('/me/student-dashboard');
       return res.data.data;
     },
     staleTime: 1000 * 60 * 2,
+    enabled: !!user,
   });
 }
 
 export function useStudentSchedule() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
   return useQuery({
-    queryKey: ['student-schedule'],
+    queryKey: ['student-schedule', userKey],
     queryFn: async () => {
       const res = await apiClient.get<ApiResponse<StudentScheduleItem[]>>('/me/schedule');
       return res.data.data;
     },
     staleTime: 1000 * 60 * 5,
+    enabled: !!user,
   });
 }
 
 export function useStudentGrades() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
   return useQuery({
-    queryKey: ['student-grades'],
+    queryKey: ['student-grades', userKey],
     queryFn: async () => {
       const res = await apiClient.get<ApiResponse<StudentGradeItem[]>>('/me/grades');
       return res.data.data;
     },
     staleTime: 1000 * 60 * 5,
+    enabled: !!user,
   });
 }
 
 export function useStudentTasks() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
   return useQuery({
-    queryKey: ['student-tasks'],
+    queryKey: ['student-tasks', userKey],
     queryFn: async () => {
       const res = await apiClient.get<ApiResponse<StudentTaskItem[]>>('/me/tasks');
       return res.data.data;
     },
     staleTime: 1000 * 60 * 2,
+    enabled: !!user,
   });
 }
 
@@ -266,13 +279,16 @@ export function useSubmitTask() {
 }
 
 export function useStudentExams() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
   return useQuery({
-    queryKey: ['student-exams'],
+    queryKey: ['student-exams', userKey],
     queryFn: async () => {
       const res = await apiClient.get<ApiResponse<StudentExamItem[]>>('/me/exams');
       return res.data.data;
     },
     staleTime: 1000 * 60 * 2,
+    enabled: !!user,
   });
 }
 

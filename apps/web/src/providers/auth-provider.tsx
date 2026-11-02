@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api/api-client';
 import { tokenStorage } from '@/lib/auth/token-storage';
 import { resolveUserDestination, sanitizeRoles } from '@/lib/rbac/evaluator';
 import { ApiResponse } from '@/types/api';
+import { queryClient } from './query-provider';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
@@ -180,6 +181,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tokenStorage.setTokens(tokens.accessToken, tokens.refreshToken);
       tokenStorage.setUser(loggedUser);
       setUser(loggedUser);
+      try {
+        queryClient.clear();
+      } catch {
+        // ignore
+      }
 
       const roles = sanitizeRoles(loggedUser.roles);
       if (roles.length > 0) {
@@ -205,8 +211,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tokenStorage.clearAll();
       setUser(null);
       setActiveRoleState(null);
+      try {
+        queryClient.clear();
+      } catch {
+        // ignore
+      }
       setIsLoading(false);
-      router.push('/masuk');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/masuk';
+      } else {
+        router.push('/masuk');
+      }
     }
   };
 

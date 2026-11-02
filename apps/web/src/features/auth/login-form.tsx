@@ -68,10 +68,13 @@ export function LoginForm() {
       const result = await login(payload);
 
       if (result.destination) {
-        if (redirectParam && redirectParam.startsWith('/')) {
-          router.push(redirectParam);
+        const targetPath = redirectParam && redirectParam.startsWith('/')
+          ? redirectParam
+          : getDestinationPath(result.destination);
+        if (typeof window !== 'undefined') {
+          window.location.href = targetPath;
         } else {
-          router.push(getDestinationPath(result.destination));
+          router.push(targetPath);
         }
       }
     } catch (err: unknown) {
@@ -102,10 +105,13 @@ export function LoginForm() {
       });
 
       if (result.destination) {
-        if (redirectParam && redirectParam.startsWith('/')) {
-          router.push(redirectParam);
+        const targetPath = redirectParam && redirectParam.startsWith('/')
+          ? redirectParam
+          : getDestinationPath(result.destination);
+        if (typeof window !== 'undefined') {
+          window.location.href = targetPath;
         } else {
-          router.push(getDestinationPath(result.destination));
+          router.push(targetPath);
         }
       }
     } catch (err: unknown) {
