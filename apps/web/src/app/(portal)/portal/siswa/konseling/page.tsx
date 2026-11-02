@@ -29,9 +29,9 @@ export default function StudentKonselingPage() {
   // Form State
   const [topic, setTopic] = useState('');
   const [category, setCategory] = useState<'Akademik' | 'Sosial & Teman' | 'Pengembangan Diri' | 'Keluarga'>('Pengembangan Diri');
-  const [counselor, setCounselor] = useState('Ibu Ratna Dewi, S.Pd., Kons.');
+  const [counselor, setCounselor] = useState('');
   const [preferredDate, setPreferredDate] = useState('');
-  const [preferredTime, setPreferredTime] = useState('13:30 WIB (Sepulang Sekolah)');
+  const [preferredTime, setPreferredTime] = useState('');
   const [notes, setNotes] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -187,8 +187,9 @@ export default function StudentKonselingPage() {
                     onChange={(e) => setCounselor(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 bg-white focus:outline-none focus:border-blue-900 shadow-2xs cursor-pointer"
                   >
-                    <option value="Ibu Ratna Dewi, S.Pd., Kons.">Ibu Ratna Dewi, S.Pd., Kons. (Koordinator BK)</option>
-                    <option value="Bapak Dedi Kurniawan, M.Pd.">Bapak Dedi Kurniawan, M.Pd. (Konselor Putra)</option>
+                    <option value="">-- Pilih Guru Konselor BK (Opsional / Fleksibel) --</option>
+                    <option value="Koordinator BK">Koordinator Bimbingan Konseling</option>
+                    <option value="Konselor BK">Konselor Bimbingan Konseling</option>
                   </select>
                 </div>
 
@@ -201,9 +202,10 @@ export default function StudentKonselingPage() {
                     onChange={(e) => setPreferredTime(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 bg-white focus:outline-none focus:border-blue-900 shadow-2xs cursor-pointer"
                   >
+                    <option value="">-- Pilih Preferensi Waktu --</option>
                     <option value="13:30 WIB (Sepulang Sekolah)">Sepulang Sekolah (13:30 - 14:30 WIB)</option>
-                    <option value="Jam Istirahat Pertama (09:45 WIB)">Jam Istirahat 1 (09:45 - 10:15 WIB)</option>
-                    <option value="Jam Istirahat Siang (12:30 WIB)">Jam Istirahat Siang (12:30 - 13:00 WIB)</option>
+                    <option value="09:45 WIB (Jam Istirahat 1)">Jam Istirahat 1 (09:45 - 10:15 WIB)</option>
+                    <option value="12:30 WIB (Jam Istirahat Siang)">Jam Istirahat Siang (12:30 - 13:00 WIB)</option>
                   </select>
                 </div>
               </div>
@@ -292,7 +294,7 @@ export default function StudentKonselingPage() {
 
                     {item.notes && (
                       <p className="text-xs text-slate-600 italic bg-white p-2.5 rounded-lg border border-slate-200/80 mt-1">
-                        "{item.notes}"
+                        &ldquo;{item.notes}&rdquo;
                       </p>
                     )}
                   </div>
@@ -342,13 +344,13 @@ export default function StudentKonselingPage() {
             <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">Kontak Cepat Konselor</h4>
             <div className="space-y-2 text-xs text-slate-700">
               <div className="p-3 rounded-xl bg-slate-50/70 border border-slate-200/80">
-                <p className="font-bold text-slate-900">Ibu Ratna Dewi, S.Pd., Kons.</p>
-                <p className="text-slate-500 text-[11px]">Koordinator Bimbingan Konseling</p>
+                <p className="font-bold text-slate-900">Koordinator Bimbingan Konseling</p>
+                <p className="text-slate-500 text-[11px]">Layanan Konseling &amp; Bimbingan Siswa</p>
                 <p className="text-blue-900 font-mono font-semibold mt-1">Ruang BK Lt. 2 Gedung A</p>
               </div>
               <div className="p-3 rounded-xl bg-slate-50/70 border border-slate-200/80">
-                <p className="font-bold text-slate-900">Bapak Dedi Kurniawan, M.Pd.</p>
-                <p className="text-slate-500 text-[11px]">Konselor Putra & Pembinaan Karakter</p>
+                <p className="font-bold text-slate-900">Konselor Bimbingan Konseling</p>
+                <p className="text-slate-500 text-[11px]">Konsultasi Pembinaan Karakter &amp; Akademik</p>
                 <p className="text-blue-900 font-mono font-semibold mt-1">Ruang BK Lt. 2 Gedung A</p>
               </div>
             </div>

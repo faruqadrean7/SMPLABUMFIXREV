@@ -2,12 +2,13 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Globe, Award, BookOpen, Calendar, ArrowLeft } from 'lucide-react';
+import { Globe, Award, ArrowLeft } from 'lucide-react';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
+import { ErrorState } from '@/components/ui/error-state';
 
 export default function StudentCambridgePage() {
-  const { data: studentDash, isLoading } = useStudentDashboard();
+  const { data: studentDash, isLoading, isError, refetch } = useStudentDashboard();
 
   if (isLoading) {
     return (
@@ -17,13 +18,22 @@ export default function StudentCambridgePage() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="py-12">
+        <ErrorState
+          title="Gagal Memuat Portofolio Cambridge"
+          message="Terjadi kendala saat mengambil data portofolio Cambridge dari server. Silakan coba kembali."
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
+
   const profile = studentDash?.programProfile as any;
-  const candidateId = profile?.cambridge_candidate_id ?? 'ID-MAL-2026-042';
-  const readiness = profile?.checkpoint_readiness ?? {
-    english: { score: 4.8, status: 'Ready' },
-    math: { score: 5.2, status: 'Exceeding' },
-    science: { score: 4.5, status: 'Ready' },
-  };
+  const candidateId = profile?.cambridge_candidate_id || '-';
+  const readiness = profile?.checkpoint_readiness || {};
+  const readinessEntries = Object.entries(readiness);
 
   return (
     <div className="flex flex-col gap-4 text-slate-900">
@@ -34,8 +44,10 @@ export default function StudentCambridgePage() {
             <Globe className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-extrabold tracking-tight">Cambridge & Portofolio ICP</h1>
-            <p className="text-xs text-slate-500">International Class Program • Candidate: {candidateId}</p>
+            <h1 className="text-lg font-extrabold tracking-tight">Cambridge &amp; Portofolio ICP</h1>
+            <p className="text-xs text-slate-500">
+              International Class Program • Candidate: {candidateId}
+            </p>
           </div>
         </div>
         <Link
@@ -47,25 +59,35 @@ export default function StudentCambridgePage() {
       </div>
 
       {/* Checkpoint Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {Object.entries(readiness).map(([subject, data]: [string, any]) => (
-          <div key={subject} className="p-4 rounded-xl bg-white border border-slate-200 flex flex-col justify-between">
-            <div>
-              <span className="text-xs font-semibold text-blue-900 uppercase tracking-wide">
-                Checkpoint {subject.toUpperCase()}
-              </span>
-              <div className="mt-2 text-2xl font-extrabold text-slate-900">
-                Score: {data.score} <span className="text-xs text-slate-400 font-normal">/ 6.0</span>
+      {readinessEntries.length === 0 ? (
+        <div className="p-8 text-center rounded-xl bg-white border border-slate-200">
+          <Award className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-60" />
+          <p className="text-xs font-bold text-slate-700">Belum Ada Data Kesiapan Checkpoint</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Data evaluasi kesiapan ujian Cambridge belum dimasukkan oleh tim kurikulum ICP.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {readinessEntries.map(([subject, data]: [string, any]) => (
+            <div key={subject} className="p-4 rounded-xl bg-white border border-slate-200 flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-semibold text-blue-900 uppercase tracking-wide">
+                  Checkpoint {subject.toUpperCase()}
+                </span>
+                <div className="mt-2 text-2xl font-extrabold text-slate-900">
+                  Score: {data?.score ?? '-'} <span className="text-xs text-slate-400 font-normal">/ 6.0</span>
+                </div>
+              </div>
+              <div className="mt-3">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-900 border border-blue-200">
+                  Status: {data?.status ?? '-'}
+                </span>
               </div>
             </div>
-            <div className="mt-3">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-900 border border-blue-200">
-                Status: {data.status}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -2,12 +2,13 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { BookOpen, Award, CheckCircle2, Calendar, UserCheck, ArrowLeft } from 'lucide-react';
+import { BookOpen, CheckCircle2, UserCheck, ArrowLeft } from 'lucide-react';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
+import { ErrorState } from '@/components/ui/error-state';
 
 export default function StudentHafalanPage() {
-  const { data: studentDash, isLoading } = useStudentDashboard();
+  const { data: studentDash, isLoading, isError, refetch } = useStudentDashboard();
 
   if (isLoading) {
     return (
@@ -17,13 +18,25 @@ export default function StudentHafalanPage() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="py-12">
+        <ErrorState
+          title="Gagal Memuat Data Hafalan"
+          message="Terjadi kendala saat mengambil data capaian hafalan dari server. Silakan coba kembali."
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
+
   const profile = studentDash?.programProfile as any;
-  const currentJuz = profile?.current_juz ?? 2;
-  const targetJuz = profile?.target_juz ?? 3;
-  const lastSurah = profile?.current_surah ?? 'Al-Mulk: 1-30';
-  const lastGrade = profile?.last_tasmi_grade ?? 'Mumtaz';
-  const evaluator = profile?.tasmi_evaluator ?? 'Ustadz Abdullah, S.Pd.I';
-  const percentage = Math.min(100, Math.round((currentJuz / targetJuz) * 100));
+  const currentJuz = typeof profile?.current_juz === 'number' ? profile.current_juz : 0;
+  const targetJuz = typeof profile?.target_juz === 'number' ? profile.target_juz : 0;
+  const lastSurah = profile?.current_surah ?? '-';
+  const lastGrade = profile?.last_tasmi_grade ?? '-';
+  const evaluator = profile?.tasmi_evaluator ?? '-';
+  const percentage = targetJuz > 0 ? Math.min(100, Math.round((currentJuz / targetJuz) * 100)) : 0;
 
   return (
     <div className="flex flex-col gap-4 text-slate-900">
@@ -52,7 +65,7 @@ export default function StudentHafalanPage() {
           <div>
             <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wide">Capaian Target</span>
             <div className="mt-2 text-2xl font-extrabold text-emerald-950">
-              {currentJuz} dari {targetJuz} Juz
+              {targetJuz > 0 ? `${currentJuz} dari ${targetJuz} Juz` : `${currentJuz} Juz (Target belum diisi)`}
             </div>
           </div>
           <div className="mt-3">
