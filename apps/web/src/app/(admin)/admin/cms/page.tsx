@@ -30,6 +30,8 @@ import {
   UploadCloud,
   Pencil,
   BookOpen,
+  Share2,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +44,7 @@ import { cmsApi } from '@/features/cms/cms-api';
 import {
   SiteProfile,
   SiteSettingsPayload,
+  FeaturedProgram,
   PostItem,
   PostCategoryItem,
   CreatePostPayload,
@@ -101,6 +104,13 @@ export default function CmsAdminPage() {
       postal_code: '',
       maps_embed_url: '',
     },
+    social_media: {
+      instagram: '',
+      youtube: '',
+      facebook: '',
+      twitter: '',
+      tiktok: '',
+    },
     profile: {
       vision: '',
       mission: [],
@@ -113,6 +123,7 @@ export default function CmsAdminPage() {
         score: 0,
         certificate_no: '',
       },
+      featured_programs: [],
     },
   });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -235,6 +246,13 @@ export default function CmsAdminPage() {
               postal_code: d.address?.postal_code || '',
               maps_embed_url: d.address?.maps_embed_url || '',
             },
+            social_media: {
+              instagram: d.social_media?.instagram || '',
+              youtube: d.social_media?.youtube || '',
+              facebook: d.social_media?.facebook || '',
+              twitter: d.social_media?.twitter || '',
+              tiktok: d.social_media?.tiktok || '',
+            },
             profile: {
               vision: d.profile?.vision || '',
               mission: d.profile?.mission || [],
@@ -247,6 +265,7 @@ export default function CmsAdminPage() {
                 score: d.profile?.accreditation?.score || 0,
                 certificate_no: d.profile?.accreditation?.certificate_no || '',
               },
+              featured_programs: d.profile?.featured_programs || [],
             },
           });
           setMissionInput((d.profile?.mission || []).join('\n'));
@@ -319,6 +338,45 @@ export default function CmsAdminPage() {
   // =========================================================================
   // ACTIONS: PROFILE
   // =========================================================================
+  const handleAddFeaturedProgram = () => {
+    const currentPrograms = profileForm.profile?.featured_programs || [];
+    setProfileForm({
+      ...profileForm,
+      profile: {
+        ...profileForm.profile,
+        featured_programs: [...currentPrograms, { title: '', description: '', icon: '' }],
+      },
+    });
+  };
+
+  const handleUpdateFeaturedProgram = (index: number, field: keyof FeaturedProgram, value: string) => {
+    const currentPrograms = profileForm.profile?.featured_programs || [];
+    const updated = currentPrograms.map((item, idx) => {
+      if (idx === index) {
+        return { ...item, [field]: value };
+      }
+      return item;
+    });
+    setProfileForm({
+      ...profileForm,
+      profile: {
+        ...profileForm.profile,
+        featured_programs: updated,
+      },
+    });
+  };
+
+  const handleRemoveFeaturedProgram = (index: number) => {
+    const currentPrograms = profileForm.profile?.featured_programs || [];
+    setProfileForm({
+      ...profileForm,
+      profile: {
+        ...profileForm.profile,
+        featured_programs: currentPrograms.filter((_, idx) => idx !== index),
+      },
+    });
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
@@ -329,15 +387,32 @@ export default function CmsAdminPage() {
         .map((m) => m.trim())
         .filter((m) => m.length > 0);
 
+      const validPrograms = (profileForm.profile?.featured_programs || [])
+        .filter((p) => p.title && p.title.trim().length > 0)
+        .map((p) => ({
+          title: p.title.trim(),
+          description: p.description?.trim() || undefined,
+          icon: p.icon?.trim() || undefined,
+        }));
+
       const payload: SiteSettingsPayload = {
         ...profileForm,
         profile: {
           ...profileForm.profile,
           mission: missions,
+          featured_programs: validPrograms,
         },
       };
 
       await cmsApi.updateSiteSettings(payload);
+      setProfileForm((prev) => ({
+        ...prev,
+        profile: {
+          ...prev.profile,
+          mission: missions,
+          featured_programs: validPrograms,
+        },
+      }));
       setSuccessMessage('Pengaturan profil situs sekolah berhasil disimpan.');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Gagal menyimpan profil situs.');
@@ -1020,6 +1095,87 @@ export default function CmsAdminPage() {
                         placeholder="081234567890"
                       />
                     </div>
+
+                    {/* Media Sosial Resmi */}
+                    <div className="pt-4 border-t border-slate-200 space-y-4">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          <Share2 className="h-3.5 w-3.5 text-primary" />
+                          Media Sosial Resmi
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Bisa berupa username (misal @sekolah) atau URL lengkap. Sistem publik akan menormalkan tautan secara otomatis. Kosongkan jika tidak ada.
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">Instagram</label>
+                          <Input
+                            value={profileForm.social_media?.instagram || ''}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                social_media: { ...profileForm.social_media, instagram: e.target.value },
+                              })
+                            }
+                            placeholder="@sekolah atau https://instagram.com/sekolah"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">YouTube</label>
+                          <Input
+                            value={profileForm.social_media?.youtube || ''}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                social_media: { ...profileForm.social_media, youtube: e.target.value },
+                              })
+                            }
+                            placeholder="@sekolah atau https://youtube.com/@sekolah"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">Facebook</label>
+                          <Input
+                            value={profileForm.social_media?.facebook || ''}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                social_media: { ...profileForm.social_media, facebook: e.target.value },
+                              })
+                            }
+                            placeholder="nama_halaman atau URL profil"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">Twitter / X</label>
+                          <Input
+                            value={profileForm.social_media?.twitter || ''}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                social_media: { ...profileForm.social_media, twitter: e.target.value },
+                              })
+                            }
+                            placeholder="@sekolah atau URL profil"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">TikTok</label>
+                          <Input
+                            value={profileForm.social_media?.tiktok || ''}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                social_media: { ...profileForm.social_media, tiktok: e.target.value },
+                              })
+                            }
+                            placeholder="@sekolah atau URL profil"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -1153,6 +1309,107 @@ export default function CmsAdminPage() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Program Unggulan Sekolah */}
+              <Card className="rounded-sm">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      Program Unggulan Sekolah
+                    </CardTitle>
+                    <CardDescription>
+                      Daftar program unggulan yang ditampilkan pada beranda dan halaman akademik sekolah.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddFeaturedProgram}
+                    className="gap-1.5 text-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Tambah Program
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {(!profileForm.profile?.featured_programs || profileForm.profile.featured_programs.length === 0) ? (
+                    <div className="text-center py-8 border border-dashed border-slate-200 rounded-md bg-slate-50/50">
+                      <p className="text-xs text-slate-500">Belum ada program unggulan yang ditambahkan.</p>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Bila dikosongkan, website publik akan menampilkan program bawaan (Reguler, ICP, Tahfidz, Inklusi).
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddFeaturedProgram}
+                        className="mt-3 gap-1.5 text-xs"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Tambah Program Pertama
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {profileForm.profile.featured_programs.map((program, idx) => (
+                        <div
+                          key={idx}
+                          className="p-4 border border-slate-200 rounded-md bg-slate-50/50 space-y-3"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-700">Program #{idx + 1}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveFeaturedProgram(idx)}
+                              className="h-7 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs gap-1"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Hapus
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="md:col-span-2">
+                              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                                Judul Program <span className="text-rose-500">*</span>
+                              </label>
+                              <Input
+                                value={program.title || ''}
+                                onChange={(e) => handleUpdateFeaturedProgram(idx, 'title', e.target.value)}
+                                placeholder="Contoh: Kelas Internasional (ICP)"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                                Label / Badge / Ikon (Opsional)
+                              </label>
+                              <Input
+                                value={program.icon || ''}
+                                onChange={(e) => handleUpdateFeaturedProgram(idx, 'icon', e.target.value)}
+                                placeholder="Contoh: Cambridge, Tahfidz, Unggulan"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-slate-700 block mb-1">
+                              Deskripsi Singkat (Opsional)
+                            </label>
+                            <Textarea
+                              rows={2}
+                              value={program.description || ''}
+                              onChange={(e) => handleUpdateFeaturedProgram(idx, 'description', e.target.value)}
+                              placeholder="Penjelasan keunggulan program kurikulum atau fasilitas..."
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Tombol Simpan */}
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
