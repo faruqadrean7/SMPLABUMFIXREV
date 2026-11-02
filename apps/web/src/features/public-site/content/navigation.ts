@@ -10,7 +10,9 @@ export const PUBLIC_NAV_ITEMS: NavItem[] = [
   { label: 'Profil', href: '/profil' },
   { label: 'Akademik', href: '/akademik' },
   { label: 'Berita', href: '/berita' },
+  { label: 'Agenda', href: '/agenda' },
   { label: 'Galeri', href: '/galeri' },
+  { label: 'Unduhan', href: '/unduhan' },
   { label: 'Kontak', href: '/kontak' },
 ];
 
@@ -47,7 +49,9 @@ export const FOOTER_QUICK_LINKS: QuickLinkItem[] = [
   { label: 'Profil & Sejarah', href: '/profil' },
   { label: 'Kurikulum & Program', href: '/akademik' },
   { label: 'Berita & Pengumuman', href: '/berita' },
+  { label: 'Agenda Kegiatan', href: '/agenda' },
   { label: 'Galeri Aktivitas', href: '/galeri' },
+  { label: 'Pusat Unduhan', href: '/unduhan' },
   { label: 'Pendaftaran Siswa Baru (PPDB)', href: '/ppdb' },
 ];
 

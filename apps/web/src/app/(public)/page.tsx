@@ -17,6 +17,7 @@ import {
   Mail,
   MapPin,
   Calendar,
+  Clock,
   AlertCircle,
   RotateCw,
   ChevronRight,
@@ -65,6 +66,18 @@ export default function HomePage() {
   const { data: activeWave } = useQuery({
     queryKey: ['public-active-wave'],
     queryFn: () => publicApi.getActiveWave(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Query 3 agenda kegiatan terbaru/terdekat dari backend (FE-CMS-PUBLIC-01)
+  const {
+    data: upcomingEvents,
+    isLoading: isLoadingEvents,
+    isError: isEventsError,
+    refetch: refetchEvents,
+  } = useQuery({
+    queryKey: ['public-latest-events'],
+    queryFn: () => publicApi.getLatestEvents(3),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -763,6 +776,139 @@ export default function HomePage() {
                   </article>
                 );
               })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* =========================================================================
+          5b. AGENDA & KEGIATAN SEKOLAH TERDEKAT (FE-CMS-PUBLIC-01)
+          ========================================================================= */}
+      <section aria-labelledby="agenda-heading" className="py-14 sm:py-18 bg-white border-t border-gray-100">
+        <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div className="space-y-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#C89332] block">
+                AGENDA &amp; JADWAL KEGIATAN
+              </span>
+              <h2
+                id="agenda-heading"
+                className="font-pub-heading text-2xl sm:text-3xl font-bold text-[#062940]"
+              >
+                Agenda Sekolah Terdekat
+              </h2>
+            </div>
+            <Link
+              href="/agenda"
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#0A3D62] hover:text-[#C89332] transition-colors focus:outline-none focus:underline self-start sm:self-auto"
+            >
+              <span>Lihat Semua Agenda</span>
+              <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+
+          {/* Loading Skeleton */}
+          {isLoadingEvents && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5" aria-busy="true">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="bg-slate-50 border border-slate-200/60 rounded-2xl p-5 animate-pulse space-y-3">
+                  <div className="h-4 bg-slate-200 rounded w-1/4" />
+                  <div className="h-5 bg-slate-200 rounded w-3/4" />
+                  <div className="h-4 bg-slate-200 rounded w-1/2" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Error State */}
+          {!isLoadingEvents && isEventsError && (
+            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-center max-w-md mx-auto space-y-2">
+              <p className="text-xs text-slate-600">Tidak dapat memuat agenda terbaru saat ini.</p>
+              <button
+                type="button"
+                onClick={() => refetchEvents()}
+                className="text-xs font-semibold text-[#0A3D62] hover:underline"
+              >
+                Coba lagi
+              </button>
+            </div>
+          )}
+
+          {/* Data Agenda */}
+          {!isLoadingEvents && !isEventsError && upcomingEvents && upcomingEvents.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {upcomingEvents.map((evt) => {
+                let day = '--';
+                let monthStr = '---';
+                try {
+                  const d = new Date(evt.start_at);
+                  day = d.getDate().toString().padStart(2, '0');
+                  monthStr = new Intl.DateTimeFormat('id-ID', { month: 'short', year: 'numeric' }).format(d);
+                } catch {
+                  // ignore
+                }
+
+                const catLabel =
+                  evt.category === 'ujian'
+                    ? 'Ujian / Asesmen'
+                    : evt.category === 'libur'
+                    ? 'Libur Resmi'
+                    : 'Kegiatan Sekolah';
+
+                const catBadge =
+                  evt.category === 'ujian'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : evt.category === 'libur'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200';
+
+                return (
+                  <div
+                    key={evt.id}
+                    className="bg-[#F8FAFC] border border-slate-200/80 rounded-2xl p-5 hover:border-[#C89332]/50 hover:shadow-xs transition-all flex flex-col justify-between group"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 flex flex-col items-center justify-center shrink-0 group-hover:bg-[#062940] group-hover:text-white transition-colors">
+                            <span className="text-sm font-extrabold leading-none">{day}</span>
+                            <span className="text-[9px] uppercase font-bold text-slate-500 group-hover:text-white/80 leading-tight mt-0.5">
+                              {monthStr.split(' ')[0]}
+                            </span>
+                          </div>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {monthStr}
+                          </span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${catBadge}`}>
+                          {catLabel}
+                        </span>
+                      </div>
+
+                      <h3 className="font-pub-heading text-sm font-bold text-slate-900 group-hover:text-[#0A3D62] transition-colors line-clamp-2 leading-snug">
+                        {evt.title}
+                      </h3>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
+                      <span>SMP Laboratorium UM</span>
+                      <Link href="/agenda" className="font-semibold text-[#0A3D62] hover:text-[#C89332]">
+                        Detail →
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!isLoadingEvents && !isEventsError && (!upcomingEvents || upcomingEvents.length === 0) && (
+            <div className="bg-[#F8FAFC] rounded-2xl border border-slate-200/70 p-6 text-center text-xs text-slate-500">
+              Belum ada agenda kegiatan terdekat yang dijadwalkan.{' '}
+              <Link href="/agenda" className="text-[#0A3D62] font-semibold hover:underline">
+                Lihat kalender kegiatan
+              </Link>
             </div>
           )}
         </div>
