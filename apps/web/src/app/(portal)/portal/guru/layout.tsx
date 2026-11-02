@@ -125,7 +125,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     },
     {
       name: 'Sarpras & Fasilitas',
-      href: '/guru/sarpras',
+      href: '/guru/fasilitas',
       icon: Building2,
     },
   ];
