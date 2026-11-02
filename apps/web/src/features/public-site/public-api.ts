@@ -8,6 +8,8 @@ import {
   GetPublicEventsParams,
   PublicDownloadItem,
   GetPublicDownloadsParams,
+  PublicBulletinItem,
+  GetPublicBulletinsParams,
 } from './types';
 
 export interface GetPublicPostsParams {
@@ -189,6 +191,28 @@ export const publicApi = {
    */
   getPublicDownload: async (id: string): Promise<PublicDownloadItem> => {
     const res = await apiClient.get<ApiResponse<PublicDownloadItem>>(`/public/downloads/${id}`);
+    return res.data.data;
+  },
+
+  /**
+   * BE-CMS-03: Mengambil daftar buletin / majalah sekolah publik
+   */
+  getPublicBulletins: async (params?: GetPublicBulletinsParams): Promise<PaginatedResponse<PublicBulletinItem>> => {
+    const res = await apiClient.get<PaginatedResponse<PublicBulletinItem>>('/public/bulletins', {
+      params: {
+        page: params?.page ?? 1,
+        per_page: params?.per_page ?? 9,
+        search: params?.search || undefined,
+      },
+    });
+    return res.data;
+  },
+
+  /**
+   * BE-CMS-03: Mengambil detail buletin publik berdasarkan ID
+   */
+  getPublicBulletin: async (id: string): Promise<PublicBulletinItem> => {
+    const res = await apiClient.get<ApiResponse<PublicBulletinItem>>(`/public/bulletins/${id}`);
     return res.data.data;
   },
 };
