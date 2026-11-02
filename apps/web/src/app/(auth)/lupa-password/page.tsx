@@ -53,7 +53,7 @@ export default function LupaPasswordPage() {
           Pemulihan Kata Sandi
         </h1>
         <p className="mt-1 text-xs text-slate-600 font-medium">
-          SMP-SMA Laboratorium Universitas Negeri Malang (SISTLABUM)
+          SMP Laboratorium Universitas Negeri Malang (SISTLABUM)
         </p>
       </div>
 
