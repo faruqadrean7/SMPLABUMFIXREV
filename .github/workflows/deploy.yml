@@ -10,11 +10,17 @@ jobs:
     steps:
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Kunci dekripsi manifest CBT (hanya ciphertext .enc yang ada di repo).
+          CBT_MANIFEST_KEY: ${{ secrets.CBT_MANIFEST_KEY }}
+          # Set variabel repo CBT_DEMO_SCHEDULE=1 untuk menjadwalkan ujian demo otomatis.
+          CBT_DEMO_SCHEDULE: ${{ vars.CBT_DEMO_SCHEDULE }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          envs: CBT_MANIFEST_KEY,CBT_DEMO_SCHEDULE
           script: |
             set -e
             echo "Deploying update..."
@@ -26,6 +32,28 @@ jobs:
             cd /home/fafnir/SMPLABUMFIXREV/apps/api
             php /home/fafnir/.local/bin/composer install --no-dev --optimize-autoloader --no-interaction
             php artisan migrate --force
+
+            # CBT: impor paket PAS Matematika dari manifest terenkripsi. Idempoten.
+            # Hanya ciphertext (.enc) ada di repo; didekripsi di sini pakai CBT_MANIFEST_KEY.
+            if [ -n "$CBT_MANIFEST_KEY" ]; then
+              echo "Seeding paket CBT Matematika..."
+              mkdir -p storage/app/import
+              openssl enc -d -aes-256-cbc -pbkdf2 -md sha256 -iter 100000 \
+                -in deploy/cbt/mtk-pas-9-genap-2526.json.enc \
+                -out storage/app/import/mtk-pas-9-genap-2526.json \
+                -pass env:CBT_MANIFEST_KEY
+              php artisan cbt:import-package storage/app/import/mtk-pas-9-genap-2526.json
+              php artisan cbt:attach-mtk-figures
+              if [ "${CBT_DEMO_SCHEDULE:-0}" = "1" ]; then
+                php artisan cbt:demo-schedule-exam
+              fi
+              # Hapus plaintext (berisi kunci jawaban) setelah impor; data sudah di DB.
+              rm -f storage/app/import/mtk-pas-9-genap-2526.json
+              echo "Seeding CBT selesai."
+            else
+              echo "CBT_MANIFEST_KEY tidak diset; lewati seeding CBT."
+            fi
+
             php artisan config:cache
             php artisan route:cache
 
