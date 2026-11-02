@@ -8,7 +8,9 @@ import {
   MapPin, 
   Printer, 
   GraduationCap, 
-  BookOpen
+  BookOpen,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { useTeacherSchedules } from '@/lib/use-teacher-data';
 
@@ -23,42 +25,54 @@ interface ScheduleSlot {
   jpCount: number;
 }
 
-const defaultScheduleSlots: ScheduleSlot[] = [
-  // Senin
-  { id: 'sch-1', day: 'Senin', period: 1, timeRange: '07:30 - 09:00', className: 'Kelas IX-A', subjectName: 'Informatika', roomName: 'Lab Komputer 1', jpCount: 2 },
-  { id: 'sch-2', day: 'Senin', period: 4, timeRange: '10:00 - 11:30', className: 'Kelas IX-B', subjectName: 'Pemrograman Web', roomName: 'Lab Multimedia', jpCount: 2 },
-  // Selasa
-  { id: 'sch-3', day: 'Selasa', period: 2, timeRange: '08:15 - 09:45', className: 'Kelas VIII-C', subjectName: 'Informatika Dasar', roomName: 'Lab Komputer 2', jpCount: 2 },
-  { id: 'sch-4', day: 'Selasa', period: 6, timeRange: '12:45 - 14:15', className: 'Kelas IX-A', subjectName: 'Praktikum Web', roomName: 'Lab Komputer 1', jpCount: 2 },
-  // Rabu (Hari Ini)
-  { id: 'sch-5', day: 'Rabu', period: 1, timeRange: '07:30 - 09:00', className: 'Kelas IX-A', subjectName: 'Informatika & Pemrograman', roomName: 'Lab Komputer 1', jpCount: 2 },
-  { id: 'sch-6', day: 'Rabu', period: 4, timeRange: '10:00 - 11:30', className: 'Kelas IX-B', subjectName: 'Pemrograman Web & Logika', roomName: 'Lab Multimedia', jpCount: 2 },
-  // Kamis
-  { id: 'sch-7', day: 'Kamis', period: 2, timeRange: '08:15 - 09:45', className: 'Kelas VIII-C', subjectName: 'Informatika Dasar', roomName: 'Lab Komputer 2', jpCount: 2 },
-  { id: 'sch-8', day: 'Kamis', period: 5, timeRange: '10:30 - 12:00', className: 'Kelas IX-B', subjectName: 'Informatika', roomName: 'Lab Komputer 1', jpCount: 2 },
-  // Jumat
-  { id: 'sch-9', day: 'Jumat', period: 1, timeRange: '07:30 - 09:00', className: 'Kelas IX-A', subjectName: 'Proyek P5 Rekayasa Teknologi', roomName: 'Lab Komputer 1', jpCount: 2 },
-];
+const normalizeDay = (dayName?: string, dayOfWeek?: number): 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' => {
+  if (dayName) {
+    const d = dayName.trim().toLowerCase();
+    if (d.includes('senin') || d === 'monday') return 'Senin';
+    if (d.includes('selasa') || d === 'tuesday') return 'Selasa';
+    if (d.includes('rabu') || d === 'wednesday') return 'Rabu';
+    if (d.includes('kamis') || d === 'thursday') return 'Kamis';
+    if (d.includes('jumat') || d === "jum'at" || d === 'friday') return 'Jumat';
+  }
+  if (dayOfWeek === 1) return 'Senin';
+  if (dayOfWeek === 2) return 'Selasa';
+  if (dayOfWeek === 3) return 'Rabu';
+  if (dayOfWeek === 4) return 'Kamis';
+  if (dayOfWeek === 5) return 'Jumat';
+  return 'Senin';
+};
 
 export default function JadwalMengajarPage() {
   const [selectedDayFilter, setSelectedDayFilter] = useState<string>('ALL');
-  const { data: liveSchedules = [] } = useTeacherSchedules();
+  const { data: liveSchedules = [], isLoading, isError, refetch } = useTeacherSchedules();
 
-  const scheduleSlots: ScheduleSlot[] = liveSchedules.length > 0
-    ? liveSchedules.map((s, idx) => ({
-        id: s.id,
-        day: (s.dayName as any) || 'Senin',
-        period: idx + 1,
-        timeRange: `${s.startTime} - ${s.endTime}`,
-        className: s.className,
-        subjectName: s.subjectName,
-        roomName: s.roomName,
-        jpCount: 2,
-      }))
-    : defaultScheduleSlots;
+  const scheduleSlots: ScheduleSlot[] = (liveSchedules || []).map((s, idx) => ({
+    id: s.id,
+    day: normalizeDay(s.dayName, s.dayOfWeek),
+    period: idx + 1,
+    timeRange: s.startTime && s.endTime ? `${s.startTime} - ${s.endTime}` : '-',
+    className: s.className || 'Kelas',
+    subjectName: s.subjectName || 'Mata Pelajaran',
+    roomName: s.roomName || 'Ruang Kelas',
+    jpCount: 2,
+  }));
 
   const daysOfWeek = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'] as const;
   const totalJP = scheduleSlots.reduce((acc, curr) => acc + curr.jpCount, 0);
+
+  const uniqueClasses = Array.from(new Set(scheduleSlots.map((s) => s.className).filter(Boolean)));
+  const uniqueRooms = Array.from(new Set(scheduleSlots.map((s) => s.roomName).filter(Boolean)));
+
+  const todayIndex = new Date().getDay();
+  const dayNamesMap: Record<number, 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'> = {
+    1: 'Senin',
+    2: 'Selasa',
+    3: 'Rabu',
+    4: 'Kamis',
+    5: 'Jumat',
+  };
+  const todayName = dayNamesMap[todayIndex];
+  const todaySlots = todayName ? scheduleSlots.filter((s) => s.day === todayName) : [];
 
   const handlePrint = () => {
     window.print();
@@ -71,7 +85,7 @@ export default function JadwalMengajarPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-900 text-white shadow-2xs">
-              Akademik & KBM
+              Akademik &amp; KBM
             </span>
             <span className="text-xs text-slate-500 font-semibold">• BE-ACD-01 (P0)</span>
           </div>
@@ -103,7 +117,7 @@ export default function JadwalMengajarPage() {
         </div>
       </div>
 
-      {/* ─── 4 SUMMARY KPI CARDS (CLEAN METRICS WITHOUT BORDER-L-4) ─── */}
+      {/* ─── 4 SUMMARY KPI CARDS ─── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 shrink-0">
         {/* Card 1: Beban Tatap Muka */}
         <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3">
@@ -112,9 +126,11 @@ export default function JadwalMengajarPage() {
               Beban Tatap Muka
             </span>
             <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5">
-              {totalJP} <span className="text-xs font-bold text-slate-500 font-sans">JP / Minggu</span>
+              {isLoading ? '-' : totalJP} <span className="text-xs font-bold text-slate-500 font-sans">JP / Minggu</span>
             </div>
-            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Min. 24 JP Sertifikasi</p>
+            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+              {isLoading ? 'Memuat data...' : isError ? 'Gagal memuat' : 'Min. 24 JP Sertifikasi'}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-900 border border-blue-200 flex items-center justify-center shrink-0 shadow-2xs">
             <Clock className="w-5 h-5" />
@@ -128,25 +144,41 @@ export default function JadwalMengajarPage() {
               Rombel Diampu
             </span>
             <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5">
-              3 <span className="text-xs font-bold text-slate-500 font-sans">Rombel Aktif</span>
+              {isLoading ? '-' : uniqueClasses.length} <span className="text-xs font-bold text-slate-500 font-sans">Rombel Aktif</span>
             </div>
-            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Kelas IX-A, IX-B, VIII-C</p>
+            <p className="text-[10px] text-slate-500 font-semibold mt-0.5 truncate max-w-[160px]" title={uniqueClasses.join(', ')}>
+              {isLoading
+                ? 'Memuat data...'
+                : isError
+                ? 'Gagal memuat'
+                : uniqueClasses.length > 0
+                ? uniqueClasses.join(', ')
+                : 'Belum ada rombel'}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center shrink-0 shadow-2xs">
             <GraduationCap className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Card 3: Ruang Praktikum */}
+        {/* Card 3: Ruang Pembelajaran */}
         <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3">
           <div>
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-              Ruang Praktikum
+              Ruang Pembelajaran
             </span>
             <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5">
-              2 <span className="text-xs font-bold text-slate-500 font-sans">Ruang Lab</span>
+              {isLoading ? '-' : uniqueRooms.length} <span className="text-xs font-bold text-slate-500 font-sans">Ruang Terdaftar</span>
             </div>
-            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Lab Komputer 1 & Multimedia</p>
+            <p className="text-[10px] text-slate-500 font-semibold mt-0.5 truncate max-w-[160px]" title={uniqueRooms.join(' & ')}>
+              {isLoading
+                ? 'Memuat data...'
+                : isError
+                ? 'Gagal memuat'
+                : uniqueRooms.length > 0
+                ? uniqueRooms.join(' & ')
+                : 'Belum ada ruang'}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center shrink-0 shadow-2xs">
             <MapPin className="w-5 h-5" />
@@ -157,12 +189,20 @@ export default function JadwalMengajarPage() {
         <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3">
           <div>
             <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">
-              Jadwal Hari Ini (Rabu)
+              Jadwal Hari Ini {todayName ? `(${todayName})` : ''}
             </span>
             <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5">
-              2 <span className="text-xs font-bold text-slate-500 font-sans">Sesi Mengajar</span>
+              {isLoading ? '-' : todaySlots.length} <span className="text-xs font-bold text-slate-500 font-sans">Sesi Mengajar</span>
             </div>
-            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">07:30 - 09:00 & 10:00 - 11:30</p>
+            <p className="text-[10px] text-slate-500 font-semibold mt-0.5 truncate max-w-[160px]">
+              {isLoading
+                ? 'Memuat data...'
+                : isError
+                ? 'Gagal memuat'
+                : todaySlots.length > 0
+                ? todaySlots.map((s) => s.timeRange).join(' & ')
+                : 'Tidak ada sesi hari ini'}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-900 border border-blue-200 flex items-center justify-center shrink-0 shadow-2xs">
             <CalendarCheck className="w-5 h-5" />
@@ -190,7 +230,7 @@ export default function JadwalMengajarPage() {
             </div>
           </div>
 
-          {/* Clean Day Filter Tabs (Tanpa Dot Hijau) */}
+          {/* Clean Day Filter Tabs */}
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 self-start sm:self-auto">
             <button
               type="button"
@@ -223,14 +263,48 @@ export default function JadwalMengajarPage() {
           </div>
         </div>
 
-        {/* ─── CONTENT AREA: MINGGUAN (ALL) VS HARIAN (SINGLE DAY) ─── */}
+        {/* ─── CONTENT AREA: LOADING / ERROR / EMPTY / JADWAL ─── */}
         <div className="flex-1 min-h-0 overflow-y-auto pr-0.5">
-          {selectedDayFilter === 'ALL' ? (
+          {isLoading ? (
+            <div className="h-full min-h-64 flex flex-col items-center justify-center py-16 px-4 text-center">
+              <RefreshCw className="w-8 h-8 text-blue-900 animate-spin mb-3" />
+              <h3 className="text-sm font-bold text-slate-800">Memuat Jadwal Mengajar...</h3>
+              <p className="text-xs text-slate-500 mt-1">Mengambil data jadwal KBM dari server akademik</p>
+            </div>
+          ) : isError ? (
+            <div className="h-full min-h-64 flex flex-col items-center justify-center py-16 px-4 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 mb-3 shadow-2xs">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800">Gagal Memuat Jadwal Mengajar</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-md">
+                Terjadi kendala saat mengambil data jadwal dari server akademik. Silakan periksa koneksi atau coba muat ulang.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="mt-4 px-4 py-2 rounded-lg text-xs font-bold bg-blue-900 hover:bg-blue-950 text-white flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Coba Lagi</span>
+              </button>
+            </div>
+          ) : scheduleSlots.length === 0 ? (
+            <div className="h-full min-h-64 flex flex-col items-center justify-center py-16 px-4 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+              <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 mb-3 shadow-2xs">
+                <Calendar className="w-6 h-6 opacity-60" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800">Belum Ada Jadwal Mengajar</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-md">
+                Jadwal mengajar Anda untuk semester ini belum diterbitkan atau belum ditugaskan oleh bagian kurikulum.
+              </p>
+            </div>
+          ) : selectedDayFilter === 'ALL' ? (
             /* Mode 1: Matriks Mingguan 5 Kolom Penuh */
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3 h-full">
               {daysOfWeek.map((day) => {
-                const daySlots = scheduleSlots.filter(s => s.day === day);
-                const isToday = day === 'Rabu';
+                const daySlots = scheduleSlots.filter((s) => s.day === day);
+                const isToday = todayName ? day === todayName : false;
 
                 return (
                   <div 
@@ -241,7 +315,7 @@ export default function JadwalMengajarPage() {
                         : 'border-slate-200/90 bg-white shadow-2xs'
                     }`}
                   >
-                    {/* Day Column Header (Harmonious Monochromatic Blue/White for Today) */}
+                    {/* Day Column Header */}
                     <div className={`p-3 border-b flex items-center justify-between font-extrabold text-xs uppercase tracking-wider ${
                       isToday 
                         ? 'bg-blue-900 text-white border-blue-950 shadow-2xs' 
@@ -267,7 +341,7 @@ export default function JadwalMengajarPage() {
                             <Clock className="w-5 h-5 opacity-60" />
                           </div>
                           <span className="text-xs font-bold text-slate-600">Tidak Ada Sesi Tatap Muka</span>
-                          <span className="text-[10px] text-slate-400 mt-0.5">Waktu persiapan ajar & administrasi</span>
+                          <span className="text-[10px] text-slate-400 mt-0.5">Waktu persiapan ajar &amp; administrasi</span>
                         </div>
                       ) : (
                         daySlots.map((slot) => (
@@ -313,7 +387,7 @@ export default function JadwalMengajarPage() {
                                 className="mt-1.5 w-full py-1.5 px-2 rounded-lg text-[11px] font-black bg-blue-900 hover:bg-blue-950 text-white flex items-center justify-center gap-1 shadow-2xs transition-colors cursor-pointer"
                               >
                                 <BookOpen className="w-3 h-3" />
-                                <span>Input Jurnal & Presensi ➔</span>
+                                <span>Input Jurnal &amp; Presensi ➔</span>
                               </a>
                             )}
                           </div>
@@ -325,11 +399,11 @@ export default function JadwalMengajarPage() {
               })}
             </div>
           ) : (
-            /* Mode 2: Tampilan Harian (Langsung Tampil Jadwal Saja, Tanpa Header Hari Redundan) */
+            /* Mode 2: Tampilan Harian */
             <div className="max-w-4xl mx-auto w-full py-2">
               {(() => {
-                const daySlots = scheduleSlots.filter(s => s.day === selectedDayFilter);
-                const isToday = selectedDayFilter === 'Rabu';
+                const daySlots = scheduleSlots.filter((s) => s.day === selectedDayFilter);
+                const isToday = todayName ? selectedDayFilter === todayName : false;
 
                 if (daySlots.length === 0) {
                   return (
@@ -392,7 +466,7 @@ export default function JadwalMengajarPage() {
                             className="w-full py-2 px-3 rounded-xl text-xs font-black bg-blue-900 hover:bg-blue-950 text-white flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
                           >
                             <BookOpen className="w-3.5 h-3.5" />
-                            <span>Input Jurnal & Presensi Sesi ➔</span>
+                            <span>Input Jurnal &amp; Presensi Sesi ➔</span>
                           </a>
                         )}
                       </div>
