@@ -45,3 +45,7 @@ playwright-report/
 /apps/api/storage/load_tokens.json
 /apps/api/tests/load/tokens.json
 
+
+# Paket ujian asli (soal + kunci) & manifest impor CBT — JANGAN di-commit (AGENTS.md §6.2/§6.6/§9)
+docs/mtk/
+/apps/api/storage/app/import/
