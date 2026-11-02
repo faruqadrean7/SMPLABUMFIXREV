@@ -754,17 +754,32 @@ export const MOCK_CHILD_SCHEDULES: Record<string, ChildScheduleItem[]> = {
 };
 
 // ─── INFORMASI BIAYA & ADMINISTRASI TU (INFORMATIF NON-PAYMENT) ─
+export type SchoolFeeStatus =
+  | 'Lunas'
+  | 'Belum Dibayar'
+  | 'Menunggu Verifikasi'
+  | 'Jatuh Tempo'
+  | 'Dibayar Sebagian'
+  | 'Dibatalkan'
+  | 'Lunas / Bebas Tanggungan'
+  | 'Dalam Proses Administrasi TU';
+
 export interface SchoolFeeItem {
   id: string;
   student_id: string;
   item_name: string;
   period_label: string;
   nominal_text: string;
-  status: 'Lunas / Bebas Tanggungan' | 'Dalam Proses Administrasi TU';
+  status: SchoolFeeStatus;
   verified_date: string;
   receipt_number: string;
   cashier_name: string;
   notes: string;
+  total_amount?: number;
+  paid_amount?: number;
+  remaining_amount?: number;
+  due_date?: string;
+  raw_status?: string;
 }
 
 export const MOCK_GUARDIAN_FEES: Record<string, SchoolFeeItem[]> = {

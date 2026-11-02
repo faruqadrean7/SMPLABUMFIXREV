@@ -54,7 +54,7 @@ export function GuardianDashboardView() {
   const attendancePct = attendanceDays.length ? Math.round((hadirCount / attendanceDays.length) * 100) : null;
 
   const outstandingFees = (activeFees ?? []).filter(
-    (f) => f.status !== 'Lunas / Bebas Tanggungan',
+    (f) => f.status !== 'Lunas / Bebas Tanggungan' && f.status !== 'Lunas',
   );
   const prestasiCount = (activePoints ?? []).filter((p) => p.kind === 'prestasi').length;
   const pelanggaranCount = (activePoints ?? []).filter((p) => p.kind === 'pelanggaran').length;

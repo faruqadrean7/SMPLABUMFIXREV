@@ -12,7 +12,8 @@ import {
   useChildProgressReports,
   ChildReportCardData,
   ChildCharacterNoteData,
-  ChildProgressReportItem
+  ChildProgressReportItem,
+  useChildInvoices,
 } from './use-guardian-data';
 import { 
   GuardianChildProfile, 
@@ -24,6 +25,7 @@ import {
   ChildScheduleItem,
 } from './mock-guardian-data';
 import { buildAttendanceRecap, buildAttendanceCalendar, formatGateTapTime } from './guardian-attendance';
+import { buildChildFees, resolveAdminFeeStatus, resolveFeeSummary } from './guardian-fees';
 
 interface GuardianContextType {
   guardian: GuardianProfile;
@@ -79,13 +81,13 @@ const DEFAULT_CHILD: GuardianChildProfile = {
   points_pelanggaran: 0,
   admin_fee_status: 'Lunas / Bebas Tanggungan',
   fee_summary: {
-    title: 'SPP & Biaya Operasional (BOP)',
-    period: 'Bulan Oktober 2026',
-    amount: 'Rp 450.000',
+    title: 'SPP & Biaya Sekolah',
+    period: '-',
+    amount: 'Rp 0',
     status: 'Lunas',
-    detail_note: 'Bebas Tanggungan SPP Gasal',
-    receipt_or_due: 'KW-TU/2026/10/0189',
-    officer: 'Siti Rohmah (Kasir TU)',
+    detail_note: 'Memuat data tagihan...',
+    receipt_or_due: '-',
+    officer: '',
   },
 };
 
@@ -125,6 +127,12 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
   const { data: reportCardData, refetch: refetchReportCard } = useChildReportCards(activeChildId);
   const { data: characterNotesData, refetch: refetchNotes } = useChildCharacterNotes(activeChildId);
   const { data: progressReportsData, refetch: refetchProgress } = useChildProgressReports(activeChildId);
+  const { data: invoicesData, isLoading: isInvoicesLoading, isError: isInvoicesError, refetch: refetchInvoices } = useChildInvoices(activeChildId);
+
+  // Active Fees (Admin & SPP) - FE-ORTU-BIAYA-01: data nyata dari backend GET /me/children/{child}/invoices
+  const activeFees = useMemo<SchoolFeeItem[]>(() => {
+    return buildChildFees(invoicesData);
+  }, [invoicesData]);
 
   const refetchAll = () => {
     refetchChildren();
@@ -134,6 +142,7 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     refetchReportCard();
     refetchNotes();
     refetchProgress();
+    refetchInvoices();
   };
 
   // Construct active child profile
@@ -207,18 +216,10 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
       points_balance: 45,
       points_prestasi: 45,
       points_pelanggaran: 0,
-      admin_fee_status: 'Lunas / Bebas Tanggungan',
-      fee_summary: {
-        title: 'SPP & Biaya Operasional (BOP)',
-        period: 'Bulan Oktober 2026',
-        amount: 'Rp 450.000',
-        status: 'Lunas',
-        detail_note: 'Bebas Tanggungan SPP Gasal',
-        receipt_or_due: 'KW-TU/2026/10/0189',
-        officer: 'Siti Rohmah (Kasir TU)',
-      },
+      admin_fee_status: resolveAdminFeeStatus(activeFees),
+      fee_summary: resolveFeeSummary(activeFees),
     };
-  }, [childrenData, activeChildId, childDetail, attendanceData, gradesData, reportCardData]);
+  }, [childrenData, activeChildId, childDetail, attendanceData, gradesData, reportCardData, activeFees]);
 
   // Construct guardian profile
   const guardian = useMemo<GuardianProfile>(() => {
@@ -267,16 +268,18 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
         points_balance: 45,
         points_prestasi: 45,
         points_pelanggaran: 0,
-        admin_fee_status: 'Lunas / Bebas Tanggungan',
-        fee_summary: {
-          title: 'SPP & Biaya Operasional (BOP)',
-          period: 'Bulan Oktober 2026',
-          amount: 'Rp 450.000',
-          status: 'Lunas',
-          detail_note: 'Bebas Tanggungan SPP Gasal',
-          receipt_or_due: 'KW-TU/2026/10/0189',
-          officer: 'Siti Rohmah (Kasir TU)',
-        },
+        admin_fee_status: isCur ? resolveAdminFeeStatus(activeFees) : 'Lunas / Bebas Tanggungan',
+        fee_summary: isCur
+          ? resolveFeeSummary(activeFees)
+          : {
+              title: 'SPP & Biaya Sekolah',
+              period: '-',
+              amount: 'Rp 0',
+              status: 'Lunas',
+              detail_note: '-',
+              receipt_or_due: '-',
+              officer: '',
+            },
       };
     });
 
@@ -290,7 +293,7 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
       occupation: 'Arsitek & Wiraswasta',
       children: mappedChildren.length > 0 ? mappedChildren : [DEFAULT_CHILD],
     };
-  }, [user, childrenData, activeChildId, childDetail, attendanceData, gradesData]);
+  }, [user, childrenData, activeChildId, childDetail, attendanceData, gradesData, activeFees]);
 
   // Active Grades from live API
   const activeGrades = useMemo<ChildSubjectGrade[]>(() => {
@@ -379,36 +382,6 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     return items;
   }, [activeChildId, characterNotesData, childDetail]);
 
-  // Active Fees (Admin & SPP)
-  const activeFees = useMemo<SchoolFeeItem[]>(() => {
-    return [
-      {
-        id: 'fee-01',
-        student_id: activeChildId,
-        item_name: 'SPP & Biaya Operasional Pembelajaran (BOP) - Oktober 2026',
-        period_label: 'Bulan Oktober 2026',
-        nominal_text: 'Rp 450.000',
-        status: 'Lunas / Bebas Tanggungan',
-        verified_date: '05 Oktober 2026, 09:15 WIB',
-        receipt_number: 'KW-TU/2026/10/0189',
-        cashier_name: 'Siti Rohmah (Kasir TU)',
-        notes: 'Bebas Tanggungan SPP Gasal',
-      },
-      {
-        id: 'fee-02',
-        student_id: activeChildId,
-        item_name: 'SPP & Biaya Operasional Pembelajaran (BOP) - September 2026',
-        period_label: 'Bulan September 2026',
-        nominal_text: 'Rp 450.000',
-        status: 'Lunas / Bebas Tanggungan',
-        verified_date: '04 September 2026, 10:20 WIB',
-        receipt_number: 'KW-TU/2026/09/0142',
-        cashier_name: 'Siti Rohmah (Kasir TU)',
-        notes: 'Lunas via Virtual Account Bank',
-      },
-    ];
-  }, [activeChildId]);
-
   // Active Schedule
   const activeSchedule = useMemo<ChildScheduleItem[]>(() => {
     const isClass9 = activeChild?.class_name?.includes('9');
@@ -480,8 +453,8 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     ];
   }, [activeChild?.class_name]);
 
-  const isLoading = isChildrenLoading || isAttLoading || isGradesLoading;
-  const isError = isChildrenError;
+  const isLoading = isChildrenLoading || isAttLoading || isGradesLoading || isInvoicesLoading;
+  const isError = isChildrenError || isInvoicesError;
 
   return (
     <GuardianContext.Provider
