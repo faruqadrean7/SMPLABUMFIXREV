@@ -65,11 +65,14 @@ export default function KepsekDashboardPage() {
       ? 'Wakil Kepala Sekolah'
       : 'Pimpinan Eksekutif';
 
-  const ppdbQuota = metrics.ppdbTargetQuota > 0 ? metrics.ppdbTargetQuota : 240;
-  const ppdbPercentage = Math.min(
-    100,
-    Math.round((metrics.ppdbEnrolledCount / ppdbQuota) * 100)
-  );
+  const hasPpdbQuota = typeof metrics.ppdbTargetQuota === 'number' && metrics.ppdbTargetQuota > 0;
+  const ppdbQuota = hasPpdbQuota ? metrics.ppdbTargetQuota : 0;
+  const ppdbPercentage = hasPpdbQuota
+    ? Math.min(
+        100,
+        Math.round((metrics.ppdbEnrolledCount / ppdbQuota) * 100)
+      )
+    : null;
 
   return (
     <div className="space-y-6">
@@ -190,9 +193,15 @@ export default function KepsekDashboardPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold text-slate-900">Target PPDB 2026</CardTitle>
-              <Badge variant="outline" className="text-xs font-bold text-brand-blue border-blue-200 bg-blue-50">
-                {ppdbPercentage}% Tercapai
-              </Badge>
+              {hasPpdbQuota ? (
+                <Badge variant="outline" className="text-xs font-bold text-brand-blue border-blue-200 bg-blue-50">
+                  {ppdbPercentage}% Tercapai
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs font-semibold text-slate-500 border-slate-200 bg-slate-50">
+                  Kuota Belum Ditetapkan
+                </Badge>
+              )}
             </div>
             <CardDescription className="text-xs">
               Perkembangan penerimaan peserta didik baru tahun ajaran 2026/2027
@@ -200,17 +209,26 @@ export default function KepsekDashboardPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-baseline justify-between text-sm">
-              <span className="text-slate-600 font-medium">Siswa Diterima & Terdaftar:</span>
+              <span className="text-slate-600 font-medium">Siswa Diterima &amp; Terdaftar:</span>
               <span className="font-black text-slate-900 text-lg">
-                {metrics.ppdbEnrolledCount} <span className="text-xs text-slate-500 font-normal">/ {ppdbQuota} Kuota</span>
+                {metrics.ppdbEnrolledCount}{' '}
+                <span className="text-xs text-slate-500 font-normal">
+                  {hasPpdbQuota ? `/ ${ppdbQuota} Kuota` : '(Kuota belum ditetapkan)'}
+                </span>
               </span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-              <div
-                className="bg-brand-blue h-full rounded-full transition-all duration-500"
-                style={{ width: `${ppdbPercentage}%` }}
-              />
-            </div>
+            {hasPpdbQuota ? (
+              <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="bg-brand-blue h-full rounded-full transition-all duration-500"
+                  style={{ width: `${ppdbPercentage}%` }}
+                />
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">
+                Target kuota penerimaan siswa baru belum diatur oleh panitia PPDB.
+              </p>
+            )}
             <p className="text-xs text-slate-500">
               Seleksi dan verifikasi berkas dilakukan secara objektif oleh Panitia PPDB sekolah.
             </p>
