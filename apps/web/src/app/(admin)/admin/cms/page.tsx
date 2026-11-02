@@ -29,6 +29,7 @@ import {
   FolderOpen,
   UploadCloud,
   Pencil,
+  BookOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,10 +52,12 @@ import {
   AlbumItem,
   CreateAlbumPayload,
   MediaItem,
+  BulletinItem,
+  CreateBulletinPayload,
 } from '@/features/cms/types';
 
 export default function CmsAdminPage() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'posts' | 'events' | 'downloads' | 'albums'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'posts' | 'events' | 'downloads' | 'albums' | 'bulletins'>('profile');
 
   // =========================================================================
   // COMMON STATE
@@ -190,6 +193,20 @@ export default function CmsAdminPage() {
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
   // =========================================================================
+  // TAB 6: BULLETINS STATE (ADM-CMS-06 / FE-CMS-PUBLIC-04a)
+  // =========================================================================
+  const [bulletins, setBulletins] = useState<BulletinItem[]>([]);
+  const [bulletinSearch, setBulletinSearch] = useState('');
+  const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
+  const [editingBulletinId, setEditingBulletinId] = useState<string | null>(null);
+  const [bulletinForm, setBulletinForm] = useState<CreateBulletinPayload>({
+    title: '',
+    file_id: '',
+    cover_file_id: null,
+  });
+  const [isSubmittingBulletin, setIsSubmittingBulletin] = useState(false);
+
+  // =========================================================================
   // DATA FETCHING
   // =========================================================================
   const fetchData = useCallback(async () => {
@@ -262,6 +279,11 @@ export default function CmsAdminPage() {
           q: albumSearch || undefined,
         });
         setAlbums(albumsRes.data || []);
+      } else if (activeTab === 'bulletins') {
+        const bulletinsRes = await cmsApi.getBulletins({
+          search: bulletinSearch || undefined,
+        });
+        setBulletins(bulletinsRes.data || []);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal memuat data modul CMS.';
@@ -279,6 +301,7 @@ export default function CmsAdminPage() {
     downloadSearch,
     downloadCategoryFilter,
     albumSearch,
+    bulletinSearch,
   ]);
 
   useEffect(() => {
@@ -688,6 +711,78 @@ export default function CmsAdminPage() {
     });
   };
 
+  // =========================================================================
+  // ACTIONS: BULLETINS (ADM-CMS-06 / FE-CMS-PUBLIC-04a)
+  // =========================================================================
+  const handleOpenCreateBulletin = () => {
+    setEditingBulletinId(null);
+    setBulletinForm({
+      title: '',
+      file_id: '',
+      cover_file_id: null,
+    });
+    setIsBulletinModalOpen(true);
+  };
+
+  const handleOpenEditBulletin = (item: BulletinItem) => {
+    setEditingBulletinId(item.id);
+    setBulletinForm({
+      title: item.title,
+      file_id: item.file_id,
+      cover_file_id: item.cover_file_id || null,
+    });
+    setIsBulletinModalOpen(true);
+  };
+
+  const handleSaveBulletin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulletinForm.file_id) {
+      setError('Silakan unggah berkas PDF buletin terlebih dahulu.');
+      return;
+    }
+    setIsSubmittingBulletin(true);
+    setError(null);
+    try {
+      if (editingBulletinId) {
+        await cmsApi.updateBulletin(editingBulletinId, bulletinForm);
+        setSuccessMessage('Buletin berhasil diperbarui.');
+      } else {
+        await cmsApi.createBulletin(bulletinForm);
+        setSuccessMessage('Buletin berhasil ditambahkan.');
+      }
+      setIsBulletinModalOpen(false);
+      setEditingBulletinId(null);
+      setBulletinForm({
+        title: '',
+        file_id: '',
+        cover_file_id: null,
+      });
+      fetchData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Gagal menyimpan buletin.');
+    } finally {
+      setIsSubmittingBulletin(false);
+    }
+  };
+
+  const handleDeleteBulletin = (id: string, title: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Hapus Buletin',
+      description: 'Apakah Anda yakin ingin menghapus buletin sekolah ini?',
+      itemLabel: title,
+      onConfirm: async () => {
+        try {
+          await cmsApi.deleteBulletin(id);
+          setSuccessMessage('Buletin berhasil dihapus.');
+          fetchData();
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Gagal menghapus buletin.');
+        }
+      },
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Halaman */}
@@ -794,6 +889,17 @@ export default function CmsAdminPage() {
         >
           <ImageIcon className="h-4 w-4" />
           Galeri &amp; Media
+        </button>
+        <button
+          onClick={() => setActiveTab('bulletins')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+            activeTab === 'bulletins'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <BookOpen className="h-4 w-4" />
+          Buletin &amp; Majalah
         </button>
       </div>
 
@@ -2108,6 +2214,220 @@ export default function CmsAdminPage() {
                     Tutup
                   </Button>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 6: BULETIN & MAJALAH SEKOLAH (ADM-CMS-06 / FE-CMS-PUBLIC-04a)
+      ========================================================================= */}
+      {activeTab === 'bulletins' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Cari buletin / majalah..."
+                  value={bulletinSearch}
+                  onChange={(e) => setBulletinSearch(e.target.value)}
+                  className="pl-9 h-9 text-xs"
+                />
+              </div>
+            </div>
+            <Button size="sm" onClick={handleOpenCreateBulletin} className="gap-2 shrink-0">
+              <Plus className="h-4 w-4" />
+              Tambah Buletin
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <Card className="rounded-sm">
+              <CardContent className="p-8 text-center text-slate-500">
+                <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
+                <p>Memuat daftar buletin dan majalah sekolah...</p>
+              </CardContent>
+            </Card>
+          ) : bulletins.length === 0 ? (
+            <Card className="rounded-sm border-dashed">
+              <CardContent className="p-12 text-center">
+                <BookOpen className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+                <h3 className="text-base font-semibold text-slate-900">Belum Ada Buletin Sekolah</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                  Publikasi berkala, mading digital, dan majalah sekolah belum ditambahkan. Unggah edisi pertama untuk dibaca publik.
+                </p>
+                <Button size="sm" onClick={handleOpenCreateBulletin} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Tambah Buletin Pertama
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="overflow-x-auto rounded-sm border border-slate-200 bg-white">
+              <table className="w-full text-left text-xs text-slate-600">
+                <thead className="bg-slate-50 text-slate-700 uppercase tracking-wider font-semibold border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 w-16">Sampul</th>
+                    <th className="px-4 py-3">Judul Buletin &amp; Edisi</th>
+                    <th className="px-4 py-3">Berkas PDF</th>
+                    <th className="px-4 py-3">Tanggal Dibuat</th>
+                    <th className="px-4 py-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {bulletins.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="w-10 h-14 bg-slate-100 rounded border border-slate-200 overflow-hidden flex items-center justify-center">
+                          {item.cover?.url ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={item.cover.url}
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <BookOpen className="h-5 w-5 text-slate-400" />
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-slate-900 block">{item.title}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.file?.download_url || item.file?.url ? (
+                          <a
+                            href={item.file.download_url || item.file.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>Lihat Berkas</span>
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">PDF Terunggah</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {item.created_at
+                          ? new Date(item.created_at).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right space-x-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenEditBulletin(item)}
+                          className="h-7 px-2 text-slate-600 hover:text-slate-900 border-slate-200"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteBulletin(item.id, item.title)}
+                          className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-slate-200"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Modal Tambah / Edit Buletin */}
+          {isBulletinModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="bg-white rounded-sm shadow-xl max-w-md w-full p-6 space-y-4 animate-in fade-in max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-primary" />
+                    {editingBulletinId ? 'Edit Buletin Sekolah' : 'Tambah Buletin Baru'}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setIsBulletinModalOpen(false);
+                      setEditingBulletinId(null);
+                    }}
+                    className="text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveBulletin} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      Judul / Tema Edisi Buletin *
+                    </label>
+                    <Input
+                      required
+                      value={bulletinForm.title}
+                      onChange={(e) => setBulletinForm({ ...bulletinForm, title: e.target.value })}
+                      placeholder="Contoh: Buletin Pelajar Edisi 10 - Menyulam Karya Literasi"
+                    />
+                  </div>
+
+                  <FileUpload
+                    label="Unggah Berkas PDF Buletin *"
+                    accept=".pdf"
+                    maxSizeMb={30}
+                    visibility="publik"
+                    purpose="cms_bulletin"
+                    value={bulletinForm.file_id}
+                    onChange={(id) => setBulletinForm({ ...bulletinForm, file_id: id || '' })}
+                    helperText="Maks. 30 MB (format PDF dokumen)"
+                  />
+
+                  <FileUpload
+                    label="Sampul / Cover Buletin (Opsional)"
+                    accept=".jpg,.jpeg,.png,.webp"
+                    maxSizeMb={5}
+                    visibility="publik"
+                    purpose="cms_bulletin_cover"
+                    value={bulletinForm.cover_file_id}
+                    onChange={(id) => setBulletinForm({ ...bulletinForm, cover_file_id: id || null })}
+                    helperText="Maks. 5 MB (format JPG, PNG, WebP)"
+                  />
+
+                  <div className="flex justify-end gap-2 pt-3 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsBulletinModalOpen(false);
+                        setEditingBulletinId(null);
+                      }}
+                      disabled={isSubmittingBulletin}
+                    >
+                      Batal
+                    </Button>
+                    <Button type="submit" size="sm" disabled={isSubmittingBulletin} className="gap-2">
+                      {isSubmittingBulletin ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          Menyimpan...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-3.5 w-3.5" />
+                          {editingBulletinId ? 'Perbarui Buletin' : 'Simpan Buletin'}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
               </div>
             </div>
           )}

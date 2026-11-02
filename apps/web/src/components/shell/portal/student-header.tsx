@@ -28,7 +28,7 @@ export function StudentHeader() {
     { title: 'Jadwal', href: '/portal/siswa/jadwal', icon: Calendar },
     { title: 'Tugas KBM', href: '/portal/siswa/tugas', icon: BookOpen },
     { title: 'Ujian CBT', href: '/portal/siswa/cbt', icon: Monitor },
-    { title: 'E-Rapor', href: '/portal/siswa/rapor', icon: FileText },
+    { title: 'E-Rapor', href: '/portal/siswa/nilai', icon: FileText },
     { title: 'Poin Disiplin', href: '/portal/siswa/poin', icon: Award },
     { title: 'Tagihan', href: '/portal/siswa/tagihan', icon: CreditCard },
   ];

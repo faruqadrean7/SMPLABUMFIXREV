@@ -816,13 +816,6 @@ export default function ProfilePage() {
                 Sarana lengkap untuk mendukung belajar, riset, dan pengembangan diri.
               </p>
             </div>
-            <Link
-              href="/fasilitas"
-              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#0A3D62] hover:text-[#C89332] transition-colors"
-            >
-              <span>Lihat Semua Fasilitas</span>
-              <ArrowRight className="w-4 h-4" aria-hidden="true" />
-            </Link>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">

@@ -247,3 +247,37 @@ export interface CreatePagePayload {
 }
 
 export interface UpdatePagePayload extends Partial<CreatePagePayload> {}
+
+export interface BulletinItem {
+  id: string;
+  title: string;
+  file_id: string;
+  cover_file_id?: string | null;
+  school_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  file?: {
+    id: string;
+    object_key?: string;
+    mime_type?: string;
+    size_bytes?: number;
+    url?: string;
+    download_url?: string;
+  } | null;
+  cover?: {
+    id: string;
+    object_key?: string;
+    url?: string;
+    download_url?: string;
+  } | null;
+}
+
+export interface CreateBulletinPayload {
+  title: string;
+  file_id: string;
+  cover_file_id?: string | null;
+  school_id?: string;
+}
+
+export interface UpdateBulletinPayload extends Partial<CreateBulletinPayload> {}
+

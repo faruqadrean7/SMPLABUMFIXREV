@@ -67,8 +67,23 @@ export function PublicFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/agenda" className="hover:text-white transition-colors">
+                  Agenda
+                </Link>
+              </li>
+              <li>
                 <Link href="/galeri" className="hover:text-white transition-colors">
                   Galeri
+                </Link>
+              </li>
+              <li>
+                <Link href="/unduhan" className="hover:text-white transition-colors">
+                  Unduhan
+                </Link>
+              </li>
+              <li>
+                <Link href="/buletin" className="hover:text-white transition-colors">
+                  Buletin
                 </Link>
               </li>
               <li>

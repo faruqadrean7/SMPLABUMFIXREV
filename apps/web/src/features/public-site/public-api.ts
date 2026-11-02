@@ -3,6 +3,14 @@ import { ApiResponse, PaginatedResponse } from '@/types/api';
 import { PostItem, PostCategoryItem, SiteProfile } from '@/features/cms/types';
 import { ppdbApi } from '@/features/ppdb/ppdb-api';
 import { PPDBWaveItem } from '@/types/ppdb';
+import {
+  PublicEventItem,
+  GetPublicEventsParams,
+  PublicDownloadItem,
+  GetPublicDownloadsParams,
+  PublicBulletinItem,
+  GetPublicBulletinsParams,
+} from './types';
 
 export interface GetPublicPostsParams {
   page?: number;
@@ -121,6 +129,90 @@ export const publicApi = {
    */
   getPublicSite: async (): Promise<SiteProfile> => {
     const res = await apiClient.get<ApiResponse<SiteProfile>>('/public/site');
+    return res.data.data;
+  },
+
+  /**
+   * BE-CMS-04: Mengambil daftar agenda kegiatan publik (kalender/acara)
+   */
+  getPublicEvents: async (params?: GetPublicEventsParams): Promise<PaginatedResponse<PublicEventItem>> => {
+    const res = await apiClient.get<PaginatedResponse<PublicEventItem>>('/public/events', {
+      params: {
+        page: params?.page ?? 1,
+        per_page: params?.per_page ?? 12,
+        category: params?.category || undefined,
+        search: params?.search || undefined,
+        month: params?.month || undefined,
+        year: params?.year || undefined,
+        start_date: params?.start_date || undefined,
+        end_date: params?.end_date || undefined,
+        all: params?.all ? 'true' : undefined,
+      },
+    });
+    return res.data;
+  },
+
+  /**
+   * BE-CMS-04: Mengambil detail agenda kegiatan publik berdasarkan ID
+   */
+  getPublicEvent: async (id: string): Promise<PublicEventItem> => {
+    const res = await apiClient.get<ApiResponse<PublicEventItem>>(`/public/events/${id}`);
+    return res.data.data;
+  },
+
+  /**
+   * BE-CMS-04: Mengambil agenda kegiatan publik terdekat untuk beranda
+   */
+  getLatestEvents: async (limit: number = 3): Promise<PublicEventItem[]> => {
+    const res = await apiClient.get<PaginatedResponse<PublicEventItem>>('/public/events', {
+      params: { per_page: limit, page: 1 },
+    });
+    return res.data?.data || [];
+  },
+
+  /**
+   * BE-CMS-06: Mengambil daftar dokumen unduhan publik
+   */
+  getPublicDownloads: async (params?: GetPublicDownloadsParams): Promise<PaginatedResponse<PublicDownloadItem>> => {
+    const res = await apiClient.get<PaginatedResponse<PublicDownloadItem>>('/public/downloads', {
+      params: {
+        page: params?.page ?? 1,
+        per_page: params?.per_page ?? 10,
+        category: params?.category || undefined,
+        search: params?.search || undefined,
+        all: params?.all ? 'true' : undefined,
+      },
+    });
+    return res.data;
+  },
+
+  /**
+   * BE-CMS-06: Mengambil detail dokumen unduhan publik berdasarkan ID
+   */
+  getPublicDownload: async (id: string): Promise<PublicDownloadItem> => {
+    const res = await apiClient.get<ApiResponse<PublicDownloadItem>>(`/public/downloads/${id}`);
+    return res.data.data;
+  },
+
+  /**
+   * BE-CMS-03: Mengambil daftar buletin / majalah sekolah publik
+   */
+  getPublicBulletins: async (params?: GetPublicBulletinsParams): Promise<PaginatedResponse<PublicBulletinItem>> => {
+    const res = await apiClient.get<PaginatedResponse<PublicBulletinItem>>('/public/bulletins', {
+      params: {
+        page: params?.page ?? 1,
+        per_page: params?.per_page ?? 9,
+        search: params?.search || undefined,
+      },
+    });
+    return res.data;
+  },
+
+  /**
+   * BE-CMS-03: Mengambil detail buletin publik berdasarkan ID
+   */
+  getPublicBulletin: async (id: string): Promise<PublicBulletinItem> => {
+    const res = await apiClient.get<ApiResponse<PublicBulletinItem>>(`/public/bulletins/${id}`);
     return res.data.data;
   },
 };

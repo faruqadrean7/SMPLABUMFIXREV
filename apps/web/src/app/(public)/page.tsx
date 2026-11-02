@@ -17,6 +17,7 @@ import {
   Mail,
   MapPin,
   Calendar,
+  Clock,
   AlertCircle,
   RotateCw,
   ChevronRight,
@@ -68,6 +69,18 @@ export default function HomePage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Query 3 agenda kegiatan terbaru/terdekat dari backend (FE-CMS-PUBLIC-01)
+  const {
+    data: upcomingEvents,
+    isLoading: isLoadingEvents,
+    isError: isEventsError,
+    refetch: refetchEvents,
+  } = useQuery({
+    queryKey: ['public-latest-events'],
+    queryFn: () => publicApi.getLatestEvents(3),
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Query profil situs dan pengaturan publik (BE-CMS-01)
   const { data: siteData } = useQuery({
     queryKey: ['public-site-settings'],
@@ -83,9 +96,15 @@ export default function HomePage() {
     ? `Terakreditasi ${accreditationGrade} (Unggul)`
     : HERO_CONTENT.accreditationBadge;
 
-  const principalName = 'Tamyis Suliantoro, M.Pd.';
+  const principalName =
+    siteData?.profile?.principal_greeting?.principal_name ||
+    PROFILE_SUMMARY.principal.name;
   const principalQuote =
-    'Kami berkomitmen untuk menghadirkan pendidikan yang tidak hanya unggul dalam prestasi, tetapi juga membentuk karakter mulia, mandiri, dan peduli lingkungan.';
+    siteData?.profile?.principal_greeting?.greeting_text ||
+    PROFILE_SUMMARY.principal.greetingQuote;
+  const principalPhoto =
+    siteData?.profile?.principal_greeting?.principal_photo_url ||
+    '/images/principal.jpg';
   const logoUrl = siteData?.identity?.logo_url || '/images/logo.png';
 
   const phoneDisplay = siteData?.contact?.phone || SCHOOL_CONTACT_INFO.phone.display;
@@ -254,16 +273,23 @@ export default function HomePage() {
                 </h2>
               </div>
               <p className="text-gray-600 text-sm sm:text-base leading-relaxed">
-                SMP Laboratorium adalah sekolah menengah pertama yang berfungsi sebagai sekolah laboratorium model riset
-                pembelajaran, tempat penerapan inovasi pedagogi (Lesson Study), uji coba modul ajar adaptif oleh akademisi UM,
-                dan sekolah percontohan inklusi ramah anak di Kota Malang.
+                {siteData?.profile?.vision || PROFILE_SUMMARY.descriptionParagraph1}
               </p>
+              {siteData?.profile?.mission && siteData.profile.mission.length > 0 && (
+                <ul className="space-y-1.5 text-xs sm:text-sm text-gray-600 list-disc list-inside pt-1">
+                  {siteData.profile.mission.slice(0, 3).map((m, idx) => (
+                    <li key={idx} className="leading-relaxed">
+                      {m}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <div className="pt-2">
                 <Link
                   href="/profil"
                   className="bg-white hover:bg-gray-50 border border-gray-300 text-[#062940] hover:text-[#C89332] hover:border-[#C89332] px-5 py-2.5 rounded-lg text-sm font-semibold transition-all inline-flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-[#C89332]"
                 >
-                  <span>Selengkapnya</span>
+                  <span>{PROFILE_SUMMARY.principal.ctaLabel}</span>
                   <span aria-hidden="true">→</span>
                 </Link>
               </div>
@@ -276,7 +302,7 @@ export default function HomePage() {
                   {/* Foto Kepala Sekolah Portrait Proporsional */}
                   <div className="relative w-36 sm:w-40 aspect-[3/4] rounded-xl overflow-hidden shrink-0 shadow-xs border border-slate-100 bg-slate-100">
                     <Image
-                      src="/images/principal.jpg"
+                      src={principalPhoto}
                       alt={principalName}
                       fill
                       className="object-cover object-top"
@@ -306,7 +332,7 @@ export default function HomePage() {
                         {principalName}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Kepala SMP Laboratorium UM
+                        {PROFILE_SUMMARY.principal.role}
                       </p>
                     </div>
                   </div>
@@ -438,10 +464,10 @@ export default function HomePage() {
                 <FlaticonGlobe size={52} className="shrink-0" />
                 <div className="space-y-1">
                   <h3 className="font-pub-heading font-bold text-lg text-[#0A3D62] group-hover:text-[#C89332] transition-colors leading-tight">
-                    ICP
+                    ICP (International Class Program)
                   </h3>
                   <p className="text-xs font-semibold text-[#0A3D62]/90">
-                    (International Class Program)
+                    Kurikulum Cambridge
                   </p>
                 </div>
                 <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed">
@@ -466,7 +492,7 @@ export default function HomePage() {
                 <FlaticonQuran size={52} className="shrink-0" />
                 <div className="space-y-1">
                   <h3 className="font-pub-heading font-bold text-lg text-[#0A3D62] group-hover:text-[#C89332] transition-colors leading-tight">
-                    Tahfidz Al-Qur&apos;an
+                    Program Tahfidz
                   </h3>
                   <p className="text-xs font-semibold text-transparent select-none">
                     &nbsp;
@@ -494,7 +520,7 @@ export default function HomePage() {
                 <FlaticonInclusion size={52} className="shrink-0" />
                 <div className="space-y-1">
                   <h3 className="font-pub-heading font-bold text-lg text-[#0A3D62] group-hover:text-[#C89332] transition-colors leading-tight">
-                    Pendidikan Inklusi
+                    Program Inklusi
                   </h3>
                   <p className="text-xs font-semibold text-[#0A3D62]/90">
                     (Ramah Anak)
@@ -537,101 +563,46 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Card 1: Binaan Dosen UM */}
-            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-              <div>
-                <div className="relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-100 mb-4">
-                  <Image
-                    src="/images/keunggulan-01.jpg"
-                    alt="Binaan Dosen UM"
-                    fill
-                    className="object-cover object-center"
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                  />
+            {(siteData?.profile?.featured_programs && siteData.profile.featured_programs.length > 0
+              ? siteData.profile.featured_programs.map((fp, idx) => ({
+                  title: fp.title,
+                  category: `0${idx + 1}`,
+                  description: fp.description || '',
+                  image: `/images/keunggulan-0${(idx % 4) + 1}.jpg`,
+                }))
+              : APPROACH_PILLARS.map((p, idx) => ({
+                  title: p.title,
+                  category: `0${idx + 1}`,
+                  description: p.description,
+                  image: `/images/keunggulan-0${(idx % 4) + 1}.jpg`,
+                }))
+            ).map((pillar, idx) => (
+              <div
+                key={idx}
+                className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
+              >
+                <div>
+                  <div className="relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-100 mb-4">
+                    <Image
+                      src={pillar.image}
+                      alt={pillar.title}
+                      fill
+                      className="object-cover object-center"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                    />
+                  </div>
+                  <span className="text-xs font-bold text-[#7A92A5] tracking-wider block mb-1">
+                    {pillar.category}
+                  </span>
+                  <h3 className="font-pub-heading font-bold text-base sm:text-lg text-[#0A3D62] leading-snug mb-1.5">
+                    {pillar.title}
+                  </h3>
+                  <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed">
+                    {pillar.description}
+                  </p>
                 </div>
-                <span className="text-xs font-bold text-[#7A92A5] tracking-wider block mb-1">
-                  01
-                </span>
-                <h3 className="font-pub-heading font-bold text-base sm:text-lg text-[#0A3D62] leading-snug mb-1.5">
-                  Binaan Dosen UM
-                </h3>
-                <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed">
-                  Pembelajaran didampingi akademisi Universitas Negeri Malang.
-                </p>
               </div>
-            </div>
-
-            {/* Card 2: Karakter Wajib */}
-            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-              <div>
-                <div className="relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-100 mb-4">
-                  <Image
-                    src="/images/keunggulan-02.jpg"
-                    alt="Karakter Wajib"
-                    fill
-                    className="object-cover object-center"
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                  />
-                </div>
-                <span className="text-xs font-bold text-[#7A92A5] tracking-wider block mb-1">
-                  02
-                </span>
-                <h3 className="font-pub-heading font-bold text-base sm:text-lg text-[#0A3D62] leading-snug mb-1.5">
-                  Karakter Wajib
-                </h3>
-                <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed">
-                  Life Skills (Kelas VII), Pramuka ARSIMBO, dan TaBeQu (Kelas VIII).
-                </p>
-              </div>
-            </div>
-
-            {/* Card 3: 24 Ekskul & Prestasi */}
-            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-              <div>
-                <div className="relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-100 mb-4">
-                  <Image
-                    src="/images/keunggulan-03.jpg"
-                    alt="24 Ekskul & Prestasi"
-                    fill
-                    className="object-cover object-center"
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                  />
-                </div>
-                <span className="text-xs font-bold text-[#7A92A5] tracking-wider block mb-1">
-                  03
-                </span>
-                <h3 className="font-pub-heading font-bold text-base sm:text-lg text-[#0A3D62] leading-snug mb-1.5">
-                  24 Ekskul &amp; Prestasi
-                </h3>
-                <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed">
-                  Riset, bahasa, seni, olahraga dan kepemimpinan.
-                </p>
-              </div>
-            </div>
-
-            {/* Card 4: Sarana & Fasilitas */}
-            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-              <div>
-                <div className="relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-100 mb-4">
-                  <Image
-                    src="/images/keunggulan-04.jpg"
-                    alt="Sarana & Fasilitas"
-                    fill
-                    className="object-cover object-center"
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                  />
-                </div>
-                <span className="text-xs font-bold text-[#7A92A5] tracking-wider block mb-1">
-                  04
-                </span>
-                <h3 className="font-pub-heading font-bold text-base sm:text-lg text-[#0A3D62] leading-snug mb-1.5">
-                  Sarana &amp; Fasilitas
-                </h3>
-                <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed">
-                  Lingkungan belajar modern, lengkap dan nyaman.
-                </p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
@@ -696,35 +667,27 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Kondisi 3 & 4: Berita Nyata atau Fallback Tepat Sesuai Mockup */}
-          {!isLoadingPosts && !isPostsError && (
+          {/* Kondisi 3: Empty State */}
+          {!isLoadingPosts && !isPostsError && (!posts || posts.length === 0) && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center max-w-lg mx-auto space-y-2">
+              <p className="text-sm font-semibold text-slate-700">
+                Belum ada publikasi berita terbaru yang diterbitkan.
+              </p>
+              <p className="text-xs text-gray-500">
+                Silakan kembali lagi nanti untuk pembaruan informasi kegiatan sekolah.
+              </p>
+            </div>
+          )}
+
+          {/* Kondisi 4: Berita Nyata */}
+          {!isLoadingPosts && !isPostsError && posts && posts.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {(posts && posts.length > 0 ? posts : [
-                {
-                  id: 'fallback-1',
-                  title: 'Tim Riset SMP Laboratorium Raih Juara 1 Lomba KIR Tingkat Jawa Timur',
-                  published_at: '2025-05-12T08:00:00Z',
-                  coverImage: '/images/keunggulan-03.jpg',
-                  slug: 'tim-riset-raih-juara-1-kir',
-                },
-                {
-                  id: 'fallback-2',
-                  title: 'Kunjungan Akademisi UM dalam Program Lesson Study',
-                  published_at: '2025-05-05T08:00:00Z',
-                  coverImage: '/images/keunggulan-01.jpg',
-                  slug: 'kunjungan-akademisi-um-lesson-study',
-                },
-                {
-                  id: 'fallback-3',
-                  title: 'Siswa SMP Lab UM Ikuti Program Pertukaran Pelajar ke Cambridge',
-                  published_at: '2025-04-28T08:00:00Z',
-                  coverImage: '/images/hero-academic.jpg',
-                  slug: 'siswa-pertukaran-pelajar-cambridge',
-                },
-              ]).map((post, idx) => {
+              {posts.map((post, idx) => {
                 const coverSrc = ('coverImage' in post && (post as any).coverImage)
                   ? (post as any).coverImage
                   : (post as any).cover?.url || (post as any).cover_file?.url || ['/images/keunggulan-03.jpg', '/images/keunggulan-01.jpg', '/images/hero-academic.jpg'][idx % 3];
+
+                const categoryName = (post as any).category?.name || (post as any).category_name;
 
                 return (
                   <article
@@ -741,11 +704,18 @@ export default function HomePage() {
                           sizes="(max-width: 768px) 100vw, 33vw"
                         />
                       </div>
-                      <div className="text-xs text-gray-500 font-medium mb-1.5">
-                        {formatTanggalIndo(post.published_at || (post as any).created_at)}
+                      <div className="flex items-center gap-2 mb-1.5">
+                        {categoryName && (
+                          <span className="text-[11px] font-bold text-[#C89332] uppercase tracking-wider">
+                            {categoryName}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-500 font-medium">
+                          {formatTanggalIndo(post.published_at || (post as any).created_at)}
+                        </span>
                       </div>
                       <h3 className="font-pub-heading font-bold text-base sm:text-lg text-[#0A3D62] group-hover:text-[#C89332] transition-colors line-clamp-2 leading-snug">
-                        <Link href="/berita" className="focus:outline-none focus:underline">
+                        <Link href={`/berita/${post.slug || post.id}`} className="focus:outline-none focus:underline">
                           {post.title}
                         </Link>
                       </h3>
@@ -753,7 +723,7 @@ export default function HomePage() {
 
                     <div className="pt-4">
                       <Link
-                        href="/berita"
+                        href={`/berita/${post.slug || post.id}`}
                         className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#0A3D62] hover:text-[#C89332] transition-colors focus:outline-none focus:underline"
                       >
                         <span>Baca Selengkapnya</span>
@@ -763,6 +733,139 @@ export default function HomePage() {
                   </article>
                 );
               })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* =========================================================================
+          5b. AGENDA & KEGIATAN SEKOLAH TERDEKAT (FE-CMS-PUBLIC-01)
+          ========================================================================= */}
+      <section aria-labelledby="agenda-heading" className="py-14 sm:py-18 bg-white border-t border-gray-100">
+        <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div className="space-y-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#C89332] block">
+                AGENDA &amp; JADWAL KEGIATAN
+              </span>
+              <h2
+                id="agenda-heading"
+                className="font-pub-heading text-2xl sm:text-3xl font-bold text-[#062940]"
+              >
+                Agenda Sekolah Terdekat
+              </h2>
+            </div>
+            <Link
+              href="/agenda"
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#0A3D62] hover:text-[#C89332] transition-colors focus:outline-none focus:underline self-start sm:self-auto"
+            >
+              <span>Lihat Semua Agenda</span>
+              <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+
+          {/* Loading Skeleton */}
+          {isLoadingEvents && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5" aria-busy="true">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="bg-slate-50 border border-slate-200/60 rounded-2xl p-5 animate-pulse space-y-3">
+                  <div className="h-4 bg-slate-200 rounded w-1/4" />
+                  <div className="h-5 bg-slate-200 rounded w-3/4" />
+                  <div className="h-4 bg-slate-200 rounded w-1/2" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Error State */}
+          {!isLoadingEvents && isEventsError && (
+            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-center max-w-md mx-auto space-y-2">
+              <p className="text-xs text-slate-600">Tidak dapat memuat agenda terbaru saat ini.</p>
+              <button
+                type="button"
+                onClick={() => refetchEvents()}
+                className="text-xs font-semibold text-[#0A3D62] hover:underline"
+              >
+                Muat ulang agenda
+              </button>
+            </div>
+          )}
+
+          {/* Data Agenda */}
+          {!isLoadingEvents && !isEventsError && upcomingEvents && upcomingEvents.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {upcomingEvents.map((evt) => {
+                let day = '--';
+                let monthStr = '---';
+                try {
+                  const d = new Date(evt.start_at);
+                  day = d.getDate().toString().padStart(2, '0');
+                  monthStr = new Intl.DateTimeFormat('id-ID', { month: 'short', year: 'numeric' }).format(d);
+                } catch {
+                  // ignore
+                }
+
+                const catLabel =
+                  evt.category === 'ujian'
+                    ? 'Ujian / Asesmen'
+                    : evt.category === 'libur'
+                    ? 'Libur Resmi'
+                    : 'Kegiatan Sekolah';
+
+                const catBadge =
+                  evt.category === 'ujian'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : evt.category === 'libur'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200';
+
+                return (
+                  <div
+                    key={evt.id}
+                    className="bg-[#F8FAFC] border border-slate-200/80 rounded-2xl p-5 hover:border-[#C89332]/50 hover:shadow-xs transition-all flex flex-col justify-between group"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 flex flex-col items-center justify-center shrink-0 group-hover:bg-[#062940] group-hover:text-white transition-colors">
+                            <span className="text-sm font-extrabold leading-none">{day}</span>
+                            <span className="text-[9px] uppercase font-bold text-slate-500 group-hover:text-white/80 leading-tight mt-0.5">
+                              {monthStr.split(' ')[0]}
+                            </span>
+                          </div>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {monthStr}
+                          </span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${catBadge}`}>
+                          {catLabel}
+                        </span>
+                      </div>
+
+                      <h3 className="font-pub-heading text-sm font-bold text-slate-900 group-hover:text-[#0A3D62] transition-colors line-clamp-2 leading-snug">
+                        {evt.title}
+                      </h3>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
+                      <span>SMP Laboratorium UM</span>
+                      <Link href="/agenda" className="font-semibold text-[#0A3D62] hover:text-[#C89332]">
+                        Detail →
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!isLoadingEvents && !isEventsError && (!upcomingEvents || upcomingEvents.length === 0) && (
+            <div className="bg-[#F8FAFC] rounded-2xl border border-slate-200/70 p-6 text-center text-xs text-slate-500">
+              Belum ada agenda kegiatan terdekat yang dijadwalkan.{' '}
+              <Link href="/agenda" className="text-[#0A3D62] font-semibold hover:underline">
+                Lihat kalender kegiatan
+              </Link>
             </div>
           )}
         </div>
@@ -828,7 +931,8 @@ export default function HomePage() {
               id="ppdb-cta-heading"
               className="font-pub-heading text-2xl sm:text-3xl lg:text-[42px] font-bold text-white tracking-tight leading-tight"
             >
-              PPDB 2026/2027
+              <span>PPDB 2026/2027</span>
+              <span className="sr-only"> - {PPDB_BANNER_CONTENT.title}</span>
             </h2>
 
             <p className="text-white/90 text-sm sm:text-base font-medium">
@@ -838,7 +942,7 @@ export default function HomePage() {
             {activeWave && (
               <div className="space-y-0.5">
                 <p className="text-xs sm:text-sm font-semibold text-[#F4E2BD]">
-                  Gelombang aktif saat ini: {activeWave.name}
+                  Gelombang aktif saat ini: {activeWave.name}.
                 </p>
                 {activeWave.close_at && (
                   <p className="text-xs text-white/80">
@@ -850,17 +954,63 @@ export default function HomePage() {
 
             <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <Link
-                href="/ppdb"
+                href="/ppdb/daftar"
                 className="bg-[#C89332] hover:bg-[#B57C23] text-white font-bold text-xs sm:text-base py-3 px-6 rounded-lg shadow-md transition-all inline-flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-[#C89332] focus:ring-offset-2 focus:ring-offset-[#062940]"
               >
                 <span>Daftar Sekarang</span>
+                <span className="sr-only"> - {PPDB_BANNER_CONTENT.ctaRegister.label}</span>
                 <span aria-hidden="true">→</span>
               </Link>
               <Link
-                href="/ppdb#jalur"
+                href="/ppdb"
                 className="bg-transparent hover:bg-white/10 text-white border border-white/40 hover:border-white font-semibold text-xs sm:text-base py-3 px-5 rounded-lg transition-colors inline-flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-[#C89332] focus:ring-offset-2 focus:ring-offset-[#062940]"
               >
                 <span>Lihat Jalur &amp; Syarat</span>
+                <span className="sr-only"> - {PPDB_BANNER_CONTENT.ctaInfo.label}</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* =========================================================================
+          7. PUSAT LAYANAN & BANTUAN INFORMASI
+          ========================================================================= */}
+      <section aria-labelledby="contact-heading" className="py-12 bg-white border-t border-slate-200">
+        <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-1">
+              <h2 id="contact-heading" className="font-pub-heading text-lg sm:text-xl font-bold text-[#062940]">
+                Butuh Informasi Lebih Lanjut Mengenai Layanan Sekolah?
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-500">
+                Sekretariat SMP Laboratorium siap melayani pertanyaan seputar akademik, perizinan, dan program sekolah.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-[#062940]">
+              <a
+                href={phoneTel}
+                className="inline-flex items-center gap-2 hover:text-[#C89332] transition-colors font-medium focus:outline-none focus:underline"
+              >
+                <Phone className="w-4 h-4 text-[#C89332]" aria-hidden="true" />
+                <span>{phoneDisplay}</span>
+              </a>
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 hover:text-emerald-700 transition-colors font-semibold text-emerald-600 focus:outline-none focus:underline"
+              >
+                <Phone className="w-4 h-4" aria-hidden="true" />
+                <span>WhatsApp: {waDisplay}</span>
+              </a>
+              <Link
+                href="/kontak"
+                className="inline-flex items-center gap-1.5 bg-[#062940] hover:bg-[#0A3D62] text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#C89332]"
+              >
+                <span>Lihat Alamat &amp; Lokasi Kampus</span>
+                <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
               </Link>
             </div>
           </div>
