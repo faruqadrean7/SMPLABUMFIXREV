@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Complaint;
 use App\Models\ComplaintEvent;
+use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -74,6 +75,11 @@ class ComplaintService
                 $auditIp,
                 $auditUserAgent
             );
+
+            // BE-REPORT-02: Notifikasi ringan ke BK & Kepsek untuk aduan bullying (doc 09 §6.7)
+            if ($complaint->category === 'bullying') {
+                $this->notifyBullyingReport($complaint);
+            }
 
             return [
                 'ticket_code' => $complaint->ticket_code,
@@ -201,6 +207,22 @@ class ComplaintService
         if (! empty($currentUser->school_id) && ! empty($complaint->school_id) && $complaint->school_id !== $currentUser->school_id) {
             throw new HttpException(403, 'Akses ditolak: Pengaduan berada di luar sekolah penugasan Anda.');
         }
+
+        // BE-REPORT-02 (AC1): Audit-baca saat detail aduan diakses oleh staf berwenang
+        $this->logAudit(
+            $currentUser->id,
+            'complaint.read_detail',
+            'Complaint',
+            $complaint->id,
+            null,
+            [
+                'ticket_code' => $complaint->ticket_code,
+                'category' => $complaint->category,
+                'is_anonymous' => (bool) $complaint->is_anonymous,
+            ],
+            $request->ip(),
+            $request->userAgent()
+        );
 
         if (! $this->canViewReporterIdentity($currentUser) && ! $complaint->is_anonymous) {
             $complaint->setRelation('reporter', null);
@@ -351,6 +373,49 @@ class ComplaintService
                 'ip_address' => $ip,
                 'user_agent' => $userAgent,
             ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * BE-REPORT-02 (AC2): Notifikasi ringan ke Guru BK dan Kepala Sekolah saat ada laporan bullying.
+     * Aturan ketat 09_SECURITY_PRIVACY §6.7: DILARANG menyertakan isi aduan atau data identitas pelapor.
+     */
+    protected function notifyBullyingReport(Complaint $complaint): void
+    {
+        try {
+            $query = User::where('status', 'active');
+
+            if (! empty($complaint->school_id)) {
+                $query->where(function ($q) use ($complaint) {
+                    $q->where('school_id', $complaint->school_id)->orWhereNull('school_id');
+                });
+            }
+
+            $staffUsers = $query->whereHas('roles', function ($q) {
+                $q->whereIn('code', [
+                    'counselor',
+                    'guru_bk',
+                    'principal',
+                    'kepala_sekolah',
+                    'super_admin',
+                ]);
+            })->get();
+
+            foreach ($staffUsers as $staff) {
+                Notification::create([
+                    'user_id' => $staff->id,
+                    'notif_type' => 'complaint.bullying_alert',
+                    'title' => 'Laporan Baru: Perundungan (Bullying)',
+                    'body' => "Terdapat pengaduan baru kategori Perundungan dengan kode tiket {$complaint->ticket_code}. Harap segera ditinjau.",
+                    'data' => [
+                        'ticket_code' => $complaint->ticket_code,
+                        'category' => $complaint->category,
+                        'action_url' => '/admin/public-relations?tab=complaints&category=bullying',
+                    ],
+                ]);
+            }
         } catch (\Throwable $e) {
             report($e);
         }

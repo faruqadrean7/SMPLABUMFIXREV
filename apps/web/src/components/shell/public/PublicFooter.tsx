@@ -121,6 +121,15 @@ export function PublicFooter() {
                 </Link>
               </li>
               <li>
+                <Link
+                  href="/lapor"
+                  className="inline-flex items-center gap-1.5 text-amber-300 hover:text-white font-medium transition-colors"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  Lapor Bullying & Pengaduan
+                </Link>
+              </li>
+              <li>
                 <a
                   href="https://sso.um.ac.id"
                   target="_blank"
