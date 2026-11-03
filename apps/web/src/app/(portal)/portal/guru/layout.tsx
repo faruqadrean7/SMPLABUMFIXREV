@@ -20,7 +20,8 @@ import {
   Building2,
   ShieldCheck,
   ChevronDown,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { RoleGuard } from '@/components/role-guard';
@@ -110,6 +111,13 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       icon: BookOpen,
       badge: '3 Dokumen',
       badgeColor: 'bg-teal-800 text-white',
+    },
+    {
+      name: 'Program Khusus',
+      href: '/guru/program-khusus',
+      icon: Sparkles,
+      badge: 'Tahfidz/ICP',
+      badgeColor: 'bg-indigo-900 text-white',
     },
     {
       name: 'Perizinan Siswa',

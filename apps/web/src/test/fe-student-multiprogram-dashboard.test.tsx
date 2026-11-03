@@ -141,7 +141,7 @@ describe('FE-PORTAL-STUDENT-02B: Multi-Program Student Dashboard Widgets', () =>
     expect(screen.getByText('Siswa Program Inklusi')).toBeInTheDocument();
     expect(screen.getByText('Ibu Ratna Dewi, S.Pd (GPK)')).toBeInTheDocument();
     expect(screen.getByText('Menyelesaikan modul membaca terarah')).toBeInTheDocument();
-    expect(screen.getByText(/Perasaan Hari Ini/i)).toBeInTheDocument();
+    expect(screen.getByText(/Perasaan Belajar Hari Ini/i)).toBeInTheDocument();
   });
 
   it('renders Reguler widget with KKTP summary and P5 project tracker for Reguler students', () => {

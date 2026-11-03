@@ -14,6 +14,30 @@ vi.mock('@/lib/use-student-data', () => ({
   useCreateCounselingRequest: vi.fn(() => ({
     mutateAsync: vi.fn(),
   })),
+  // Program-khusus cards (materi/tugas/target) kini dirender di halaman siswa;
+  // mock hook-nya agar render tidak crash dan menampilkan empty state jujur.
+  useProgramMaterials: vi.fn(() => ({
+    data: { data: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  })),
+  useProgramTargets: vi.fn(() => ({
+    data: { data: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  })),
+  useProgramTasks: vi.fn(() => ({
+    data: { data: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  })),
+  useSubmitProgramTask: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
 }));
 
 describe('FE-ANTIFAKE-02: Hentikan Nilai Fallback Fiktif di Portal Siswa', () => {
