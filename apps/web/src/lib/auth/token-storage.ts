@@ -70,14 +70,12 @@ export const tokenStorage = {
         // Fallback to memory
       }
     }
-    // Sinkronkan juga ke localStorage untuk backward compatibility
+    // Keamanan (AGENTS.md §4): access token TIDAK BOLEH disimpan di localStorage.
+    // Bersihkan kunci legacy ('auth_token' & ACCESS_TOKEN_KEY) agar sesi lama ikut termigrasi.
     if (hasLocalStorage()) {
       try {
-        if (token) {
-          window.localStorage.setItem('auth_token', token);
-        } else {
-          window.localStorage.removeItem('auth_token');
-        }
+        window.localStorage.removeItem('auth_token');
+        window.localStorage.removeItem(ACCESS_TOKEN_KEY);
       } catch {
         // Fallback
       }
