@@ -29,19 +29,14 @@ export function InklusiWidget({ profile }: InklusiWidgetProps) {
     'ringkasan'
   );
 
-  const gpk = profile?.gpk ?? {
-    name: 'Ibu Ratna Dewi, S.Pd (GPK)',
-    contact_phone: '081234567890',
-    room: 'Ruang Sumber Inklusi Lab UM',
-  };
+  // Anti-fabrikasi (AGENTS.md 6.2/9): tanpa data API, tampilkan state kosong jujur,
+  // JANGAN mengarang nama GPK, nomor kontak, atau milestone.
+  const gpk = profile?.gpk ?? null;
 
-  const milestones = profile?.ppi_milestones ?? [
-    { id: 'm1', title: 'Menyelesaikan modul membaca teks deskriptif', is_completed: true },
-    { id: 'm2', title: 'Latihan fokus & motorik halus terarah (15 menit)', is_completed: false },
-  ];
+  const milestones = profile?.ppi_milestones ?? [];
 
-  const currentMood = profile?.daily_mood?.mood ?? 'happy';
-  const [selectedMood, setSelectedMood] = useState<string>(currentMood);
+  const currentMood = profile?.daily_mood?.mood ?? null;
+  const [selectedMood, setSelectedMood] = useState<string>(currentMood ?? '');
   const [feedback, setFeedback] = useState<string>('');
   const submitMoodMutation = useSubmitDailyMood();
 
@@ -143,18 +138,28 @@ export function InklusiWidget({ profile }: InklusiWidgetProps) {
                 <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wide">
                   Guru Pendamping Khusus
                 </span>
-                <h3 className="mt-1 text-sm font-extrabold text-purple-950">{gpk.name}</h3>
-                <p className="text-xs text-purple-800 mt-0.5">{gpk.room}</p>
+                {gpk ? (
+                  <>
+                    <h3 className="mt-1 text-sm font-extrabold text-purple-950">{gpk.name}</h3>
+                    {gpk.room && <p className="text-xs text-purple-800 mt-0.5">{gpk.room}</p>}
+                  </>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Belum ada data Guru Pendamping Khusus.
+                  </p>
+                )}
               </div>
-              <div className="mt-3 pt-2 border-t border-purple-200/80 flex items-center justify-between">
-                <a
-                  href={`tel:${gpk.contact_phone}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-900 hover:bg-purple-950 text-white text-xs font-bold shadow-2xs cursor-pointer"
-                >
-                  <Phone className="w-3 h-3" /> Panggil GPK
-                </a>
-                <span className="text-[10px] text-purple-700 font-semibold">Siaga di sekolah</span>
-              </div>
+              {gpk?.contact_phone && (
+                <div className="mt-3 pt-2 border-t border-purple-200/80 flex items-center justify-between">
+                  <a
+                    href={`tel:${gpk.contact_phone}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-900 hover:bg-purple-950 text-white text-xs font-bold shadow-2xs cursor-pointer"
+                  >
+                    <Phone className="w-3 h-3" /> Panggil GPK
+                  </a>
+                  <span className="text-[10px] text-purple-700 font-semibold">Siaga di sekolah</span>
+                </div>
+              )}
             </div>
 
             {/* PPI Milestones */}
@@ -164,25 +169,31 @@ export function InklusiWidget({ profile }: InklusiWidgetProps) {
                   Milestone Belajar Terpilih
                 </span>
                 <div className="mt-2 space-y-1.5">
-                  {milestones.map((m: any) => (
-                    <div
-                      key={m.id}
-                      className="p-2 rounded-lg bg-white border border-slate-200 flex items-center gap-2 text-xs"
-                    >
-                      <CheckCircle2
-                        className={`w-3.5 h-3.5 shrink-0 ${
-                          m.is_completed ? 'text-emerald-700' : 'text-slate-300'
-                        }`}
-                      />
-                      <span
-                        className={`truncate ${
-                          m.is_completed ? 'line-through text-slate-400 font-normal' : 'text-slate-800 font-medium'
-                        }`}
+                  {milestones.length > 0 ? (
+                    milestones.map((m: any) => (
+                      <div
+                        key={m.id}
+                        className="p-2 rounded-lg bg-white border border-slate-200 flex items-center gap-2 text-xs"
                       >
-                        {m.title}
-                      </span>
-                    </div>
-                  ))}
+                        <CheckCircle2
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            m.is_completed ? 'text-emerald-700' : 'text-slate-300'
+                          }`}
+                        />
+                        <span
+                          className={`truncate ${
+                            m.is_completed ? 'line-through text-slate-400 font-normal' : 'text-slate-800 font-medium'
+                          }`}
+                        >
+                          {m.title}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="p-2 text-xs text-slate-500">
+                      Belum ada target milestone PPI aktif.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="mt-2.5 pt-2 border-t border-slate-200 flex items-center gap-1 text-xs text-slate-500">
