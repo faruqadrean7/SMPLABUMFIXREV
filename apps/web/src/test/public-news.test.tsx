@@ -58,7 +58,9 @@ describe('Public News Page Tests (WEB-NEWS-01)', () => {
 
     // H1 Heading
     const h1 = screen.getByRole('heading', { level: 1 });
-    expect(h1).toHaveTextContent(/Warta & Pengumuman Sekolah/i);
+    // Judul hero dipisah <br/>, jadi cek per potongan agar tahan perubahan whitespace.
+    expect(h1).toHaveTextContent(/Warta & Pengumuman/i);
+    expect(h1).toHaveTextContent(/Sekolah/i);
 
     // Breadcrumb
     const breadcrumb = screen.getByRole('navigation', { name: /Navigasi Halaman/i });
