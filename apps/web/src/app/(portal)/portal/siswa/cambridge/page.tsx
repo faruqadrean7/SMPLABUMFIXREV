@@ -6,6 +6,11 @@ import { Globe, Award, ArrowLeft } from 'lucide-react';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { ErrorState } from '@/components/ui/error-state';
+import {
+  ProgramMaterialsCard,
+  ProgramTargetsCard,
+  ProgramTasksCard,
+} from '@/features/portal/student-programs';
 
 export default function StudentCambridgePage() {
   const { data: studentDash, isLoading, isError, refetch } = useStudentDashboard();
@@ -52,7 +57,7 @@ export default function StudentCambridgePage() {
         </div>
         <Link
           href="/siswa/dashboard"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 self-start sm:self-auto"
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 self-start sm:self-auto cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Kembali ke Beranda
         </Link>
@@ -88,6 +93,28 @@ export default function StudentCambridgePage() {
           ))}
         </div>
       )}
+
+      {/* Program Tasks Section */}
+      <ProgramTasksCard
+        programType="icp"
+        title="Tugas & Latihan Ujian Cambridge"
+        subtitle="Kumpulkan lembar pengerjaan past paper, latihan checkpoint, atau essay"
+      />
+
+      {/* Grid: Materials and Targets */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ProgramMaterialsCard
+          programType="icp"
+          title="Past Papers & Panduan Cambridge"
+          subtitle="Modul materi English, Science, Mathematics, dan lembar soal tahun sebelumnya"
+        />
+
+        <ProgramTargetsCard
+          programType="icp"
+          title="Target Kesiapan Checkpoint"
+          subtitle="Target skor band 0.0 - 6.0 per mata pelajaran kurikulum Cambridge"
+        />
+      </div>
     </div>
   );
 }

@@ -384,8 +384,8 @@ export function useSubmitMutabaah() {
     mutationFn: async (payload: {
       sholat_fardhu: number;
       tilawah_pages: number;
-      dhuha: boolean;
-      tahajud: boolean;
+      dhuha?: boolean;
+      tahajud?: boolean;
     }) => {
       const res = await apiClient.post<ApiResponse<any>>('/me/program/mutabaah', payload);
       return res.data.data;
@@ -395,5 +395,159 @@ export function useSubmitMutabaah() {
     },
   });
 }
+
+// =========================================================================
+// PROGRAM KHUSUS: MATERI, TARGET, & TUGAS (BE-PROG-01 / FE-PROG-01)
+// =========================================================================
+
+export interface ProgramMaterialItem {
+  id: string;
+  program_type: 'tahfidz' | 'icp' | 'inklusi' | 'reguler' | string;
+  title: string;
+  description?: string | null;
+  material_type: string;
+  file_id?: string | null;
+  external_url?: string | null;
+  meta?: Record<string, any> | null;
+  created_at: string;
+  creator?: {
+    id: string;
+    username: string;
+  } | null;
+  file?: {
+    id: string;
+    original_name?: string;
+    url?: string;
+    size_bytes?: number;
+  } | null;
+}
+
+export interface ProgramTargetItem {
+  id: string;
+  student_id: string;
+  program_type: 'tahfidz' | 'icp' | 'inklusi' | 'reguler' | string;
+  title: string;
+  description?: string | null;
+  domain?: string | null;
+  target_value?: string | null;
+  current_value?: string | null;
+  period?: string | null;
+  status: 'aktif' | 'tercapai' | 'batal' | string;
+  meta?: Record<string, any> | null;
+  created_at: string;
+  setter?: {
+    id: string;
+    username: string;
+  } | null;
+}
+
+export interface ProgramTaskSubmissionItem {
+  id: string;
+  task_id: string;
+  student_id: string;
+  file_id?: string | null;
+  link?: string | null;
+  notes?: string | null;
+  status: 'dikumpulkan' | 'dinilai' | 'perlu_revisi' | string;
+  score?: number | null;
+  feedback?: string | null;
+  submitted_at: string;
+  file?: {
+    id: string;
+    original_name?: string;
+    url?: string;
+  } | null;
+}
+
+export interface ProgramTaskItem {
+  id: string;
+  program_type: 'tahfidz' | 'icp' | 'inklusi' | 'reguler' | string;
+  title: string;
+  instructions?: string | null;
+  due_at?: string | null;
+  file_id?: string | null;
+  meta?: Record<string, any> | null;
+  created_at: string;
+  creator?: {
+    id: string;
+    username: string;
+  } | null;
+  file?: {
+    id: string;
+    original_name?: string;
+    url?: string;
+  } | null;
+  submissions?: ProgramTaskSubmissionItem[];
+}
+
+export function useProgramMaterials(params?: { q?: string; material_type?: string; per_page?: number }) {
+  return useQuery({
+    queryKey: ['program-materials', params],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<ProgramMaterialItem[]>>('/me/program/materials', {
+        params,
+      });
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+export function useProgramTargets(params?: { status?: string; domain?: string; per_page?: number }) {
+  return useQuery({
+    queryKey: ['program-targets', params],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<ProgramTargetItem[]>>('/me/program/targets', {
+        params,
+      });
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+export function useProgramTasks(params?: { status?: string; per_page?: number }) {
+  return useQuery({
+    queryKey: ['program-tasks', params],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<ProgramTaskItem[]>>('/me/program/tasks', {
+        params,
+      });
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+export function useSubmitProgramTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      taskId,
+      payload,
+      idempotencyKey,
+    }: {
+      taskId: string;
+      payload: { file_id?: string; link?: string; notes?: string };
+      idempotencyKey?: string;
+    }) => {
+      const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : undefined;
+      const res = await apiClient.post<ApiResponse<ProgramTaskSubmissionItem>>(
+        `/me/program/tasks/${taskId}/submit`,
+        payload,
+        { headers }
+      );
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+    },
+  });
+}
+
+
+
+
 
 
