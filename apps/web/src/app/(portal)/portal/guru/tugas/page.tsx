@@ -40,7 +40,14 @@ export default function GuruTugasPage() {
   const [classId, setClassId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [gradeComponentId, setGradeComponentId] = useState('');
-  const [dueDate, setDueDate] = useState('2026-10-28T23:59');
+  // FIX-GURU-04: default tenggat selalu di masa depan (+7 hari) agar tugas baru tidak langsung "lewat".
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    d.setHours(23, 59, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
   const [maxScore, setMaxScore] = useState(100);
   const [allowLate, setAllowLate] = useState(true);
   const [lockAfterDue, setLockAfterDue] = useState(false);
@@ -509,10 +516,17 @@ export default function GuruTugasPage() {
                             <Clock className="w-3.5 h-3.5" />
                             {unreviewed} Perlu Dinilai
                           </span>
-                        ) : isPastDue ? (
+                        ) : collected > 0 ? (
+                          /* FIX-GURU-04: "Selesai Dinilai" hanya jika ada pengumpulan & semua sudah dinilai. */
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-emerald-700 text-white shadow-xs">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             Selesai Dinilai
+                          </span>
+                        ) : isPastDue ? (
+                          /* FIX-GURU-04: lewat tenggat tanpa satu pun pengumpulan. */
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-slate-500 text-white shadow-xs">
+                            <Clock className="w-3.5 h-3.5" />
+                            Berakhir (Tanpa Pengumpulan)
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-blue-900 text-white shadow-xs">

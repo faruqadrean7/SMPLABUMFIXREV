@@ -162,7 +162,7 @@ class MeTeacherJournalApiTest extends TestCase
 
         $this->period = GradePeriod::create([
             'semester_id' => $this->semester->id,
-            'month' => 10,
+            'month' => (int) now()->month,
             'status' => 'open',
         ]);
 
@@ -245,6 +245,41 @@ class MeTeacherJournalApiTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.lessonTopic', 'Teorema Pythagoras');
+    }
+
+    /**
+     * FIX-GURU-01: menyimpan jurnal beserta presensi menghasilkan attendance_summary nyata,
+     * dan riwayat (list journals) mengembalikan rekap hadir yang benar (bukan 0).
+     */
+    public function test_fix_guru_01_journal_with_attendance_returns_real_summary(): void
+    {
+        $create = $this->actingAs($this->teacherUser)
+            ->postJson('/api/v1/me/teacher/journals', [
+                'schedule_id' => $this->schedule->id,
+                'session_date' => '2026-10-16',
+                'topic' => 'Relasi dan Fungsi',
+                'method' => 'Tatap Muka',
+                'attendances' => [
+                    ['student_id' => $this->student->id, 'status' => 'hadir', 'note' => null],
+                ],
+            ]);
+
+        $create->assertStatus(201)
+            ->assertJsonPath('data.attendance_summary.total', 1)
+            ->assertJsonPath('data.attendance_summary.hadir', 1)
+            ->assertJsonPath('data.attendance_summary.attendance_rate', 100);
+
+        $this->assertDatabaseHas('attendances', [
+            'student_id' => $this->student->id,
+            'status' => 'hadir',
+        ]);
+
+        $list = $this->actingAs($this->teacherUser)
+            ->getJson('/api/v1/me/teacher/journals');
+
+        $list->assertStatus(200)
+            ->assertJsonPath('data.0.attendance_summary.hadir', 1)
+            ->assertJsonPath('data.0.attendance_summary.total', 1);
     }
 
     /**

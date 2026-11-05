@@ -56,6 +56,57 @@ export default function TeacherExamsPage() {
   const [cognitiveLevel, setCognitiveLevel] = useState('C2');
   const [difficulty, setDifficulty] = useState(2);
 
+  // FIX-GURU-06: opsi jawaban & kunci untuk soal berbasis pilihan.
+  type QuestionOptionInput = { label: string; body: string; is_correct: boolean };
+  const defaultOptionsFor = (type: string): QuestionOptionInput[] => {
+    if (type === 'bs') {
+      return [
+        { label: 'B', body: 'Benar', is_correct: false },
+        { label: 'S', body: 'Salah', is_correct: false },
+      ];
+    }
+    return ['A', 'B', 'C', 'D'].map((label) => ({ label, body: '', is_correct: false }));
+  };
+  const [options, setOptions] = useState<QuestionOptionInput[]>(() => defaultOptionsFor('pg'));
+  const [shortAnswer, setShortAnswer] = useState('');
+
+  // FIX-GURU-05: guard anti klik-ganda (cegah soal duplikat).
+  const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false);
+  const [isSubmittingBank, setIsSubmittingBank] = useState(false);
+
+  const needsOptions = ['pg', 'pg_kompleks', 'bs'].includes(questionType);
+  const isSingleChoice = questionType === 'pg' || questionType === 'bs';
+  const canAddOptions = questionType === 'pg' || questionType === 'pg_kompleks';
+
+  const handleTypeChange = (type: string) => {
+    setQuestionType(type);
+    setOptions(defaultOptionsFor(type));
+    setShortAnswer('');
+  };
+
+  const toggleCorrect = (idx: number) => {
+    setOptions((prev) =>
+      prev.map((o, i) => {
+        if (i === idx) return { ...o, is_correct: !o.is_correct };
+        return isSingleChoice ? { ...o, is_correct: false } : o;
+      }),
+    );
+  };
+
+  const updateOptionBody = (idx: number, body: string) =>
+    setOptions((prev) => prev.map((o, i) => (i === idx ? { ...o, body } : o)));
+
+  const addOption = () =>
+    setOptions((prev) => [
+      ...prev,
+      { label: String.fromCharCode(65 + prev.length), body: '', is_correct: false },
+    ]);
+
+  const removeOption = (idx: number) =>
+    setOptions((prev) =>
+      prev.filter((_, i) => i !== idx).map((o, i) => ({ ...o, label: String.fromCharCode(65 + i) })),
+    );
+
   const fetchBanks = async () => {
     setIsLoadingBanks(true);
     try {
@@ -83,12 +134,14 @@ export default function TeacherExamsPage() {
 
   const handleCreateBank = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingBank) return; // FIX-GURU-05: cegah submit ganda.
     if (!bankName.trim()) return;
     if (!bankSubjectId) {
       setErrorMsg('Mata pelajaran belum dipilih. Pastikan Anda memiliki penugasan mengajar.');
       return;
     }
     setErrorMsg(null);
+    setIsSubmittingBank(true);
     try {
       const newBank = await guruApi.createQuestionBank({
         name: bankName,
@@ -101,26 +154,63 @@ export default function TeacherExamsPage() {
       setTimeout(() => setFeedbackMsg(null), 3000);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Gagal membuat bank soal.');
+    } finally {
+      setIsSubmittingBank(false);
     }
   };
 
   const handleCreateQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingQuestion) return; // FIX-GURU-05: cegah soal duplikat dari klik berulang.
     if (!selectedBankId || !questionText.trim()) return;
+
+    // FIX-GURU-06: validasi & rakit opsi jawaban + kunci.
+    let payloadOptions: Array<{ label: string; body: string; is_correct: boolean }> | undefined;
+    if (needsOptions) {
+      const filled = options.filter((o) => o.body.trim());
+      if (filled.length < 2) {
+        setErrorMsg('Minimal 2 opsi jawaban harus diisi.');
+        return;
+      }
+      const correctCount = filled.filter((o) => o.is_correct).length;
+      if (isSingleChoice && correctCount !== 1) {
+        setErrorMsg('Pilih tepat satu jawaban benar untuk soal ini.');
+        return;
+      }
+      if (!isSingleChoice && correctCount < 1) {
+        setErrorMsg('Pilih minimal satu jawaban benar.');
+        return;
+      }
+      payloadOptions = filled.map((o) => ({ label: o.label, body: o.body.trim(), is_correct: o.is_correct }));
+    } else if (questionType === 'isian') {
+      if (!shortAnswer.trim()) {
+        setErrorMsg('Kunci jawaban isian singkat wajib diisi.');
+        return;
+      }
+      payloadOptions = [{ label: 'KUNCI', body: shortAnswer.trim(), is_correct: true }];
+    }
+
+    setErrorMsg(null);
+    setIsSubmittingQuestion(true);
     try {
       await guruApi.createQuestion(selectedBankId, {
         question_type: questionType,
         body: { text: questionText },
         cognitive_level: cognitiveLevel,
         difficulty: Number(difficulty),
+        options: payloadOptions,
       });
       setIsQuestionModalOpen(false);
       setQuestionText('');
+      setOptions(defaultOptionsFor(questionType));
+      setShortAnswer('');
       setFeedbackMsg('Butir soal berhasil ditambahkan ke bank soal.');
       setTimeout(() => setFeedbackMsg(null), 3000);
       fetchBanks();
     } catch (err: any) {
       setErrorMsg(err?.message || 'Gagal menambahkan soal.');
+    } finally {
+      setIsSubmittingQuestion(false);
     }
   };
 
@@ -386,8 +476,13 @@ export default function TeacherExamsPage() {
                 <Button type="button" variant="outline" size="sm" onClick={() => setIsBankModalOpen(false)}>
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-brand-blue text-white font-bold">
-                  Simpan Bank Soal
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSubmittingBank}
+                  className="bg-brand-blue text-white font-bold disabled:opacity-50"
+                >
+                  {isSubmittingBank ? 'Menyimpan...' : 'Simpan Bank Soal'}
                 </Button>
               </div>
             </form>
@@ -414,7 +509,7 @@ export default function TeacherExamsPage() {
                   <label className="block font-bold text-slate-700 mb-1">Tipe Soal</label>
                   <select
                     value={questionType}
-                    onChange={(e) => setQuestionType(e.target.value)}
+                    onChange={(e) => handleTypeChange(e.target.value)}
                     className="w-full h-9 rounded-md border border-slate-200 px-2 text-xs"
                   >
                     <option value="pg">Pilihan Ganda</option>
@@ -465,12 +560,84 @@ export default function TeacherExamsPage() {
                   required
                 />
               </div>
+
+              {/* FIX-GURU-06: input opsi jawaban + penanda kunci untuk soal pilihan. */}
+              {needsOptions && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold text-slate-700">
+                      Opsi Jawaban {isSingleChoice ? '(pilih 1 kunci benar)' : '(boleh >1 kunci benar)'}
+                    </label>
+                    <span className="text-[10px] text-slate-400">Centang lingkaran = jawaban benar</span>
+                  </div>
+                  {options.map((opt, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleCorrect(idx)}
+                        aria-label={`Tandai opsi ${opt.label} sebagai jawaban benar`}
+                        className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-[10px] font-bold transition-colors ${
+                          opt.is_correct
+                            ? 'bg-emerald-600 border-emerald-600 text-white'
+                            : 'bg-white border-slate-300 text-slate-500 hover:border-emerald-500'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                      <Input
+                        value={opt.body}
+                        onChange={(e) => updateOptionBody(idx, e.target.value)}
+                        placeholder={`Isi opsi ${opt.label}`}
+                        disabled={questionType === 'bs'}
+                        className="h-8 text-xs"
+                      />
+                      {canAddOptions && options.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => removeOption(idx)}
+                          aria-label={`Hapus opsi ${opt.label}`}
+                          className="shrink-0 text-slate-400 hover:text-rose-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {canAddOptions && (
+                    <button
+                      type="button"
+                      onClick={addOption}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-blue hover:underline"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Tambah opsi
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {questionType === 'isian' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Kunci Jawaban (Isian Singkat)</label>
+                  <Input
+                    value={shortAnswer}
+                    onChange={(e) => setShortAnswer(e.target.value)}
+                    placeholder="Jawaban benar yang diharapkan"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => setIsQuestionModalOpen(false)}>
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-brand-blue text-white font-bold">
-                  Simpan Butir Soal
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSubmittingQuestion}
+                  className="bg-brand-blue text-white font-bold disabled:opacity-50"
+                >
+                  {isSubmittingQuestion ? 'Menyimpan...' : 'Simpan Butir Soal'}
                 </Button>
               </div>
             </form>

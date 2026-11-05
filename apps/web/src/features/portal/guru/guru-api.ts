@@ -423,13 +423,25 @@ export const guruApi = {
     return unwrapList<FacilityBookingItem>(res);
   },
 
+  // FIX-GURU-11: daftar fasilitas nyata untuk mengisi dropdown reservasi (hindari UUID dummy).
+  async getFacilities(params?: { per_page?: number; q?: string }): Promise<Array<{ id: string; name: string }>> {
+    const res = await apiClient.get('/facilities', { params: { per_page: 100, ...params } });
+    return unwrapList<{ id: string; name: string }>(res);
+  },
+
   async createFacilityBooking(payload: FacilityBookingPayload): Promise<FacilityBookingItem> {
-    const res = await apiClient.post<FacilityBookingItem>('/me/teacher/facility-bookings', payload);
+    // FIX-GURU-12: beri ruang latensi backend (cold-start) agar tidak mudah timeout 15s.
+    const res = await apiClient.post<FacilityBookingItem>('/me/teacher/facility-bookings', payload, {
+      timeout: 30000,
+    });
     return unwrapItem<FacilityBookingItem>(res, res.data);
   },
 
   async createSarprasTicket(payload: SarprasTicketPayload): Promise<SarprasTicketItem> {
-    const res = await apiClient.post<SarprasTicketItem>('/me/teacher/tickets', payload);
+    // FIX-GURU-12: timeout per-request lebih longgar untuk operasi tulis tiket sarpras.
+    const res = await apiClient.post<SarprasTicketItem>('/me/teacher/tickets', payload, {
+      timeout: 30000,
+    });
     return unwrapItem<SarprasTicketItem>(res, res.data);
   },
 

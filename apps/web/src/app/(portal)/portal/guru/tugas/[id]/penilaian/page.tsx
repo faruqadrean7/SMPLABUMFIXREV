@@ -70,8 +70,14 @@ export default function SpeedGraderPage() {
         setActiveStudentIndex(prev => prev + 1);
       }
     },
-    onError: () => {
-      toast.error('Gagal menyimpan nilai.');
+    onError: (err: any) => {
+      // FIX-GURU-03: tampilkan pesan server yang sebenarnya, bukan pesan generik.
+      const msg =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Terjadi kesalahan saat menyimpan nilai.';
+      toast.error('Gagal menyimpan nilai: ' + msg);
     }
   });
 
@@ -79,9 +85,11 @@ export default function SpeedGraderPage() {
     if (e) e.preventDefault();
     if (!currentSubmission) return;
 
+    // FIX-GURU-03: validasi skor mengacu ke max_score tugas (bukan selalu 100).
+    const maxScore = assignment?.max_score ?? 100;
     const numScore = parseFloat(scoreInput);
-    if (isNaN(numScore) || numScore < 0 || numScore > 100) {
-      toast.error('Skor nilai harus berupa angka antara 0 hingga 100.');
+    if (isNaN(numScore) || numScore < 0 || numScore > maxScore) {
+      toast.error(`Skor nilai harus berupa angka antara 0 hingga ${maxScore}.`);
       return;
     }
 
