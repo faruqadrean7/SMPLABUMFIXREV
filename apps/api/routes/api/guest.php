@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\ComplaintAttachmentController;
 use App\Http\Controllers\Api\V1\ComplaintController;
 use App\Http\Controllers\Api\V1\GuestController;
 use Illuminate\Support\Facades\Route;
@@ -9,6 +10,16 @@ use Illuminate\Support\Facades\Route;
 // =========================================================================
 Route::post('/public/guests', [GuestController::class, 'register'])->middleware('throttle:60,1');
 Route::post('/public/guests/{id}/signature', [GuestController::class, 'uploadSignature'])->middleware('throttle:60,1');
+
+// =========================================================================
+// BE-GUEST-04: Lampiran Foto Pengaduan (Presign & Confirm - Publik)
+// =========================================================================
+Route::post('/public/complaints/attachments/presign', [ComplaintAttachmentController::class, 'presign'])
+    ->middleware('throttle:30,1');
+Route::post('/public/complaints/attachments/{token}/confirm', [ComplaintAttachmentController::class, 'confirm'])
+    ->middleware('throttle:30,1');
+Route::post('/public/complaints/attachments/confirm', [ComplaintAttachmentController::class, 'confirm'])
+    ->middleware('throttle:30,1');
 
 // =========================================================================
 // BE-GUEST-02: Aspirasi & Whistleblowing (Public Submission & Tracking)

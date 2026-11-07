@@ -5,12 +5,14 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Complaint;
 use App\Models\ComplaintEvent;
+use App\Models\File;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -47,6 +49,30 @@ class ComplaintService
                 'assigned_to' => null,
             ]);
 
+            // BE-GUEST-04: Asosiasi lampiran foto terkonfirmasi ke pengaduan
+            $attachmentFileIds = $data['attachment_file_ids'] ?? [];
+            if (! empty($attachmentFileIds)) {
+                if (count($attachmentFileIds) > 3) {
+                    throw new HttpException(400, 'Jumlah lampiran melebihi batas maksimal 3 foto.');
+                }
+
+                $files = File::whereIn('id', $attachmentFileIds)->get();
+                if ($files->count() !== count($attachmentFileIds)) {
+                    throw new HttpException(400, 'Satu atau lebih berkas lampiran tidak ditemukan.');
+                }
+
+                foreach ($files as $file) {
+                    if ($file->visibility !== 'privat' || ! in_array($file->owner_type, ['complaint_pending', null], true)) {
+                        throw new HttpException(400, 'Berkas lampiran tidak valid atau sudah diasosiasikan.');
+                    }
+
+                    $file->owner_type = 'complaint';
+                    $file->owner_id = $complaint->id;
+                    $file->school_id = $complaint->school_id;
+                    $file->save();
+                }
+            }
+
             // Catat event awal pada timeline
             ComplaintEvent::create([
                 'complaint_id' => $complaint->id,
@@ -56,7 +82,7 @@ class ComplaintService
                 'created_at' => Carbon::now(),
             ]);
 
-            // AC2: Whistleblower protection - jika anonim, IP dan user agent DILARANG disimpan
+            // AC2 & AC4: Whistleblower protection - jika anonim, IP dan user agent DILARANG disimpan
             $auditActorId = $isAnonymous ? null : ($currentUser?->id ?? null);
             $auditIp = $isAnonymous ? null : $request->ip();
             $auditUserAgent = $isAnonymous ? null : $request->userAgent();
@@ -71,6 +97,7 @@ class ComplaintService
                     'ticket_code' => $complaint->ticket_code,
                     'category' => $complaint->category,
                     'is_anonymous' => $isAnonymous,
+                    'attachment_count' => count($attachmentFileIds),
                 ],
                 $auditIp,
                 $auditUserAgent
@@ -86,6 +113,7 @@ class ComplaintService
                 'category' => $complaint->category,
                 'is_anonymous' => $complaint->is_anonymous,
                 'status' => $complaint->status,
+                'attachment_count' => count($attachmentFileIds),
                 'created_at' => $complaint->created_at->toIso8601String(),
                 'message' => 'Pengaduan berhasil dikirim. Simpan kode tiket ini untuk memeriksa perkembangan penanganan secara berkala.',
             ];
@@ -193,7 +221,7 @@ class ComplaintService
     }
 
     /**
-     * BE-GUEST-02: Get complaint detail for authorized staff.
+     * BE-GUEST-02 & BE-GUEST-04: Get complaint detail for authorized staff with signed attachments.
      */
     public function getComplaintDetail(string $id, Request $request): Complaint
     {
@@ -202,7 +230,7 @@ class ComplaintService
         /** @var User $currentUser */
         $currentUser = $request->user();
 
-        $complaint = Complaint::with(['reporter', 'assignedToUser', 'events.actor'])->findOrFail($id);
+        $complaint = Complaint::with(['reporter', 'assignedToUser', 'events.actor', 'attachments'])->findOrFail($id);
 
         if (! empty($currentUser->school_id) && ! empty($complaint->school_id) && $complaint->school_id !== $currentUser->school_id) {
             throw new HttpException(403, 'Akses ditolak: Pengaduan berada di luar sekolah penugasan Anda.');
@@ -227,6 +255,33 @@ class ComplaintService
         if (! $this->canViewReporterIdentity($currentUser) && ! $complaint->is_anonymous) {
             $complaint->setRelation('reporter', null);
             $complaint->reporter_user_id = null;
+        }
+
+        // AC5: Sertakan signed URL berumur pendek (<= 5 menit) dan catat audit baca
+        if ($complaint->attachments->isNotEmpty()) {
+            $complaint->attachments->each(function (File $file) {
+                $signedUrl = URL::temporarySignedRoute(
+                    'files.download.signed',
+                    Carbon::now()->addSeconds(300),
+                    ['id' => $file->id]
+                );
+                $file->setAttribute('signed_url', $signedUrl);
+                $file->setAttribute('expires_at', Carbon::now()->addSeconds(300)->toIso8601String());
+            });
+
+            $this->logAudit(
+                $currentUser->id,
+                'complaint.attachment.read',
+                'Complaint',
+                $complaint->id,
+                null,
+                [
+                    'ticket_code' => $complaint->ticket_code,
+                    'attachment_count' => $complaint->attachments->count(),
+                ],
+                $request->ip(),
+                $request->userAgent()
+            );
         }
 
         return $complaint;
@@ -370,7 +425,7 @@ class ComplaintService
                 'entity_id' => $entityId,
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
-                'ip_address' => $ip,
+                'ip' => $ip,
                 'user_agent' => $userAgent,
             ]);
         } catch (\Throwable $e) {
@@ -419,5 +474,20 @@ class ComplaintService
         } catch (\Throwable $e) {
             report($e);
         }
+    }
+
+    /**
+     * BE-GUEST-04 & AC7: Payload notifikasi steril (tanpa gambar, isi, atau data sensitif).
+     */
+    public function getNotificationPayload(Complaint $complaint): array
+    {
+        return [
+            'title' => 'Pengaduan Baru Terdaftar',
+            'body' => 'Terdapat laporan/pengaduan baru di portal sekolah. Silakan login ke portal untuk melihat detail.',
+            'data' => [
+                'type' => 'complaint',
+                'ticket_code' => $complaint->ticket_code,
+            ],
+        ];
     }
 }
