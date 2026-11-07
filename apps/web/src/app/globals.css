@@ -6,11 +6,22 @@
   :root {
     --background: 210 40% 98%;
     --foreground: 222 47% 11%;
+    /* FIX-GURU-02: paksa rendering kontrol form (input/select/textarea) mode terang.
+       Tanpa ini, OS dark mode membuat teks input tampil putih di atas latar putih
+       sehingga lembar presensi & form lain tidak terbaca. */
+    color-scheme: light;
   }
 
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Jaring pengaman: kontrol form selalu memakai warna teks gelap di tema terang. */
+  input,
+  select,
+  textarea {
+    @apply text-slate-900;
   }
 }
 

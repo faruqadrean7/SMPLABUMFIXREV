@@ -37,7 +37,7 @@ interface LeaveRequestItem {
   startDate: string;
   endDate: string;
   reason: string;
-  attachmentUrl?: string;
+  attachmentFileId?: string;
   attachmentName?: string;
   submittedAt: string;
   status: 'menunggu' | 'disetujui' | 'ditolak';
@@ -51,11 +51,15 @@ export default function PerizinanSiswaPage() {
   const [classFilter, setClassFilter] = useState<string>('ALL');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedId, setSelectedId] = useState<string>('lr-101');
+  const [selectedId, setSelectedId] = useState<string>('');
+  const [openingFileId, setOpeningFileId] = useState<string | null>(null);
 
-  const { data: apiRequests = [] } = useQuery({
+  const { data: apiRequests = [], isLoading, isError } = useQuery({
     queryKey: ['homeroom-leave-requests'],
-    queryFn: () => lmsApi.getHomeroomLeaveRequests(),
+    queryFn: async () => {
+      const res = await lmsApi.getHomeroomLeaveRequests();
+      return (res?.data ?? []) as any[];
+    },
     staleTime: 1000 * 60 * 2,
   });
 
@@ -67,130 +71,43 @@ export default function PerizinanSiswaPage() {
     },
   });
 
-  const [requests, setRequests] = useState<LeaveRequestItem[]>([
-    {
-      id: 'lr-101',
-      studentId: 'std-260705',
-      studentName: 'Dimas Anggara Saputra',
-      avatar_url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&q=80&w=150',
-      nis: '260705',
-      className: 'Kelas VII-A',
-      type: 'sakit',
-      startDate: '2026-10-21',
-      endDate: '2026-10-22',
-      reason: 'Demam tinggi dan flu batuk, istirahat di rumah sesuai anjuran dokter.',
-      attachmentUrl: '#',
-      attachmentName: 'Surat_Keterangan_Sakit_Klinik_UM.pdf',
-      submittedAt: '2026-10-21 06:30 WIB',
-      status: 'menunggu',
-      parentName: 'Bpk. Anggara Saputra (Ayah)',
-    },
-    {
-      id: 'lr-102',
-      studentId: 'std-260707',
-      studentName: 'Gita Amanda Sari',
-      avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=150',
-      nis: '260707',
-      className: 'Kelas VII-A',
-      type: 'dispensasi',
-      startDate: '2026-10-22',
-      endDate: '2026-10-23',
-      reason: 'Mewakili sekolah pada Kejuaraan Renang Pelajar Tingkat Kota Malang.',
-      attachmentUrl: '#',
-      attachmentName: 'Surat_Dispensasi_KONI_Malang.pdf',
-      submittedAt: '2026-10-20 15:40 WIB',
-      status: 'menunggu',
-      parentName: 'Ibu Amanda (Ibu)',
-    },
-    {
-      id: 'lr-001',
-      studentId: 'std-240907',
-      studentName: 'Dimas Anggara Putra',
-      avatar_url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&q=80&w=150',
-      nis: '240907',
-      className: 'Kelas IX-A',
-      type: 'sakit',
-      startDate: '2026-10-14',
-      endDate: '2026-10-15',
-      reason: 'Demam tinggi dan radang tenggorokan. Istirahat dokter 2 hari.',
-      attachmentUrl: '#',
-      attachmentName: 'Surat_Dokter_Klinik_UM_Dimas.pdf',
-      submittedAt: '2026-10-14 06:45 WIB',
-      status: 'menunggu',
-      parentName: 'Bambang Sudarmono (Ayah)',
-    },
-    {
-      id: 'lr-002',
-      studentId: 'std-240914',
-      studentName: 'Karina Safitri',
-      avatar_url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&q=80&w=150',
-      nis: '240914',
-      className: 'Kelas IX-A',
-      type: 'dispensasi',
-      startDate: '2026-10-14',
-      endDate: '2026-10-14',
-      reason: 'Mewakili sekolah pada babak penyisihan Olimpiade Sains Nasional (OSN) Bidang Informatika Tingkat Kota Malang.',
-      attachmentUrl: '#',
-      attachmentName: 'Surat_Tugas_OSN_Informatika_Karina.pdf',
-      submittedAt: '2026-10-13 14:10 WIB',
-      status: 'menunggu',
-      parentName: 'H. Suryanto (Ayah)',
-    },
-    {
-      id: 'lr-003',
-      studentId: 'std-240922',
-      studentName: 'Salma Nuraini',
-      avatar_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=150',
-      nis: '240922',
-      className: 'Kelas IX-A',
-      type: 'izin',
-      startDate: '2026-10-09',
-      endDate: '2026-10-09',
-      reason: 'Menghadiri prosesi akad nikah kakak kandung di luar kota.',
-      attachmentUrl: '#',
-      attachmentName: 'Surat_Izin_Keluarga_Salma.pdf',
-      submittedAt: '2026-10-08 19:20 WIB',
-      status: 'disetujui',
-      parentName: 'Ibu Ratna (Ibu)',
-      decisionNote: 'Disetujui. Tugas praktikum mandiri telah diserahkan ke guru pengampu.'
-    },
-    {
-      id: 'lr-004',
-      studentId: 'std-240903',
-      studentName: 'Rizky Pratama Wijaya',
-      avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150',
-      nis: '240903',
-      className: 'Kelas IX-A',
-      type: 'sakit',
-      startDate: '2026-10-05',
-      endDate: '2026-10-06',
-      reason: 'Pemeriksaan rawat jalan dan observasi gejala tifus di RS Lavalette.',
-      attachmentUrl: '#',
-      attachmentName: 'Surat_Keterangan_RS_Lavalette.pdf',
-      submittedAt: '2026-10-05 07:15 WIB',
-      status: 'disetujui',
-      parentName: 'Ir. Hendro Wijaya (Ayah)',
-      decisionNote: 'Disetujui. Siswa dipersilakan mengikuti KBM daring asinkron.'
-    },
-    {
-      id: 'lr-005',
-      studentId: 'std-240902',
-      studentName: 'Nabila Putri Andini',
-      avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
-      nis: '240902',
-      className: 'Kelas IX-A',
-      type: 'dispensasi',
-      startDate: '2026-09-28',
-      endDate: '2026-09-29',
-      reason: 'Lomba Debat Bahasa Inggris English Proficiency antar SMP Labschool Se-Jawa Timur.',
-      attachmentUrl: '#',
-      attachmentName: 'Surat_Tugas_Debat_Jatim.pdf',
-      submittedAt: '2026-09-27 11:30 WIB',
-      status: 'disetujui',
-      parentName: 'Dra. Endang Sulastri (Ibu)',
-      decisionNote: 'Disetujui resmi sebagai delegasi sekolah.'
-    }
-  ]);
+  // Normalisasi record API LeaveRequest menjadi bentuk tampilan (sumber data tunggal dari backend).
+  const requests: LeaveRequestItem[] = React.useMemo(
+    () =>
+      (apiRequests as any[]).map((r) => {
+        const student = r.student ?? {};
+        const rawClasses = student.classes ?? student.class ?? [];
+        const className = Array.isArray(rawClasses)
+          ? (rawClasses[0]?.name ?? '-')
+          : (rawClasses?.name ?? '-');
+        const requester = r.requester ?? r.requested_by_user ?? {};
+        const attachment = r.attachment_file ?? r.attachmentFile ?? null;
+        const rawType = (r.leave_type ?? r.type ?? 'izin') as string;
+        const type = (['sakit', 'izin', 'dispensasi'].includes(rawType) ? rawType : 'izin') as LeaveRequestItem['type'];
+        const classLabel = `${className}`.startsWith('Kelas') ? `${className}` : `Kelas ${className}`;
+        return {
+          id: r.id,
+          studentId: r.student_id ?? student.id ?? '',
+          studentName: student.full_name ?? student.name ?? 'Siswa',
+          nis: student.nis ?? '',
+          className: classLabel,
+          type,
+          startDate: `${r.start_date ?? ''}`.slice(0, 10),
+          endDate: `${r.end_date ?? r.start_date ?? ''}`.slice(0, 10),
+          reason: r.reason ?? '',
+          attachmentFileId: r.attachment_file_id ?? attachment?.id ?? undefined,
+          attachmentName:
+            attachment?.original_name ?? attachment?.name ?? (r.attachment_file_id ? 'Lampiran dokumen' : undefined),
+          submittedAt: `${r.created_at ?? ''}`.replace('T', ' ').slice(0, 16),
+          status: (r.status ?? 'menunggu') as LeaveRequestItem['status'],
+          parentName: requester.full_name ?? requester.name ?? 'Orang tua/wali',
+          decisionNote: r.decision_notes ?? undefined,
+          avatar_url: student.avatar_url ?? undefined,
+        } as LeaveRequestItem;
+      }),
+    [apiRequests],
+  );
+
 
   const handleDecision = async (id: string, newStatus: 'disetujui' | 'ditolak') => {
     try {
@@ -203,24 +120,35 @@ export default function PerizinanSiswaPage() {
           ? 'Permohonan izin disetujui! Status presensi KBM siswa otomatis tersinkronisasi.'
           : 'Permohonan izin ditolak.'
       );
-    } catch {
-      // Local optimistic fallback for offline prototype
-      setRequests(prev => prev.map(item => {
-        if (item.id === id) {
-          return {
-            ...item,
-            status: newStatus,
-            decisionNote: newStatus === 'disetujui' ? 'Disetujui oleh Wali Kelas (Drs. Budi Santoso)' : 'Ditolak: lampiran bukti kurang lengkap'
-          };
-        }
-        return item;
-      }));
-
-      toast.success(
-        newStatus === 'disetujui'
-          ? 'Permohonan izin disetujui! Status presensi KBM siswa otomatis tersinkronisasi.'
-          : 'Permohonan izin ditolak.'
+    } catch (err: any) {
+      toast.error(
+        'Gagal memperbarui keputusan izin: ' +
+          (err?.response?.data?.error?.message ||
+            err?.response?.data?.message ||
+            err?.message ||
+            'Terjadi kesalahan sistem.')
       );
+    }
+  };
+
+  // FIX-GURU-07: buka lampiran berkas nyata via resolusi file_id ke tautan ber-otorisasi backend.
+  const handleViewAttachment = async (fileId?: string) => {
+    if (!fileId) return;
+    setOpeningFileId(fileId);
+    try {
+      const url = await lmsApi.getFileUrl(fileId);
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        toast.error('Tautan berkas tidak tersedia.');
+      }
+    } catch (err: any) {
+      toast.error(
+        'Gagal membuka berkas: ' +
+          (err?.response?.data?.error?.message || err?.message || 'Berkas tidak dapat diakses.')
+      );
+    } finally {
+      setOpeningFileId(null);
     }
   };
 
@@ -390,11 +318,22 @@ export default function PerizinanSiswaPage() {
 
           {/* List Scroll Area */}
           <div className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2">
-            {filteredRequests.length === 0 ? (
+            {isLoading ? (
+              <div className="p-8 text-center text-slate-500">
+                <Clock className="w-8 h-8 mx-auto text-slate-300 mb-2 animate-pulse" />
+                <p className="text-xs font-bold text-slate-700">Memuat permohonan izin...</p>
+              </div>
+            ) : isError ? (
+              <div className="p-8 text-center text-rose-600">
+                <AlertCircle className="w-8 h-8 mx-auto text-rose-300 mb-2" />
+                <p className="text-xs font-bold">Gagal memuat data perizinan</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Periksa koneksi atau coba muat ulang halaman.</p>
+              </div>
+            ) : filteredRequests.length === 0 ? (
               <div className="p-8 text-center text-slate-500">
                 <UserCheck className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                 <p className="text-xs font-bold text-slate-700">Tidak ada permohonan ditemukan</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Sesuaikan kata kunci pencarian atau filter status.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Belum ada pengajuan izin, atau sesuaikan kata kunci / filter status.</p>
               </div>
             ) : (
               filteredRequests.map((item) => {
@@ -576,7 +515,7 @@ export default function PerizinanSiswaPage() {
                 {/* Berkas Lampiran Surat / Bukti */}
                 <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2">
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">Lampiran Dokumen Resmi</span>
-                  {activeItem.attachmentName ? (
+                  {activeItem.attachmentFileId ? (
                     <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
                       <div className="flex items-center gap-2.5">
                         <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
@@ -589,11 +528,12 @@ export default function PerizinanSiswaPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => toast.success(`Membuka berkas dokumen: ${activeItem.attachmentName}`)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-900 text-white hover:bg-blue-800 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
+                        onClick={() => handleViewAttachment(activeItem.attachmentFileId)}
+                        disabled={openingFileId === activeItem.attachmentFileId}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-900 text-white hover:bg-blue-800 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-wait"
                       >
                         <Eye className="w-3.5 h-3.5" />
-                        <span>Lihat Berkas</span>
+                        <span>{openingFileId === activeItem.attachmentFileId ? 'Membuka...' : 'Lihat Berkas'}</span>
                       </button>
                     </div>
                   ) : (

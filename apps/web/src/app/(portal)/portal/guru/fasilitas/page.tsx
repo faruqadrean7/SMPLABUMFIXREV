@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import {
+  useFacilities,
   useFacilityBookings,
   useCreateFacilityBooking,
   useCreateSarprasTicket,
@@ -32,6 +33,7 @@ export default function TeacherFacilitiesPage() {
 
   // Booking Query & Mutation
   const { data: bookings = [], isLoading: isLoadingBookings, error: bookingsError } = useFacilityBookings();
+  const { data: facilities = [], isLoading: isLoadingFacilities } = useFacilities();
   const createBookingMutation = useCreateFacilityBooking();
 
   // Booking Form State
@@ -54,6 +56,10 @@ export default function TeacherFacilitiesPage() {
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!facilityId) {
+      setBookingFeedback({ type: 'error', message: 'Pilih fasilitas yang akan dipinjam terlebih dahulu.' });
+      return;
+    }
     if (!startDate || !startTime || !endTime) {
       setBookingFeedback({ type: 'error', message: 'Tanggal dan rentang waktu peminjaman wajib diisi.' });
       return;
@@ -74,7 +80,7 @@ export default function TeacherFacilitiesPage() {
     setBookingFeedback(null);
     try {
       await createBookingMutation.mutateAsync({
-        facility_id: facilityId || '00000000-0000-0000-0000-000000000001',
+        facility_id: facilityId,
         start_at: startAt,
         end_at: endAt,
         purpose: bookingPurpose.trim(),
@@ -218,13 +224,17 @@ export default function TeacherFacilitiesPage() {
                     id="booking-facility"
                     value={facilityId}
                     onChange={(e) => setFacilityId(e.target.value)}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 font-medium"
+                    disabled={isLoadingFacilities}
+                    className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 font-medium disabled:bg-slate-100"
                   >
-                    <option value="">-- Pilih Fasilitas Sekolah --</option>
-                    <option value="00000000-0000-0000-0000-000000000001">Lab Komputer 1 (Lantai 2)</option>
-                    <option value="00000000-0000-0000-0000-000000000002">Lab Multimedia (Lantai 3)</option>
-                    <option value="00000000-0000-0000-0000-000000000003">Aula Graha Saraswati</option>
-                    <option value="00000000-0000-0000-0000-000000000004">Laboratorium Sains / IPA</option>
+                    <option value="">
+                      {isLoadingFacilities ? 'Memuat daftar fasilitas...' : '-- Pilih Fasilitas Sekolah --'}
+                    </option>
+                    {facilities.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

@@ -154,7 +154,7 @@ class TeacherAttendanceController extends Controller
             return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        $journals = Journal::with(['schedule.class', 'schedule.subject'])
+        $journals = Journal::with(['schedule.class', 'schedule.subject', 'attendances.student'])
             ->where('teacher_id', $teacher->id)
             ->latest('session_date')
             ->get();
@@ -176,7 +176,9 @@ class TeacherAttendanceController extends Controller
             'topic' => $j->topic ?? '',
             'competenceIndicator' => $j->notes ?? '',
             'notes' => $j->notes ?? '',
-            'studentAbsentees' => [],
+            // FIX-GURU-01: rekap presensi nyata dihitung dari relasi attendances.
+            'attendance_summary' => $this->summarizeAttendances($j->attendances),
+            'studentAbsentees' => $this->extractAbsentees($j->attendances),
             'learningObstacles' => '',
             'isLocked' => false,
             'createdAt' => $j->created_at?->toISOString() ?? now()->toISOString(),
@@ -252,16 +254,42 @@ class TeacherAttendanceController extends Controller
             }
         }
 
-        $journal = Journal::create([
-            'teacher_id' => $teacher->id,
-            'schedule_id' => $schedule->id,
-            'session_date' => $sessionDate,
-            'topic' => $topic ?: 'Topik KBM',
-            'method' => $method ?: 'Tatap Muka',
-            'notes' => $notes ?: null,
-        ]);
+        // FIX-GURU-01: jurnal + presensi disimpan dalam satu transaksi agar riwayat konsisten
+        // (menghindari duplikasi jurnal dari endpoint presensi terpisah & gating UUID di klien).
+        $normalizedAttendees = $this->normalizeAttendees(
+            $request->input('attendances', $request->input('attendees', []))
+        );
 
-        $journal->load(['schedule.class', 'schedule.subject']);
+        $journal = DB::transaction(function () use ($teacher, $schedule, $sessionDate, $topic, $method, $notes, $normalizedAttendees, $request) {
+            $journal = Journal::create([
+                'teacher_id' => $teacher->id,
+                'schedule_id' => $schedule->id,
+                'session_date' => $sessionDate,
+                'topic' => $topic ?: 'Topik KBM',
+                'method' => $method ?: 'Tatap Muka',
+                'notes' => $notes ?: null,
+            ]);
+
+            foreach ($normalizedAttendees as $att) {
+                Attendance::updateOrCreate(
+                    [
+                        'journal_id' => $journal->id,
+                        'student_id' => $att['student_id'],
+                    ],
+                    [
+                        'att_date' => $sessionDate,
+                        'status' => $att['status'],
+                        'source' => 'guru',
+                        'note' => $att['notes'],
+                        'recorded_by' => $request->user()?->id,
+                    ]
+                );
+            }
+
+            return $journal;
+        });
+
+        $journal->load(['schedule.class', 'schedule.subject', 'attendances.student']);
 
         return $this->successResponse([
             'id' => $journal->id,
@@ -280,10 +308,105 @@ class TeacherAttendanceController extends Controller
             'topic' => $journal->topic,
             'competenceIndicator' => $journal->notes ?? '',
             'notes' => $journal->notes ?? '',
-            'studentAbsentees' => [],
+            'attendance_summary' => $this->summarizeAttendances($journal->attendances),
+            'studentAbsentees' => $this->extractAbsentees($journal->attendances),
             'learningObstacles' => $learningObstacles,
             'isLocked' => false,
             'createdAt' => $journal->created_at?->toISOString() ?? now()->toISOString(),
         ], 201);
+    }
+
+    /**
+     * Normalisasi daftar kehadiran dari payload (snake/camel, status ID/EN) → bentuk kanonis.
+     *
+     * @param  mixed  $attendeesRaw
+     * @return array<int, array{student_id: string, status: string, notes: string|null}>
+     */
+    private function normalizeAttendees($attendeesRaw): array
+    {
+        $normalized = [];
+        if (! is_array($attendeesRaw)) {
+            return $normalized;
+        }
+
+        foreach ($attendeesRaw as $att) {
+            if (! is_array($att)) {
+                continue;
+            }
+            $studentId = $att['student_id'] ?? $att['studentId'] ?? null;
+            if (! $studentId || ! Str::isUuid($studentId)) {
+                continue;
+            }
+            $statusRaw = strtolower((string) ($att['status'] ?? 'present'));
+            $mappedStatus = match ($statusRaw) {
+                'present', 'hadir' => 'hadir',
+                'sick', 'sakit' => 'sakit',
+                'permission', 'izin' => 'izin',
+                'late', 'terlambat' => 'terlambat',
+                default => 'alpa',
+            };
+
+            $normalized[] = [
+                'student_id' => $studentId,
+                'status' => $mappedStatus,
+                'notes' => $att['notes'] ?? $att['note'] ?? null,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Hitung rekap presensi dari koleksi Attendance.
+     *
+     * @param  iterable<\App\Models\Attendance>  $attendances
+     * @return array<string, int>
+     */
+    private function summarizeAttendances($attendances): array
+    {
+        $counts = ['hadir' => 0, 'sakit' => 0, 'izin' => 0, 'alpa' => 0, 'terlambat' => 0];
+        foreach ($attendances as $att) {
+            $status = $att->status ?? 'alpa';
+            if (array_key_exists($status, $counts)) {
+                $counts[$status]++;
+            }
+        }
+        $total = array_sum($counts);
+
+        return [
+            'total' => $total,
+            'hadir' => $counts['hadir'],
+            'sakit' => $counts['sakit'],
+            'izin' => $counts['izin'],
+            'alpa' => $counts['alpa'],
+            'terlambat' => $counts['terlambat'],
+            'attendance_rate' => $total > 0
+                ? (int) round((($counts['hadir'] + $counts['terlambat']) / $total) * 100)
+                : 0,
+        ];
+    }
+
+    /**
+     * Daftar siswa yang tidak hadir (untuk tampilan riwayat).
+     *
+     * @param  iterable<\App\Models\Attendance>  $attendances
+     * @return array<int, array<string, mixed>>
+     */
+    private function extractAbsentees($attendances): array
+    {
+        $absentees = [];
+        foreach ($attendances as $att) {
+            if (($att->status ?? 'hadir') === 'hadir') {
+                continue;
+            }
+            $absentees[] = [
+                'student_id' => $att->student_id,
+                'name' => $att->student?->full_name ?? '',
+                'status' => $att->status,
+                'note' => $att->note,
+            ];
+        }
+
+        return $absentees;
     }
 }

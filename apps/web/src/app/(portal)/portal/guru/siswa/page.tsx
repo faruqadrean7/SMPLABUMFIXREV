@@ -100,19 +100,8 @@ export default function DirektoriSiswaPage() {
   const [referralPriority, setReferralPriority] = useState<'biasa' | 'segera'>('segera');
   const [referralNotes, setReferralNotes] = useState<string>('');
 
-  const [referrals, setReferrals] = useState<BkReferralRecord[]>([
-    {
-      id: 'ref-1',
-      studentId: 'std-240903',
-      studentName: 'Rizky Pratama Wijaya',
-      nis: '240903',
-      reason: 'Penurunan Kehadiran & Akumulasi Poin Pelanggaran (-10 Poin)',
-      priority: 'segera',
-      date: '2026-10-12',
-      status: 'dijadwalkan',
-      counselorNotes: 'Jadwal sesi temu konseling privat dengan Guru BK.'
-    }
-  ]);
+  // FIX-GURU-10 / AGENTS.md §6.2: tanpa data pribadi fiktif; daftar diisi dari entri nyata.
+  const [referrals, setReferrals] = useState<BkReferralRecord[]>([]);
 
   // Live mapped students
   const students: StudentDetailedProfile[] = roster.map((std, idx) => ({
@@ -129,88 +118,104 @@ export default function DirektoriSiswaPage() {
     avatar_url: std.avatar_url,
   }));
 
-  const [pointRecords, setPointRecords] = useState<PointRecord[]>([
-    {
-      id: 'pt-1',
-      studentId: 'std-240914',
-      studentName: 'Karina Safitri',
-      type: 'prestasi',
-      category: 'Akademik & Sains',
-      points: 25,
-      description: 'Juara 1 Olimpiade Sains Nasional (OSN) Tingkat Kota Bidang Informatika',
-      date: '2026-10-12',
-      recordedBy: 'Budi Santoso, S.Kom.'
-    },
-    {
-      id: 'pt-2',
-      studentId: 'std-240903',
-      studentName: 'Rizky Pratama Wijaya',
-      type: 'pelanggaran',
-      category: 'Kedisiplinan',
-      points: -5,
-      description: 'Terlambat masuk sekolah lebih dari 15 menit tanpa surat keterangan',
-      date: '2026-10-14',
-      recordedBy: 'Tim Tatib & Guru Piket'
-    },
-    {
-      id: 'pt-3',
-      studentId: 'std-240902',
-      studentName: 'Nabila Putri Andini',
-      type: 'prestasi',
-      category: 'Pengembangan Diri',
-      points: 15,
-      description: 'Pemateri presentasi terbaik proyek literasi digital anti-hoaks',
-      date: '2026-10-08',
-      recordedBy: 'Budi Santoso, S.Kom.'
-    }
-  ]);
+  // FIX-GURU-09 / AGENTS.md §6.2: tanpa data pribadi fiktif; daftar diisi dari entri nyata.
+  const [pointRecords, setPointRecords] = useState<PointRecord[]>([]);
 
-  const handleAddPoint = (e: React.FormEvent) => {
+  const [isSavingPoint, setIsSavingPoint] = useState(false);
+  const [isSavingReferral, setIsSavingReferral] = useState(false);
+
+  // FIX-GURU-09: catat poin siswa ke backend (POST /me/teacher/student-points).
+  const handleAddPoint = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingPoint) return;
     const student = students.find(s => s.id === selectedStudentId);
-    if (!student) return;
+    if (!student) {
+      toast.error('Pilih siswa terlebih dahulu.');
+      return;
+    }
 
     const isPrestasi = pointType === 'prestasi';
-    const pointsAmount = isPrestasi ? 15 : -5;
+    const pointsAmount = isPrestasi ? 15 : 5;
+    const category = isPrestasi ? 'Prestasi KBM & Proyek' : 'Tata Tertib Kelas';
+    const description = pointNotes || pointRule;
 
-    const newRecord: PointRecord = {
-      id: `pt-${Date.now()}`,
-      studentId: student.id,
-      studentName: student.name,
-      type: pointType,
-      category: isPrestasi ? 'Prestasi KBM & Proyek' : 'Tata Tertib Kelas',
-      points: pointsAmount,
-      description: pointNotes || pointRule,
-      date: new Date().toISOString().slice(0, 10),
-      recordedBy: 'Budi Santoso, S.Kom.'
-    };
+    setIsSavingPoint(true);
+    try {
+      await lmsApi.recordStudentPoint({
+        student_id: student.id,
+        type: pointType,
+        category,
+        points: pointsAmount,
+        notes: description,
+        date: new Date().toISOString().slice(0, 10),
+      });
 
-    setPointRecords([newRecord, ...pointRecords]);
-    toast.success(`Poin ${isPrestasi ? 'penghargaan' : 'pelanggaran'} berhasil dicatat untuk ${student.name}!`);
-    setIsPointModalOpen(false);
-    setPointNotes('');
+      const newRecord: PointRecord = {
+        id: `pt-${Date.now()}`,
+        studentId: student.id,
+        studentName: student.name,
+        type: pointType,
+        category,
+        points: isPrestasi ? pointsAmount : -pointsAmount,
+        description,
+        date: new Date().toISOString().slice(0, 10),
+        recordedBy: 'Anda',
+      };
+      setPointRecords([newRecord, ...pointRecords]);
+      toast.success(`Poin ${isPrestasi ? 'penghargaan' : 'pelanggaran'} berhasil dicatat untuk ${student.name}!`);
+      setIsPointModalOpen(false);
+      setPointNotes('');
+    } catch (err: any) {
+      toast.error(
+        'Gagal mencatat poin: ' +
+          (err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Terjadi kesalahan sistem.')
+      );
+    } finally {
+      setIsSavingPoint(false);
+    }
   };
 
-  const handleCreateReferral = (e: React.FormEvent) => {
+  // FIX-GURU-10: buat rujukan BK ke backend (POST /me/teacher/counseling-referrals).
+  const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingReferral) return;
     if (!referralStudent) return;
+    if (referralReason.trim().length < 5) {
+      toast.error('Alasan rujukan minimal 5 karakter.');
+      return;
+    }
 
-    const newRef: BkReferralRecord = {
-      id: `ref-${Date.now()}`,
-      studentId: referralStudent.id,
-      studentName: referralStudent.name,
-      nis: referralStudent.nis,
-      reason: referralReason,
-      priority: referralPriority,
-      date: new Date().toISOString().slice(0, 10),
-      status: 'menunggu',
-      counselorNotes: referralNotes || 'Menunggu penelaahan oleh Guru BK'
-    };
+    setIsSavingReferral(true);
+    try {
+      await lmsApi.createCounselingReferral({
+        student_id: referralStudent.id,
+        reason: referralReason.trim(),
+        priority: referralPriority,
+      });
 
-    setReferrals([newRef, ...referrals]);
-    toast.success(`Rujukan bimbingan konseling untuk ${referralStudent.name} berhasil diteruskan ke Guru BK!`);
-    setIsReferralModalOpen(false);
-    setReferralNotes('');
+      const newRef: BkReferralRecord = {
+        id: `ref-${Date.now()}`,
+        studentId: referralStudent.id,
+        studentName: referralStudent.name,
+        nis: referralStudent.nis,
+        reason: referralReason,
+        priority: referralPriority,
+        date: new Date().toISOString().slice(0, 10),
+        status: 'menunggu',
+        counselorNotes: referralNotes || 'Menunggu penelaahan oleh Guru BK',
+      };
+      setReferrals([newRef, ...referrals]);
+      toast.success(`Rujukan bimbingan konseling untuk ${referralStudent.name} berhasil diteruskan ke Guru BK!`);
+      setIsReferralModalOpen(false);
+      setReferralNotes('');
+    } catch (err: any) {
+      toast.error(
+        'Gagal membuat rujukan BK: ' +
+          (err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Terjadi kesalahan sistem.')
+      );
+    } finally {
+      setIsSavingReferral(false);
+    }
   };
 
   const filteredStudents = students.filter(s => {
@@ -678,9 +683,10 @@ export default function DirektoriSiswaPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg text-xs font-black bg-blue-900 hover:bg-blue-950 text-white shadow-xs"
+                  disabled={isSavingPoint}
+                  className="px-4 py-2 rounded-lg text-xs font-black bg-blue-900 hover:bg-blue-950 text-white shadow-xs disabled:opacity-50"
                 >
-                  Simpan Poin Siswa
+                  {isSavingPoint ? 'Menyimpan...' : 'Simpan Poin Siswa'}
                 </button>
               </div>
             </form>
@@ -860,9 +866,10 @@ export default function DirektoriSiswaPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-black bg-purple-900 hover:bg-purple-950 text-white rounded-lg shadow-xs cursor-pointer"
+                  disabled={isSavingReferral}
+                  className="px-4 py-2 text-xs font-black bg-purple-900 hover:bg-purple-950 text-white rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  Kirim Rujukan ke Guru BK
+                  {isSavingReferral ? 'Mengirim...' : 'Kirim Rujukan ke Guru BK'}
                 </button>
               </div>
             </form>

@@ -245,6 +245,14 @@ export function useFacilityBookings(params?: {
   });
 }
 
+export function useFacilities(params?: { q?: string }) {
+  return useQuery({
+    queryKey: ['guru', 'facilities', params],
+    queryFn: () => guruApi.getFacilities(params),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
 export function useCreateFacilityBooking() {
   const queryClient = useQueryClient();
   return useMutation({
