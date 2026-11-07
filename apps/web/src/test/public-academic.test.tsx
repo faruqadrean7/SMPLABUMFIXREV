@@ -1,10 +1,47 @@
+import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AcademicPage from '@/app/(public)/akademik/page';
+import { publicApi } from '@/features/public-site/public-api';
+
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+}
+
+function renderWithClient(ui: React.ReactElement) {
+  const queryClient = createTestQueryClient();
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 describe('Public Academic Page Tests (WEB-ACA-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(publicApi, 'getPublicSite').mockResolvedValue({
+      identity: {
+        name: 'SMP Laboratorium UM',
+      },
+      contact: {
+        phone: '(0341) 588550',
+        email: 'akademik@smp-labum.sch.id',
+      },
+      profile: {
+        accreditation: {
+          grade: 'A',
+          score: 96,
+        },
+      },
+    });
+  });
+
   it('merender hero section akademik dengan judul, slogan, dan breadcrumb navigasi', () => {
-    const { container } = render(<AcademicPage />);
+    const { container } = renderWithClient(<AcademicPage />);
 
     // H1 Heading
     const h1 = screen.getByRole('heading', { level: 1 });
@@ -25,7 +62,7 @@ describe('Public Academic Page Tests (WEB-ACA-01)', () => {
   });
 
   it('merender 4 program pendidikan unggulan terverifikasi dengan karakteristiknya', () => {
-    render(<AcademicPage />);
+    renderWithClient(<AcademicPage />);
 
     expect(
       screen.getByRole('heading', { level: 2, name: /4 Program Pendidikan Unggulan/i })
@@ -45,7 +82,7 @@ describe('Public Academic Page Tests (WEB-ACA-01)', () => {
   });
 
   it('merender metodologi pendekatan inovasi pembelajaran (Lesson Study & Mastery Learning)', () => {
-    render(<AcademicPage />);
+    renderWithClient(<AcademicPage />);
 
     expect(
       screen.getByRole('heading', { level: 2, name: /Inovasi Pendekatan Pembelajaran/i })
@@ -58,7 +95,7 @@ describe('Public Academic Page Tests (WEB-ACA-01)', () => {
   });
 
   it('merender pembinaan karakter berjenjang dan rumpun minat bakat siswa', () => {
-    render(<AcademicPage />);
+    renderWithClient(<AcademicPage />);
 
     expect(
       screen.getByRole('heading', { level: 2, name: /Pembinaan Karakter, Minat & Bakat/i })
@@ -79,7 +116,7 @@ describe('Public Academic Page Tests (WEB-ACA-01)', () => {
   });
 
   it('merender CTA pendaftaran dan konsultasi akademik dengan rute yang valid', () => {
-    const { container } = render(<AcademicPage />);
+    const { container } = renderWithClient(<AcademicPage />);
 
     // Check all links
     const allLinks = container.querySelectorAll('a');
@@ -113,7 +150,7 @@ describe('Public Academic Page Tests (WEB-ACA-01)', () => {
   });
 
   it('tidak menampilkan klaim angka fiktif tanpa sumber (seperti "24 Pilihan Ekstrakurikuler" atau biaya pendidikan palsu)', () => {
-    const { container } = render(<AcademicPage />);
+    const { container } = renderWithClient(<AcademicPage />);
     const pageText = container.textContent || '';
 
     // Pastikan angka statistik usang atau klaim tanpa verifikasi tidak muncul
@@ -123,7 +160,7 @@ describe('Public Academic Page Tests (WEB-ACA-01)', () => {
   });
 
   it('tidak merender tag <header> atau <footer> internal ganda pada halaman', () => {
-    const { container } = render(<AcademicPage />);
+    const { container } = renderWithClient(<AcademicPage />);
 
     expect(container.querySelectorAll('header')).toHaveLength(0);
     expect(container.querySelectorAll('footer')).toHaveLength(0);

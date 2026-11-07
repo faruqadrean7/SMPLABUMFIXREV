@@ -28,6 +28,7 @@ class UpdateClassRequest extends BaseApiRequest
                 })->ignore($id),
             ],
             'capacity' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'program_type' => ['nullable', 'in:reguler,tahfidz,icp,inklusi'],
         ];
     }
 

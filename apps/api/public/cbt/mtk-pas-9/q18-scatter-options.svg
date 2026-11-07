@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 340" font-family="Arial, sans-serif" font-size="14">
+  <rect width="440" height="340" fill="#ffffff"/>
+  <text x="40" y="24" font-weight="bold" fill="#333">a.</text>
+  <text x="250" y="24" font-weight="bold" fill="#333">b.</text>
+  <text x="40" y="184" font-weight="bold" fill="#333">c.</text>
+  <text x="250" y="184" font-weight="bold" fill="#333">d.</text>
+  <g stroke="#333" stroke-width="1.3" fill="none">
+    <path d="M60 40 V150 H210"/><path d="M270 40 V150 H420"/>
+    <path d="M60 200 V310 H210"/><path d="M270 200 V310 H420"/>
+  </g>
+  <!-- a: strong positive -->
+  <g fill="#333"><circle cx="72" cy="140" r="2.6"/><circle cx="92" cy="126" r="2.6"/><circle cx="112" cy="112" r="2.6"/><circle cx="132" cy="100" r="2.6"/><circle cx="152" cy="86" r="2.6"/><circle cx="172" cy="72" r="2.6"/><circle cx="192" cy="60" r="2.6"/></g>
+  <!-- b: negative with trend line -->
+  <line x1="278" y1="58" x2="412" y2="140" stroke="#333" stroke-width="1"/>
+  <g fill="#333"><circle cx="284" cy="66" r="2.6"/><circle cx="306" cy="78" r="2.6"/><circle cx="330" cy="96" r="2.6"/><circle cx="356" cy="112" r="2.6"/><circle cx="380" cy="126" r="2.6"/><circle cx="402" cy="138" r="2.6"/></g>
+  <!-- c: no correlation (scattered) -->
+  <g fill="#333"><circle cx="78" cy="220" r="2.6"/><circle cx="150" cy="214" r="2.6"/><circle cx="110" cy="248" r="2.6"/><circle cx="96" cy="286" r="2.6"/><circle cx="168" cy="276" r="2.6"/><circle cx="188" cy="236" r="2.6"/><circle cx="132" cy="300" r="2.6"/></g>
+  <!-- d: strong negative -->
+  <g fill="#333"><circle cx="282" cy="214" r="2.6"/><circle cx="302" cy="228" r="2.6"/><circle cx="322" cy="244" r="2.6"/><circle cx="342" cy="262" r="2.6"/><circle cx="362" cy="278" r="2.6"/><circle cx="382" cy="294" r="2.6"/></g>
+</svg>

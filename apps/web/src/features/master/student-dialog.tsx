@@ -25,6 +25,7 @@ export const studentSchema = z.object({
   address: z.string().optional(),
   entry_date: z.string().min(1, 'Tanggal masuk wajib diisi'),
   status: z.enum(['aktif', 'lulus', 'pindah', 'keluar']).optional(),
+  program_type: z.enum(['reguler', 'tahfidz', 'icp', 'inklusi']).optional(),
   photo_file_id: z.string().nullable().optional(),
 });
 
@@ -66,6 +67,7 @@ export function StudentDialog({
       address: '',
       entry_date: new Date().toISOString().split('T')[0],
       status: 'aktif',
+      program_type: 'reguler',
       photo_file_id: null,
     },
   });
@@ -84,6 +86,7 @@ export function StudentDialog({
         address: initialData.address || '',
         entry_date: initialData.entry_date ? initialData.entry_date.split('T')[0] : '',
         status: initialData.status || 'aktif',
+        program_type: initialData.program_type || 'reguler',
         photo_file_id: initialData.photo_file_id || null,
       });
     } else {
@@ -99,6 +102,7 @@ export function StudentDialog({
         address: '',
         entry_date: new Date().toISOString().split('T')[0],
         status: 'aktif',
+        program_type: 'reguler',
         photo_file_id: null,
       });
     }
@@ -287,6 +291,25 @@ export function StudentDialog({
                 <p className="mt-1 text-[11px] text-status-danger">{errors.entry_date.message}</p>
               )}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Program Belajar
+            </label>
+            <select
+              {...register('program_type')}
+              className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              disabled={isLoading || isSubmitting}
+            >
+              <option value="reguler">Reguler</option>
+              <option value="tahfidz">Tahfidz Al-Qur&apos;an</option>
+              <option value="icp">International Class Program (Cambridge)</option>
+              <option value="inklusi">Inklusi (ABK)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Menentukan personalisasi dashboard &amp; menu siswa.
+            </p>
           </div>
 
           <div>

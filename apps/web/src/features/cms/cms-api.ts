@@ -21,6 +21,9 @@ import {
   PageItem,
   CreatePagePayload,
   UpdatePagePayload,
+  BulletinItem,
+  CreateBulletinPayload,
+  UpdateBulletinPayload,
 } from './types';
 
 export const cmsApi = {
@@ -229,6 +232,40 @@ export const cmsApi = {
 
   deletePage: async (id: string): Promise<ApiResponse<{ message: string }>> => {
     const res = await apiClient.delete<ApiResponse<{ message: string }>>(`/pages/${id}`);
+    return res.data;
+  },
+
+  // =========================================================================
+  // 7. BULETIN & MAJALAH SEKOLAH (BE-CMS-03 / FE-CMS-PUBLIC-04a)
+  // =========================================================================
+
+  getBulletins: async (params?: {
+    search?: string;
+    q?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<PaginatedResponse<BulletinItem>> => {
+    const res = await apiClient.get<PaginatedResponse<BulletinItem>>('/bulletins', { params });
+    return res.data;
+  },
+
+  getBulletin: async (id: string): Promise<ApiResponse<BulletinItem>> => {
+    const res = await apiClient.get<ApiResponse<BulletinItem>>(`/bulletins/${id}`);
+    return res.data;
+  },
+
+  createBulletin: async (payload: CreateBulletinPayload): Promise<ApiResponse<BulletinItem>> => {
+    const res = await apiClient.post<ApiResponse<BulletinItem>>('/bulletins', payload);
+    return res.data;
+  },
+
+  updateBulletin: async (id: string, payload: UpdateBulletinPayload): Promise<ApiResponse<BulletinItem>> => {
+    const res = await apiClient.put<ApiResponse<BulletinItem>>(`/bulletins/${id}`, payload);
+    return res.data;
+  },
+
+  deleteBulletin: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+    const res = await apiClient.delete<ApiResponse<{ message: string }>>(`/bulletins/${id}`);
     return res.data;
   },
 };

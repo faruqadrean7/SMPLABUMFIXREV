@@ -48,6 +48,8 @@ export interface FileItem {
   checksum?: string | null;
   created_at: string;
   updated_at?: string;
+  url?: string;
+  download_url?: string;
 }
 
 export interface FileUrlResponse {

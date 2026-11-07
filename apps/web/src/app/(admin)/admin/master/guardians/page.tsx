@@ -20,7 +20,13 @@ import {
   Trash2,
   AlertTriangle,
   Phone,
+  UserCheck,
+  KeyRound,
+  X,
+  Check,
+  Lock,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 export default function GuardiansMasterPage() {
   const queryClient = useQueryClient();
@@ -36,6 +42,12 @@ export default function GuardiansMasterPage() {
   const [detailGuardian, setDetailGuardian] = useState<GuardianItem | null>(null);
   const [deletingGuardian, setDeletingGuardian] = useState<GuardianItem | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // State Manajemen Akun Login Wali
+  const [accountModalGuardian, setAccountModalGuardian] = useState<GuardianItem | null>(null);
+  const [accountForm, setAccountForm] = useState({ username: '', password: 'Password123!', email: '' });
+  const [isProvisioning, setIsProvisioning] = useState(false);
+  const [accountFeedback, setAccountFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // TanStack Query: List Guardians
   const {
@@ -93,6 +105,35 @@ export default function GuardiansMasterPage() {
     },
   });
 
+  const handleOpenAccountModal = (item: GuardianItem) => {
+    setAccountModalGuardian(item);
+    setAccountFeedback(null);
+    setAccountForm({
+      username: item.user?.username || `ortu_${item.full_name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12)}`,
+      password: 'Password123!',
+      email: item.user?.email || '',
+    });
+  };
+
+  const handleSaveAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accountModalGuardian) return;
+    setIsProvisioning(true);
+    setAccountFeedback(null);
+    try {
+      await guardiansApi.provisionAccount(accountModalGuardian.id, accountForm);
+      setAccountFeedback({ type: 'success', text: 'Akun login portal berhasil disimpan & siap digunakan!' });
+      queryClient.invalidateQueries({ queryKey: ['guardians'] });
+      setTimeout(() => {
+        setAccountModalGuardian(null);
+      }, 1200);
+    } catch (err: any) {
+      setAccountFeedback({ type: 'error', text: err?.message || 'Gagal menyimpan akun portal.' });
+    } finally {
+      setIsProvisioning(false);
+    }
+  };
+
   // Kolom DataTable
   const columns: ColumnDef<GuardianItem>[] = [
     {
@@ -121,6 +162,43 @@ export default function GuardiansMasterPage() {
       render: (item) => (
         <span className="text-xs text-slate-600 line-clamp-1">{item.address || '-'}</span>
       ),
+    },
+    {
+      key: 'user',
+      header: 'Akun Login Portal',
+      render: (item) => {
+        if (item.user) {
+          return (
+            <div className="flex items-center gap-1.5">
+              <Badge variant="success" className="text-[11px] font-mono gap-1 py-0.5">
+                <UserCheck className="h-3 w-3" />
+                @{item.user.username}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-[10px] text-slate-500 hover:text-blue-600"
+                title="Kelola / Reset Password Akun"
+                onClick={() => handleOpenAccountModal(item)}
+              >
+                <KeyRound className="h-3 w-3" />
+              </Button>
+            </div>
+          );
+        }
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[11px] text-blue-600 border-blue-200 hover:bg-blue-50 gap-1"
+            title="Wali ini belum memiliki akun login portal"
+            onClick={() => handleOpenAccountModal(item)}
+          >
+            <KeyRound className="h-3 w-3" />
+            + Buat Akun
+          </Button>
+        );
+      },
     },
     {
       key: 'students',
@@ -312,6 +390,116 @@ export default function GuardiansMasterPage() {
         isLoading={deleteMutation.isPending}
         error={errorMessage}
       />
+
+      {/* Modal Cepat: Buat / Reset Akun Login Portal Wali */}
+      {accountModalGuardian && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-sm rounded-xl bg-white p-5 shadow-elevated border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                  <KeyRound className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {accountModalGuardian.user ? 'Reset Password Akun' : 'Buat Akun Portal Wali'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[200px]">
+                    {accountModalGuardian.full_name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAccountModalGuardian(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAccount} className="mt-3 space-y-3">
+              {accountFeedback && (
+                <div
+                  className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                    accountFeedback.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {accountFeedback.type === 'success' ? (
+                    <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  ) : (
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                  )}
+                  <span>{accountFeedback.text}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Username Login <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  value={accountForm.username}
+                  onChange={(e) => setAccountForm({ ...accountForm, username: e.target.value })}
+                  placeholder="ortu_nama"
+                  className="h-8 text-xs font-mono"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Kata Sandi Baru <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  value={accountForm.password}
+                  onChange={(e) => setAccountForm({ ...accountForm, password: e.target.value })}
+                  placeholder="Password123!"
+                  className="h-8 text-xs font-mono"
+                  required
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">Wali dapat masuk di /masuk dengan password ini</p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Email (Opsional)
+                </label>
+                <Input
+                  type="email"
+                  value={accountForm.email}
+                  onChange={(e) => setAccountForm({ ...accountForm, email: e.target.value })}
+                  placeholder="wali@gmail.com"
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAccountModalGuardian(null)}
+                  disabled={isProvisioning}
+                  className="text-xs h-8"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isProvisioning}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs h-8"
+                >
+                  {isProvisioning ? 'Menyimpan...' : 'Simpan Akun'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -27,6 +27,7 @@ export const classSchema = z.object({
   homeroom_teacher_id: z.string().optional().or(z.literal('')),
   name: z.string().min(1, 'Nama rombel/kelas wajib diisi').max(100, 'Maksimal 100 karakter'),
   capacity: z.coerce.number().min(1, 'Minimal kapasitas 1').max(100, 'Maksimal kapasitas 100'),
+  program_type: z.enum(['reguler', 'tahfidz', 'icp', 'inklusi']).optional(),
 });
 
 export interface ClassDialogProps {
@@ -87,6 +88,7 @@ export function ClassDialog({
       homeroom_teacher_id: '',
       name: '',
       capacity: 36, // Standard default invariant Labschool UM
+      program_type: 'reguler',
     },
   });
 
@@ -107,6 +109,7 @@ export function ClassDialog({
           '',
         name: initialData.name || '',
         capacity: initialData.capacity || 36,
+        program_type: initialData.program_type || 'reguler',
       });
     } else {
       // Find active academic year for default if available
@@ -118,6 +121,7 @@ export function ClassDialog({
         homeroom_teacher_id: '',
         name: '',
         capacity: 36,
+        program_type: 'reguler',
       });
     }
   }, [initialData, reset, isOpen, academicYears, gradeLevels, majors, teachers]);
@@ -243,6 +247,25 @@ export function ClassDialog({
                 <p className="mt-1 text-[11px] text-status-danger">{errors.capacity.message}</p>
               )}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Program Belajar Rombel
+            </label>
+            <select
+              {...register('program_type')}
+              className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              disabled={isLoading || isSubmitting}
+            >
+              <option value="reguler">Reguler</option>
+              <option value="tahfidz">Tahfidz Al-Qur&apos;an</option>
+              <option value="icp">International Class Program (Cambridge)</option>
+              <option value="inklusi">Inklusi (ABK)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Dipakai sebagai fallback program bagi siswa di rombel ini.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

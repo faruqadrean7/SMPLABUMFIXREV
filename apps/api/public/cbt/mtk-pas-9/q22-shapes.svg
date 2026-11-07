@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 220" font-family="Arial, sans-serif" font-size="13">
+  <rect width="560" height="220" fill="#ffffff"/>
+  <!-- Shape A: cube, volume 512 -->
+  <g stroke="#333" stroke-width="1.4" fill="#eef2f6">
+    <polygon points="40,90 100,90 100,150 40,150"/>
+    <polygon points="40,90 60,70 120,70 100,90"/>
+    <polygon points="100,90 120,70 120,130 100,150"/>
+  </g>
+  <text x="70" y="178" text-anchor="middle" fill="#333" font-weight="bold">Shape A: cube</text>
+  <text x="70" y="196" text-anchor="middle" fill="#555">Volume 512 cm³</text>
+  <!-- Shape B: cuboid 8x8x3 (flat) -->
+  <g stroke="#333" stroke-width="1.4" fill="#eef2f6">
+    <polygon points="210,120 300,120 300,150 210,150"/>
+    <polygon points="210,120 230,100 320,100 300,120"/>
+    <polygon points="300,120 320,100 320,130 300,150"/>
+  </g>
+  <text x="255" y="138" fill="#333">8 cm</text>
+  <text x="305" y="146" fill="#333">3</text>
+  <text x="258" y="178" text-anchor="middle" fill="#333" font-weight="bold">Shape B: cuboid</text>
+  <text x="258" y="196" text-anchor="middle" fill="#555">8 × 8 × 3 cm</text>
+  <!-- Shape C: composite (tall block + flat block) -->
+  <g stroke="#333" stroke-width="1.4" fill="#eef2f6">
+    <polygon points="430,70 470,70 470,130 430,130"/>
+    <polygon points="430,70 445,58 485,58 470,70"/>
+    <polygon points="470,70 485,58 485,118 470,130"/>
+    <polygon points="470,120 520,120 520,140 470,140"/>
+    <polygon points="470,120 483,110 533,110 520,120"/>
+    <polygon points="520,120 533,110 533,130 520,140"/>
+  </g>
+  <text x="474" y="96" fill="#333">5</text>
+  <text x="418" y="104" fill="#333">8</text>
+  <text x="525" y="134" fill="#333">3</text>
+  <text x="488" y="152" text-anchor="middle" fill="#333" font-weight="bold">Shape C</text>
+  <text x="488" y="170" text-anchor="middle" fill="#555" font-size="11">B joined to another cuboid</text>
+</svg>

@@ -250,6 +250,54 @@ class StudentTest extends TestCase
         $this->assertNotEquals('3578010101080003', $rawStudent->nik_enc);
     }
 
+    public function test_be_mst_02_admin_can_set_and_update_student_program_type(): void
+    {
+        // Create dengan program_type tahfidz
+        $resp = $this->actingAs($this->adminUser)
+            ->postJson('/api/v1/students', [
+                'nis' => '10051',
+                'nisn' => '0011220051',
+                'nik' => '3578010101080051',
+                'full_name' => 'Fulan Tahfidz',
+                'gender' => 'L',
+                'birth_place' => 'Malang',
+                'birth_date' => '2012-05-10',
+                'entry_date' => '2024-07-15',
+                'program_type' => 'tahfidz',
+            ]);
+
+        $resp->assertStatus(201)->assertJsonPath('data.program_type', 'tahfidz');
+        $studentId = $resp->json('data.id');
+        $this->assertDatabaseHas('students', ['id' => $studentId, 'program_type' => 'tahfidz']);
+
+        // Tanpa program_type -> default reguler
+        $respDefault = $this->actingAs($this->adminUser)
+            ->postJson('/api/v1/students', [
+                'nis' => '10052',
+                'nisn' => '0011220052',
+                'nik' => '3578010101080052',
+                'full_name' => 'Fulanah Reguler',
+                'gender' => 'P',
+                'birth_place' => 'Malang',
+                'birth_date' => '2012-06-10',
+                'entry_date' => '2024-07-15',
+            ]);
+        $respDefault->assertStatus(201)->assertJsonPath('data.program_type', 'reguler');
+
+        // Update ke inklusi
+        $this->actingAs($this->adminUser)
+            ->putJson("/api/v1/students/{$studentId}", ['program_type' => 'inklusi'])
+            ->assertOk()
+            ->assertJsonPath('data.program_type', 'inklusi');
+        $this->assertDatabaseHas('students', ['id' => $studentId, 'program_type' => 'inklusi']);
+
+        // Nilai ilegal ditolak
+        $this->actingAs($this->adminUser)
+            ->putJson("/api/v1/students/{$studentId}", ['program_type' => 'sekolah_alam'])
+            ->assertStatus(400)
+            ->assertJsonValidationErrors(['program_type']);
+    }
+
     /**
      * BE-MST-02: Validation errors on student creation
      */

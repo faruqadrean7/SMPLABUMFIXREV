@@ -5,15 +5,15 @@ namespace App\Http\Controllers\Api\V1\Teacher;
 use App\Http\Controllers\Controller;
 use App\Models\Assignment;
 use App\Models\AssignmentSubmission;
-use App\Models\AuditLog;
 use App\Models\File;
 use App\Models\GradeComponent;
-use App\Models\GradePeriod;
 use App\Models\TeachingMaterial;
+use App\Services\LmsService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class TeacherLmsController extends Controller
 {
@@ -132,9 +132,9 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        $assignments = Assignment::with(['class', 'subject'])
+        $assignments = Assignment::with(['class' => fn ($q) => $q->withCount('students'), 'subject'])
             ->where('teacher_id', $teacher->id)
-            ->withCount('submissions')
+            ->withCount(['submissions', 'submissions as graded_count' => fn ($q) => $q->whereNotNull('score')])
             ->latest()
             ->get();
 
@@ -149,9 +149,9 @@ class TeacherLmsController extends Controller
             'className' => $a->class?->name ?? 'Kelas',
             'dueDate' => $a->due_at?->toISOString() ?? now()->addDays(7)->toISOString(),
             'due_at' => $a->due_at?->toISOString() ?? now()->addDays(7)->toISOString(),
-            'totalStudents' => $a->class?->students()->count() ?? 32,
+            'totalStudents' => $a->class?->students_count ?? 0,
             'submittedCount' => $a->submissions_count,
-            'gradedCount' => 0,
+            'gradedCount' => $a->graded_count,
             'description' => $a->description ?? '',
             'createdAt' => $a->created_at?->toISOString() ?? now()->toISOString(),
         ]);
@@ -175,6 +175,8 @@ class TeacherLmsController extends Controller
         $subjectId = $input['subject_id'] ?? $input['subjectId'] ?? null;
         $description = $input['description'] ?? '';
         $dueAt = $input['due_at'] ?? $input['dueDate'] ?? $input['due_date'] ?? now()->addDays(7);
+        $maxScore = $input['max_score'] ?? $input['maxScore'] ?? 100;
+        $gradeComponentId = $input['grade_component_id'] ?? $input['gradeComponentId'] ?? null;
 
         if (! $classId || ! $subjectId) {
             return $this->errorResponse('ID kelas dan ID mata pelajaran wajib diisi.', 'VALIDATION_ERROR', 422);
@@ -192,6 +194,21 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan mengampu mata pelajaran ini di kelas terkait.', 'FORBIDDEN', 403);
         }
 
+        // Tautan opsional ke komponen buku nilai; harus milik mapel yang sama agar nilai tugas tersinkron benar.
+        if ($gradeComponentId !== null) {
+            if (! Str::isUuid($gradeComponentId)) {
+                return $this->errorResponse('Format ID komponen nilai tidak valid.', 'VALIDATION_ERROR', 422);
+            }
+
+            $componentValid = GradeComponent::where('id', $gradeComponentId)
+                ->where('subject_id', $subjectId)
+                ->exists();
+
+            if (! $componentValid) {
+                return $this->errorResponse('Komponen nilai tidak ditemukan atau bukan untuk mata pelajaran ini.', 'VALIDATION_ERROR', 422);
+            }
+        }
+
         $assignment = Assignment::create([
             'teacher_id' => $teacher->id,
             'class_id' => $classId,
@@ -199,6 +216,8 @@ class TeacherLmsController extends Controller
             'title' => $title,
             'description' => $description,
             'due_at' => $dueAt,
+            'max_score' => $maxScore,
+            'grade_component_id' => $gradeComponentId,
         ]);
 
         $assignment->load(['class', 'subject']);
@@ -278,34 +297,13 @@ class TeacherLmsController extends Controller
             'feedback' => 'nullable|string',
         ]);
 
-        if ($submission->assignment && $submission->assignment->grade_component_id) {
-            $comp = GradeComponent::find($submission->assignment->grade_component_id);
-            if ($comp) {
-                $period = GradePeriod::where('semester_id', $comp->semester_id)
-                    ->where('month', now()->month)
-                    ->first();
-                if ($period && $period->status === 'locked') {
-                    return $this->errorResponse('Periode penilaian telah dikunci (locked). Penilaian tidak dapat disimpan.', 'BUSINESS_RULE_VIOLATION', 422);
-                }
-            }
+        // Delegasikan ke LmsService agar nilai ikut tersinkron ke buku nilai (grades)
+        // bila tugas ditautkan ke komponen nilai, dalam satu transaksi & audit terpusat.
+        try {
+            app(LmsService::class)->gradeSubmission($submission->assignment_id, $submission->id, $validated, $request);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
         }
-
-        $oldData = $submission->toArray();
-        $submission->update([
-            'score' => $validated['score'],
-            'feedback' => $validated['feedback'] ?? null,
-        ]);
-
-        AuditLog::create([
-            'actor_id' => $request->user()->id,
-            'action' => 'assignment.graded',
-            'entity' => 'AssignmentSubmission',
-            'entity_id' => $submission->id,
-            'old_value' => $oldData,
-            'new_value' => $submission->toArray(),
-            'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-        ]);
 
         return $this->successResponse(['message' => 'Nilai dan feedback berhasil diberikan.']);
     }
@@ -325,9 +323,9 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Format ID tugas tidak valid.', 'VALIDATION_ERROR', 422);
         }
 
-        $assignment = Assignment::with(['class', 'subject'])
+        $assignment = Assignment::with(['class' => fn ($q) => $q->withCount('students'), 'subject'])
             ->where('teacher_id', $teacher->id)
-            ->withCount('submissions')
+            ->withCount(['submissions', 'submissions as graded_count' => fn ($q) => $q->whereNotNull('score')])
             ->find($id);
 
         if (! $assignment) {
@@ -345,9 +343,9 @@ class TeacherLmsController extends Controller
             'className' => $assignment->class?->name ?? 'Kelas',
             'dueDate' => $assignment->due_at?->toISOString() ?? now()->addDays(7)->toISOString(),
             'due_at' => $assignment->due_at?->toISOString() ?? now()->addDays(7)->toISOString(),
-            'totalStudents' => $assignment->class?->students()->count() ?? 0,
+            'totalStudents' => $assignment->class?->students_count ?? 0,
             'submittedCount' => $assignment->submissions_count,
-            'gradedCount' => 0,
+            'gradedCount' => $assignment->graded_count,
             'description' => $assignment->description ?? '',
             'createdAt' => $assignment->created_at?->toISOString() ?? now()->toISOString(),
         ]);

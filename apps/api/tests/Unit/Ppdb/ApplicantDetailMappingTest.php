@@ -46,6 +46,8 @@ class ApplicantDetailMappingTest extends TestCase
         ]);
         $a->setRelation('wave', null);
         $a->setRelation('track', null);
+        // Cegah lazy-load relasi user (presentDetail membaca $a->user?->phone sebagai fallback).
+        $a->setRelation('user', null);
 
         $parent = new ApplicantParent();
         $parent->forceFill([

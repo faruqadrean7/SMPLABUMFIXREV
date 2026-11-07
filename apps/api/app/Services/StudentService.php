@@ -119,6 +119,7 @@ class StudentService
                 'photo_file_id' => $data['photo_file_id'] ?? null,
                 'status' => $status,
                 'entry_date' => $data['entry_date'],
+                'program_type' => $data['program_type'] ?? 'reguler',
             ]);
 
             // Initial status history entry
@@ -177,7 +178,7 @@ class StudentService
             $fields = [
                 'nis', 'nisn', 'full_name', 'gender', 'birth_place',
                 'birth_date', 'religion', 'address', 'photo_file_id',
-                'entry_date', 'graduated_at',
+                'entry_date', 'graduated_at', 'program_type',
             ];
 
             foreach ($fields as $field) {

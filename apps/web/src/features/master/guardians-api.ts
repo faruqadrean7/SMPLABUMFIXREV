@@ -60,6 +60,14 @@ export const guardiansApi = {
   },
 
   /**
+   * Aktifkan atau reset akun login portal wali
+   */
+  async provisionAccount(id: string, data?: { username?: string; password?: string; email?: string }): Promise<any> {
+    const res = await apiClient.post<ApiResponse<any>>(`/guardians/${id}/account`, data || {});
+    return res.data.data;
+  },
+
+  /**
    * Putuskan hubungan wali dengan anak/siswa
    */
   async detachFromStudent(studentId: string, guardianId: string): Promise<void> {

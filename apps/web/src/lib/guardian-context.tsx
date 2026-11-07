@@ -12,7 +12,8 @@ import {
   useChildProgressReports,
   ChildReportCardData,
   ChildCharacterNoteData,
-  ChildProgressReportItem
+  ChildProgressReportItem,
+  useChildInvoices,
 } from './use-guardian-data';
 import { 
   GuardianChildProfile, 
@@ -23,6 +24,9 @@ import {
   SchoolFeeItem,
   ChildScheduleItem,
 } from './mock-guardian-data';
+import { buildAttendanceRecap, buildAttendanceCalendar, formatGateTapTime } from './guardian-attendance';
+import { buildChildFees, resolveAdminFeeStatus, resolveFeeSummary } from './guardian-fees';
+import { buildChildSubjectGrades } from './guardian-grades';
 
 interface GuardianContextType {
   guardian: GuardianProfile;
@@ -78,13 +82,13 @@ const DEFAULT_CHILD: GuardianChildProfile = {
   points_pelanggaran: 0,
   admin_fee_status: 'Lunas / Bebas Tanggungan',
   fee_summary: {
-    title: 'SPP & Biaya Operasional (BOP)',
-    period: 'Bulan Oktober 2026',
-    amount: 'Rp 450.000',
+    title: 'SPP & Biaya Sekolah',
+    period: '-',
+    amount: 'Rp 0',
     status: 'Lunas',
-    detail_note: 'Bebas Tanggungan SPP Gasal',
-    receipt_or_due: 'KW-TU/2026/10/0189',
-    officer: 'Siti Rohmah (Kasir TU)',
+    detail_note: 'Memuat data tagihan...',
+    receipt_or_due: '-',
+    officer: '',
   },
 };
 
@@ -124,6 +128,12 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
   const { data: reportCardData, refetch: refetchReportCard } = useChildReportCards(activeChildId);
   const { data: characterNotesData, refetch: refetchNotes } = useChildCharacterNotes(activeChildId);
   const { data: progressReportsData, refetch: refetchProgress } = useChildProgressReports(activeChildId);
+  const { data: invoicesData, isLoading: isInvoicesLoading, isError: isInvoicesError, refetch: refetchInvoices } = useChildInvoices(activeChildId);
+
+  // Active Fees (Admin & SPP) - FE-ORTU-BIAYA-01: data nyata dari backend GET /me/children/{child}/invoices
+  const activeFees = useMemo<SchoolFeeItem[]>(() => {
+    return buildChildFees(invoicesData);
+  }, [invoicesData]);
 
   const refetchAll = () => {
     refetchChildren();
@@ -133,6 +143,7 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     refetchReportCard();
     refetchNotes();
     refetchProgress();
+    refetchInvoices();
   };
 
   // Construct active child profile
@@ -165,13 +176,9 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
       todayStatus === 'izin' ? 'Izin Resmi' :
       todayStatus === 'terlambat' ? 'Terlambat Masuk' : 'Tanpa Keterangan';
 
-    const recap = attendanceData?.summary;
-    const hadirCount = recap?.present_days ?? recap?.presentDays ?? recap?.hadir ?? 25;
-    const sakitCount = recap?.sick_days ?? recap?.sickDays ?? recap?.sakit ?? 1;
-    const izinCount = recap?.leave_days ?? recap?.leaveDays ?? recap?.izin ?? 1;
-    const alpaCount = recap?.unexcused_days ?? recap?.unexcusedDays ?? recap?.alpa ?? 0;
-    const terlambatCount = recap?.terlambat ?? 0;
-    const rate = recap?.percentage ?? recap?.attendance_percentage ?? recap?.persentase_kehadiran ?? 96.0;
+    // FE-ORTU-PRESENSI-01: rekap & jam tap dari data backend nyata (tanpa angka karangan).
+    const attendanceRecap = buildAttendanceRecap(attendanceData?.summary as Record<string, unknown> | undefined);
+    const tapTime = formatGateTapTime(latestAtt?.check_in_time || latestAtt?.checkInTime) ?? '-';
 
     let avgScore = 87.4;
     if (Array.isArray(gradesData) && gradesData.length > 0) {
@@ -200,34 +207,20 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
       gate_attendance_today: {
         status: todayStatus,
         status_label: statusLabel,
-        tap_time: todayStatus === 'hadir' ? '06:48 WIB' : todayStatus === 'terlambat' ? '07:15 WIB' : '-',
-        location: todayStatus === 'sakit' || todayStatus === 'izin' ? 'Surat Izin Walas' : 'Gerbang Utama RFID Siswa (Gate 1)',
-        note: latestAtt?.note || (todayStatus === 'hadir' ? 'Tepat waktu, berseragam lengkap' : 'Presensi KBM Sekolah'),
+        tap_time: tapTime,
+        // Backend presensi belum menyediakan lokasi gerbang → kosongkan (jangan mengarang 'Gate 1 RFID').
+        location: '',
+        note: latestAtt?.notes || latestAtt?.note || '',
       },
-      attendance_recap: {
-        hadir: hadirCount,
-        sakit: sakitCount,
-        izin: izinCount,
-        alpa: alpaCount,
-        terlambat: terlambatCount,
-        rate,
-      },
+      attendance_recap: attendanceRecap,
       grade_average: avgScore,
       points_balance: 45,
       points_prestasi: 45,
       points_pelanggaran: 0,
-      admin_fee_status: 'Lunas / Bebas Tanggungan',
-      fee_summary: {
-        title: 'SPP & Biaya Operasional (BOP)',
-        period: 'Bulan Oktober 2026',
-        amount: 'Rp 450.000',
-        status: 'Lunas',
-        detail_note: 'Bebas Tanggungan SPP Gasal',
-        receipt_or_due: 'KW-TU/2026/10/0189',
-        officer: 'Siti Rohmah (Kasir TU)',
-      },
+      admin_fee_status: resolveAdminFeeStatus(activeFees),
+      fee_summary: resolveFeeSummary(activeFees),
     };
-  }, [childrenData, activeChildId, childDetail, attendanceData, gradesData, reportCardData]);
+  }, [childrenData, activeChildId, childDetail, attendanceData, gradesData, reportCardData, activeFees]);
 
   // Construct guardian profile
   const guardian = useMemo<GuardianProfile>(() => {
@@ -261,35 +254,33 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
         avatar_url: c.avatar_url || c.avatarUrl || undefined,
         initials,
         gender: (c.gender === 'female' || c.gender === 'P') ? 'P' : 'L',
+        // FE-ORTU-PRESENSI-01: status gerbang harian per-anak belum tersedia sampai anak dipilih;
+        // jangan mengarang jam/catatan. (Halaman hanya memakai activeChild.gate_attendance_today.)
         gate_attendance_today: {
           status: 'hadir',
-          status_label: 'Tepat Waktu',
-          tap_time: '06:48 WIB',
-          location: 'Gerbang Utama RFID Siswa (Gate 1)',
-          note: 'Presensi KBM Sekolah',
+          status_label: '-',
+          tap_time: '-',
+          location: '',
+          note: '',
         },
-        attendance_recap: {
-          hadir: (isCur && attendanceData?.summary?.hadir !== undefined ? attendanceData.summary.hadir : 25) ?? 25,
-          sakit: (isCur && attendanceData?.summary?.sakit !== undefined ? attendanceData.summary.sakit : 1) ?? 1,
-          izin: (isCur && attendanceData?.summary?.izin !== undefined ? attendanceData.summary.izin : 1) ?? 1,
-          alpa: (isCur && attendanceData?.summary?.alpa !== undefined ? attendanceData.summary.alpa : 0) ?? 0,
-          terlambat: (isCur && attendanceData?.summary?.terlambat !== undefined ? attendanceData.summary.terlambat : 0) ?? 0,
-          rate: (isCur && attendanceData?.summary?.persentase_kehadiran !== undefined ? attendanceData.summary.persentase_kehadiran : 96.0) ?? 96.0,
-        },
+        // Rekap nyata hanya untuk anak aktif (endpoint presensi per-anak); non-aktif 0, bukan karangan.
+        attendance_recap: buildAttendanceRecap(isCur ? (attendanceData?.summary as Record<string, unknown> | undefined) : undefined),
         grade_average: isCur && (gradesData as any)?.average_score ? (gradesData as any).average_score : 87.4,
         points_balance: 45,
         points_prestasi: 45,
         points_pelanggaran: 0,
-        admin_fee_status: 'Lunas / Bebas Tanggungan',
-        fee_summary: {
-          title: 'SPP & Biaya Operasional (BOP)',
-          period: 'Bulan Oktober 2026',
-          amount: 'Rp 450.000',
-          status: 'Lunas',
-          detail_note: 'Bebas Tanggungan SPP Gasal',
-          receipt_or_due: 'KW-TU/2026/10/0189',
-          officer: 'Siti Rohmah (Kasir TU)',
-        },
+        admin_fee_status: isCur ? resolveAdminFeeStatus(activeFees) : 'Lunas / Bebas Tanggungan',
+        fee_summary: isCur
+          ? resolveFeeSummary(activeFees)
+          : {
+              title: 'SPP & Biaya Sekolah',
+              period: '-',
+              amount: 'Rp 0',
+              status: 'Lunas',
+              detail_note: '-',
+              receipt_or_due: '-',
+              officer: '',
+            },
       };
     });
 
@@ -303,81 +294,20 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
       occupation: 'Arsitek & Wiraswasta',
       children: mappedChildren.length > 0 ? mappedChildren : [DEFAULT_CHILD],
     };
-  }, [user, childrenData, activeChildId, childDetail, attendanceData, gradesData]);
+  }, [user, childrenData, activeChildId, childDetail, attendanceData, gradesData, activeFees]);
 
-  // Active Grades from live API
-  const activeGrades = useMemo<ChildSubjectGrade[]>(() => {
-    const rawList = Array.isArray(gradesData)
-      ? gradesData
-      : Array.isArray((gradesData as any)?.grades)
-      ? (gradesData as any).grades
-      : [];
-
-    if (rawList.length > 0) {
-      return rawList.map((g: any) => {
-        const score = Number(g.finalScore ?? g.score ?? 85);
-        const kkm = g.passingGrade ?? g.kkm ?? 75;
-        const isPassed = g.isPassed ?? g.is_passed ?? (score >= kkm);
-        const subName = g.subjectName || g.subject_name || 'Mata Pelajaran';
-        const subCode = (g.subjectCode || g.subject_code || g.subjectId || 'MAPEL').substring(0, 8);
-        return {
-          subject_code: subCode,
-          subject_name: subName,
-          teacher_name: g.teacherName || g.teacher_name || 'Guru Pengampu',
-          kktp: kkm,
-          formative_avg: Math.min(100, Math.round(score * 1.02 * 10) / 10),
-          summative_avg: Math.round(score * 10) / 10,
-          sts_score: score,
-          final_score: score,
-          predicate: (g.letterGrade || g.letter_grade || (score >= 88 ? 'A' : score >= 75 ? 'B' : score >= 65 ? 'C' : 'D')) as 'A' | 'B+' | 'B' | 'C' | 'D',
-          status: isPassed ? 'Tuntas' : 'Perlu Pendampingan',
-          competency_desc: g.description || `Menunjukkan capaian pemahaman yang sangat baik dalam asesmen kompetensi ${subName}.`,
-        };
-      });
-    }
-
-    if (reportCardData?.grades && reportCardData.grades.length > 0) {
-      return reportCardData.grades.map((rg, idx) => ({
-        subject_code: `MAPEL-0${idx + 1}`,
-        subject_name: rg.subject,
-        teacher_name: 'Guru Mata Pelajaran',
-        kktp: 75,
-        formative_avg: rg.score,
-        summative_avg: rg.score,
-        sts_score: rg.score,
-        final_score: rg.score,
-        predicate: (rg.predicate || 'A') as 'A' | 'B+' | 'B' | 'C' | 'D',
-        status: (rg.score >= 75 ? 'Tuntas' : 'Perlu Pendampingan') as 'Tuntas' | 'Perlu Pendampingan',
-        competency_desc: rg.description,
-      }));
-    }
-
-    return [];
-  }, [gradesData, reportCardData]);
+  // Active Grades from live API — pemetaan jujur (tanpa rekayasa) di buildChildSubjectGrades.
+  const activeGrades = useMemo<ChildSubjectGrade[]>(
+    () => buildChildSubjectGrades(gradesData, reportCardData),
+    [gradesData, reportCardData],
+  );
 
   // Active Attendance from live API
-  const activeAttendance = useMemo<AttendanceCalendarDay[]>(() => {
-    const list = (attendanceData as any)?.history || (attendanceData as any)?.records || [];
-    if (list.length > 0) {
-      return list.map((r: any, i: number) => {
-        const dateObj = new Date(r.date);
-        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-        const dayName = dayNames[dateObj.getDay()] || 'Hari';
-        const rawSt = r.status;
-        const st = (rawSt === 'present' ? 'hadir' : rawSt === 'sick' ? 'sakit' : rawSt === 'permission' ? 'izin' : rawSt === 'unexcused' ? 'alpa' : rawSt || 'hadir') as 'hadir' | 'sakit' | 'izin' | 'alpa' | 'terlambat';
-        return {
-          date: r.date,
-          day_number: dateObj.getDate() || (i + 1),
-          day_name: dayName,
-          status: st,
-          tap_in: r.check_in_time || r.checkInTime || (st === 'hadir' ? '06:48 WIB' : st === 'terlambat' ? '07:15 WIB' : undefined),
-          tap_out: st === 'hadir' || st === 'terlambat' ? '15:15 WIB' : undefined,
-          note: r.notes || r.note || (st === 'hadir' ? 'Presensi KBM Sekolah' : undefined),
-        };
-      });
-    }
-    return [];
-  }, [attendanceData]);
+  // FE-ORTU-PRESENSI-01: kalender presensi dari riwayat backend nyata (pemetaan jujur di helper).
+  const activeAttendance = useMemo<AttendanceCalendarDay[]>(
+    () => buildAttendanceCalendar(attendanceData),
+    [attendanceData],
+  );
 
   // Active Points from live character notes
   const activePoints = useMemo<ChildPointItem[]>(() => {
@@ -408,36 +338,6 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     });
     return items;
   }, [activeChildId, characterNotesData, childDetail]);
-
-  // Active Fees (Admin & SPP)
-  const activeFees = useMemo<SchoolFeeItem[]>(() => {
-    return [
-      {
-        id: 'fee-01',
-        student_id: activeChildId,
-        item_name: 'SPP & Biaya Operasional Pembelajaran (BOP) - Oktober 2026',
-        period_label: 'Bulan Oktober 2026',
-        nominal_text: 'Rp 450.000',
-        status: 'Lunas / Bebas Tanggungan',
-        verified_date: '05 Oktober 2026, 09:15 WIB',
-        receipt_number: 'KW-TU/2026/10/0189',
-        cashier_name: 'Siti Rohmah (Kasir TU)',
-        notes: 'Bebas Tanggungan SPP Gasal',
-      },
-      {
-        id: 'fee-02',
-        student_id: activeChildId,
-        item_name: 'SPP & Biaya Operasional Pembelajaran (BOP) - September 2026',
-        period_label: 'Bulan September 2026',
-        nominal_text: 'Rp 450.000',
-        status: 'Lunas / Bebas Tanggungan',
-        verified_date: '04 September 2026, 10:20 WIB',
-        receipt_number: 'KW-TU/2026/09/0142',
-        cashier_name: 'Siti Rohmah (Kasir TU)',
-        notes: 'Lunas via Virtual Account Bank',
-      },
-    ];
-  }, [activeChildId]);
 
   // Active Schedule
   const activeSchedule = useMemo<ChildScheduleItem[]>(() => {
@@ -510,8 +410,8 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     ];
   }, [activeChild?.class_name]);
 
-  const isLoading = isChildrenLoading || isAttLoading || isGradesLoading;
-  const isError = isChildrenError;
+  const isLoading = isChildrenLoading || isAttLoading || isGradesLoading || isInvoicesLoading;
+  const isError = isChildrenError || isInvoicesError;
 
   return (
     <GuardianContext.Provider

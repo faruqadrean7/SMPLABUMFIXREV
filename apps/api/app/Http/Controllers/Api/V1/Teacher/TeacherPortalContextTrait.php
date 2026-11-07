@@ -190,4 +190,27 @@ trait TeacherPortalContextTrait
             default => 'Minggu',
         };
     }
+
+    /**
+     * Resolves a student's effective learning program for teacher-facing rosters.
+     * Priority: student.program_type -> class.program_type -> 'reguler'.
+     *
+     * @return array{type: string, label: string}
+     */
+    protected function resolveStudentProgram(Student $student, ?SchoolClass $class = null): array
+    {
+        $type = $student->program_type ?? $class?->program_type ?? 'reguler';
+
+        $labels = [
+            'reguler' => 'Reguler',
+            'tahfidz' => 'Tahfidz',
+            'icp' => 'ICP',
+            'inklusi' => 'Inklusi',
+        ];
+
+        return [
+            'type' => $type,
+            'label' => $labels[$type] ?? 'Reguler',
+        ];
+    }
 }

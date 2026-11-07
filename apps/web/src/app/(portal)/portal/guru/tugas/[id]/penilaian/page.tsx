@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ArrowLeft, 
@@ -22,9 +23,9 @@ import { lmsApi } from '@/lib/api-client';
 import { AssignmentSubmission } from '@/types/lms';
 import { toast } from 'sonner';
 
-export default function SpeedGraderPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const assignmentId = resolvedParams.id;
+export default function SpeedGraderPage() {
+  const params = useParams();
+  const assignmentId = (params?.id as string) || '';
   const queryClient = useQueryClient();
 
   // Active student index in submission list

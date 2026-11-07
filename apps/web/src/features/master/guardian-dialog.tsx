@@ -7,13 +7,17 @@ import * as z from 'zod';
 import { GuardianFormValues, GuardianItem } from '@/types/master';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, Users, Save } from 'lucide-react';
+import { X, Users, Save, KeyRound, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 export const guardianSchema = z.object({
   full_name: z.string().min(1, 'Nama lengkap wali wajib diisi').max(200, 'Maksimal 200 karakter'),
   phone: z.string().min(1, 'Nomor telepon/HP wajib diisi').max(30, 'Maksimal 30 karakter'),
   occupation: z.string().max(100, 'Maksimal 100 karakter').optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
+  create_user_account: z.boolean().optional(),
+  username: z.string().optional(),
+  email: z.string().optional(),
+  password: z.string().optional(),
 });
 
 export interface GuardianDialogProps {
@@ -33,10 +37,15 @@ export function GuardianDialog({
 }: GuardianDialogProps) {
   const isEditing = !!initialData;
 
+  const [createUserAccount, setCreateUserAccount] = React.useState<boolean>(!initialData);
+  const [showPassword, setShowPassword] = React.useState<boolean>(false);
+
   const {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<GuardianFormValues>({
     resolver: zodResolver(guardianSchema),
@@ -45,26 +54,55 @@ export function GuardianDialog({
       phone: '',
       occupation: '',
       address: '',
+      create_user_account: true,
+      username: '',
+      email: '',
+      password: 'Password123!',
     },
   });
 
+  const fullNameVal = watch('full_name');
+
   useEffect(() => {
     if (initialData) {
+      setCreateUserAccount(false);
       reset({
         full_name: initialData.full_name || '',
         phone: initialData.phone || '',
         occupation: initialData.occupation || '',
         address: initialData.address || '',
+        create_user_account: false,
+        username: initialData.user?.username || '',
+        email: initialData.user?.email || '',
+        password: '',
       });
     } else {
+      setCreateUserAccount(true);
       reset({
         full_name: '',
         phone: '',
         occupation: '',
         address: '',
+        create_user_account: true,
+        username: '',
+        email: '',
+        password: 'Password123!',
       });
     }
   }, [initialData, reset, isOpen]);
+
+  // Auto-suggest username when typing name on creation
+  useEffect(() => {
+    if (!initialData && fullNameVal) {
+      const clean = fullNameVal
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 15);
+      if (clean) {
+        setValue('username', `ortu_${clean}`, { shouldValidate: true });
+      }
+    }
+  }, [fullNameVal, initialData, setValue]);
 
   if (!isOpen) return null;
 
@@ -149,6 +187,82 @@ export function GuardianDialog({
               className="h-9 text-xs"
               disabled={isLoading || isSubmitting}
             />
+          </div>
+
+          {/* Opsi Pembuatan / Pengaturan Akun Login Portal */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3.5 space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={createUserAccount}
+                  onChange={(e) => {
+                    setCreateUserAccount(e.target.checked);
+                    setValue('create_user_account', e.target.checked);
+                  }}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                />
+                <div className="flex items-center gap-1.5 font-semibold text-xs text-slate-900">
+                  <KeyRound className="h-3.5 w-3.5 text-blue-600" />
+                  <span>{isEditing ? 'Perbarui Akun Login Portal' : 'Aktifkan Akun Login Portal Wali Murid'}</span>
+                </div>
+              </label>
+
+              {createUserAccount && (
+                <div className="space-y-3 pt-1 pl-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Username Login <span className="text-status-danger">*</span>
+                      </label>
+                      <Input
+                        {...register('username')}
+                        placeholder="ortu_nama"
+                        className="h-8 text-xs font-mono bg-white"
+                        disabled={isLoading || isSubmitting}
+                      />
+                      <p className="text-[10px] text-slate-400 mt-0.5">Digunakan wali saat login di /masuk</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Kata Sandi / Password <span className="text-status-danger">*</span>
+                      </label>
+                      <div className="relative">
+                        <Input
+                          {...register('password')}
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="Password123!"
+                          className="h-8 text-xs font-mono bg-white pr-8"
+                          disabled={isLoading || isSubmitting}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Default standar: Password123!</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Email Wali Murid (Opsional)
+                    </label>
+                    <Input
+                      {...register('email')}
+                      type="email"
+                      placeholder="wali@gmail.com"
+                      className="h-8 text-xs bg-white"
+                      disabled={isLoading || isSubmitting}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">

@@ -10,6 +10,7 @@ export interface QuestionBody {
   content: string;
   formula?: string;
   media_url?: string;
+  image_url?: string;
   text?: string;
 }
 
@@ -33,6 +34,7 @@ export interface QuestionItem {
   bank_id: string;
   question_type: QuestionType;
   stem: string;
+  media_url?: string;
   body?: QuestionBody;
   weight: number;
   options?: QuestionOptionItem[];
@@ -263,7 +265,7 @@ export interface StudentSessionQuestionItem {
 
 export interface StudentSessionData {
   session_id: string;
-  exam: {
+  exam?: {
     id: string;
     title: string;
     subject_name: string;
@@ -271,18 +273,29 @@ export interface StudentSessionData {
     start_at: string;
     end_at: string;
   };
-  student: {
+  student?: {
     id: string;
     name: string;
     nis: string;
   };
+  exam_id?: string;
+  exam_title?: string;
+  student_id?: string;
+  student_name?: string;
+  status?: string;
   started_at: string;
   deadline_at: string;
+  ends_at?: string;
   remaining_seconds: number;
-  total_questions: number;
-  answers: Record<string, any>;
-  flagged_question_ids: string[];
-  questions: StudentSessionQuestionItem[];
+  total_questions?: number;
+  answers?: Record<string, any>;
+  flagged_question_ids?: string[];
+  questions?: StudentSessionQuestionItem[];
+  violation_count?: number;
+  server_time?: string;
+  extra_minutes?: number;
+  room_name?: string;
+  session_no?: number | string;
 }
 
 export interface StudentCatalogExamItem {

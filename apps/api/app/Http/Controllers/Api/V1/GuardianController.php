@@ -248,4 +248,37 @@ class GuardianController extends Controller
             return $this->errorResponse('Gagal melepas relasi perwalian siswa', 'INTERNAL_ERROR', 500);
         }
     }
+
+    /**
+     * BE-MST-04: Provision or Reset Guardian Portal Account
+     * POST /api/v1/guardians/{id}/account
+     */
+    public function provisionAccount(Request $request, string $id): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'username' => ['nullable', 'string', 'max:50'],
+                'password' => ['nullable', 'string', 'min:6'],
+                'email' => ['nullable', 'email', 'max:100'],
+            ]);
+
+            $guardian = $this->guardianService->createOrResetAccount($id, $validated, $request);
+
+            return $this->successResponse([
+                'message' => 'Akun login portal orang tua berhasil diaktifkan / diperbarui.',
+                'guardian' => $guardian,
+                'user' => [
+                    'id' => $guardian->user?->id,
+                    'username' => $guardian->user?->username,
+                    'email' => $guardian->user?->email,
+                ],
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Data orang tua/wali tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorResponse('Gagal membuat akun login orang tua: '.$e->getMessage(), 'INTERNAL_ERROR', 500);
+        }
+    }
 }

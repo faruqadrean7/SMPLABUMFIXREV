@@ -84,6 +84,7 @@ class ClassService
                 'homeroom_teacher_id' => $data['homeroom_teacher_id'] ?? null,
                 'name' => $data['name'],
                 'capacity' => $data['capacity'] ?? 36,
+                'program_type' => $data['program_type'] ?? 'reguler',
             ]);
 
             $this->logAudit(
@@ -123,7 +124,7 @@ class ClassService
                 }
             }
 
-            $fields = ['grade_level_id', 'major_id', 'homeroom_teacher_id', 'name', 'capacity'];
+            $fields = ['grade_level_id', 'major_id', 'homeroom_teacher_id', 'name', 'capacity', 'program_type'];
             foreach ($fields as $field) {
                 if (array_key_exists($field, $data)) {
                     $class->{$field} = $data[$field];

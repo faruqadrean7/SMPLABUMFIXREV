@@ -32,6 +32,7 @@ class Student extends Model
         'address',
         'photo_file_id',
         'status',
+        'program_type',
         'entry_date',
         'graduated_at',
     ];
@@ -68,6 +69,11 @@ class Student extends Model
         return $this->belongsToMany(SchoolClass::class, 'class_students', 'student_id', 'class_id')
             ->withPivot(['joined_at', 'left_at'])
             ->withTimestamps();
+    }
+
+    public function programProfile(): HasOne
+    {
+        return $this->hasOne(StudentProgramProfile::class);
     }
 
     public function statusHistory(): HasMany

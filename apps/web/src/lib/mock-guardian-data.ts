@@ -341,11 +341,12 @@ export interface ChildSubjectGrade {
   subject_name: string;
   teacher_name: string;
   kktp: number;
-  formative_avg: number;
-  summative_avg: number;
-  sts_score: number;
-  final_score: number;
-  predicate: 'A' | 'B+' | 'B' | 'C' | 'D';
+  // null = backend belum menyediakan rincian nyata; JANGAN mengisi dengan angka karangan.
+  formative_avg: number | null;
+  summative_avg: number | null;
+  sts_score: number | null;
+  final_score: number | null;
+  predicate: 'A' | 'B+' | 'B' | 'C' | 'D' | null;
   status: 'Tuntas' | 'Perlu Pendampingan';
   competency_desc: string;
 }
@@ -754,17 +755,32 @@ export const MOCK_CHILD_SCHEDULES: Record<string, ChildScheduleItem[]> = {
 };
 
 // ─── INFORMASI BIAYA & ADMINISTRASI TU (INFORMATIF NON-PAYMENT) ─
+export type SchoolFeeStatus =
+  | 'Lunas'
+  | 'Belum Dibayar'
+  | 'Menunggu Verifikasi'
+  | 'Jatuh Tempo'
+  | 'Dibayar Sebagian'
+  | 'Dibatalkan'
+  | 'Lunas / Bebas Tanggungan'
+  | 'Dalam Proses Administrasi TU';
+
 export interface SchoolFeeItem {
   id: string;
   student_id: string;
   item_name: string;
   period_label: string;
   nominal_text: string;
-  status: 'Lunas / Bebas Tanggungan' | 'Dalam Proses Administrasi TU';
+  status: SchoolFeeStatus;
   verified_date: string;
   receipt_number: string;
   cashier_name: string;
   notes: string;
+  total_amount?: number;
+  paid_amount?: number;
+  remaining_amount?: number;
+  due_date?: string;
+  raw_status?: string;
 }
 
 export const MOCK_GUARDIAN_FEES: Record<string, SchoolFeeItem[]> = {

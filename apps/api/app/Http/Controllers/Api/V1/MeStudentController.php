@@ -16,6 +16,8 @@ use App\Models\ExamSession;
 use App\Models\Grade;
 use App\Models\Schedule;
 use App\Models\Student;
+use App\Models\StudentProgramProfile;
+use App\Services\AuditLogService;
 use App\Services\LmsService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -36,6 +38,17 @@ class MeStudentController extends Controller
     }
 
     /**
+     * Resolusi program belajar efektif siswa.
+     * Prioritas: student.program_type -> class.program_type -> 'reguler'.
+     */
+    protected function resolveProgramType(Student $student): string
+    {
+        $student->loadMissing('classes');
+
+        return $student->program_type ?? $student->classes->first()?->program_type ?? 'reguler';
+    }
+
+    /**
      * GET /api/v1/me/student-dashboard
      * Ringkasan beranda siswa aktif.
      */
@@ -46,8 +59,19 @@ class MeStudentController extends Controller
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        $student->loadMissing(['classes.academicYear']);
+        $student->loadMissing(['classes.academicYear', 'programProfile']);
         $currentClass = $student->classes->first();
+
+        // Resolusi program belajar (prioritas: student.program_type -> class.program_type -> 'reguler')
+        $programType = $this->resolveProgramType($student);
+        $programBadges = [
+            'tahfidz' => "Siswa Program Tahfidz Al-Qur'an",
+            'icp' => 'International Class Program (Cambridge)',
+            'inklusi' => 'Siswa Program Inklusi',
+            'reguler' => 'Siswa Program Reguler',
+        ];
+        $programBadge = $programBadges[$programType] ?? 'Siswa Program Reguler';
+        $programProfile = $student->programProfile?->meta_data ?? [];
 
         // Presensi
         $totalAtt = Attendance::where('student_id', $student->id)->count();
@@ -99,6 +123,9 @@ class MeStudentController extends Controller
             'nis' => $student->nis ?? '',
             'nisn' => $student->nisn ?? '',
             'className' => $currentClass?->name ?? 'Belum ada kelas',
+            'programType' => $programType,
+            'programBadge' => $programBadge,
+            'programProfile' => $programProfile,
             'photoFileId' => $student->photo_file_id,
             'photoUrl' => $student->photoFile?->url,
             'todaySchedule' => $todaySchedules,
@@ -106,6 +133,102 @@ class MeStudentController extends Controller
             'attendanceRate' => $attendanceRate,
             'totalAchievements' => $achievementsCount,
         ]);
+    }
+
+    /**
+     * POST /api/v1/me/program/mood
+     * Check-in kondisi perasaan / sensori harian (khususnya untuk siswa program Inklusi).
+     */
+    public function submitDailyMood(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        if ($this->resolveProgramType($student) !== 'inklusi') {
+            return $this->errorResponse('Fitur check-in mood hanya untuk siswa program Inklusi.', 'FORBIDDEN', 403);
+        }
+
+        $validated = $request->validate([
+            'mood' => ['required', 'string', 'in:happy,calm,tired,anxious'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $profile = StudentProgramProfile::firstOrNew(['student_id' => $student->id]);
+        if (! $profile->exists) {
+            $profile->program_type = 'inklusi';
+        }
+
+        $meta = $profile->meta_data ?? [];
+        $meta['daily_mood'] = [
+            'mood' => $validated['mood'],
+            'note' => $validated['note'] ?? null,
+            'timestamp' => now()->toISOString(),
+        ];
+        $profile->meta_data = $meta;
+        $profile->save();
+
+        app(AuditLogService::class)->record(
+            action: 'portal.program.mood.checkin',
+            entity: 'StudentProgramProfile',
+            entityId: $profile->id,
+            newValues: $meta['daily_mood'],
+            request: $request,
+            isAuthoritative: true
+        );
+
+        return $this->successResponse($meta['daily_mood'], 200, ['message' => 'Mood harian berhasil dicatat.']);
+    }
+
+    /**
+     * POST /api/v1/me/program/mutabaah
+     * Simpan catatan ibadah harian / mutabaah yaumiyah (khususnya untuk siswa program Tahfidz).
+     */
+    public function submitMutabaah(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        if ($this->resolveProgramType($student) !== 'tahfidz') {
+            return $this->errorResponse('Fitur mutabaah yaumiyah hanya untuk siswa program Tahfidz.', 'FORBIDDEN', 403);
+        }
+
+        $validated = $request->validate([
+            'sholat_fardhu' => ['required', 'integer', 'min:0', 'max:5'],
+            'tilawah_pages' => ['required', 'integer', 'min:0', 'max:100'],
+            'dhuha' => ['required', 'boolean'],
+            'tahajud' => ['required', 'boolean'],
+        ]);
+
+        $profile = StudentProgramProfile::firstOrNew(['student_id' => $student->id]);
+        if (! $profile->exists) {
+            $profile->program_type = 'tahfidz';
+        }
+
+        $meta = $profile->meta_data ?? [];
+        $meta['mutabaah_today'] = [
+            'sholat_fardhu' => (int) $validated['sholat_fardhu'],
+            'tilawah_pages' => (int) $validated['tilawah_pages'],
+            'dhuha' => (bool) $validated['dhuha'],
+            'tahajud' => (bool) $validated['tahajud'],
+            'updated_at' => now()->toISOString(),
+        ];
+        $profile->meta_data = $meta;
+        $profile->save();
+
+        app(AuditLogService::class)->record(
+            action: 'portal.program.mutabaah.update',
+            entity: 'StudentProgramProfile',
+            entityId: $profile->id,
+            newValues: $meta['mutabaah_today'],
+            request: $request,
+            isAuthoritative: true
+        );
+
+        return $this->successResponse($meta['mutabaah_today'], 200, ['message' => 'Checklist mutabaah berhasil disimpan.']);
     }
 
     /**
@@ -452,8 +575,10 @@ class MeStudentController extends Controller
             if ($childId) {
                 return $guardian->students()->where('students.id', $childId)->first();
             }
+
             return $guardian->students()->first();
         }
+
         return null;
     }
 }

@@ -11,8 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getDestinationPath } from '@/lib/rbac/evaluator';
 import { ApiClientError } from '@/lib/api/errors';
-import { cn } from '@/lib/utils';
-import { User, Lock, AlertCircle, Eye, EyeOff, GraduationCap, BookOpen, Users, Briefcase, ShieldCheck } from 'lucide-react';
+import { User, Lock, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 const loginSchema = z.object({
   identifier: z.string().min(1, 'Identitas (username, email, NIS, atau NIP) wajib diisi'),
@@ -21,52 +20,6 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-type PersonaType = 'siswa' | 'ortu' | 'guru' | 'staf' | null;
-
-interface PersonaOption {
-  id: 'siswa' | 'ortu' | 'guru' | 'staf';
-  label: string;
-  fieldLabel: string;
-  placeholder: string;
-  hint: string;
-  icon: React.ElementType;
-}
-
-const PERSONAS: PersonaOption[] = [
-  {
-    id: 'siswa',
-    label: 'Siswa',
-    fieldLabel: 'NISN / NIS / Username',
-    placeholder: 'NISN / NIS / Username',
-    hint: 'Gunakan NISN atau username akun siswa Anda',
-    icon: GraduationCap,
-  },
-  {
-    id: 'ortu',
-    label: 'Orang Tua',
-    fieldLabel: 'Email / No. WhatsApp / Username',
-    placeholder: 'Email / No. WhatsApp / Username',
-    hint: 'Gunakan email atau nomor HP yang didaftarkan',
-    icon: Users,
-  },
-  {
-    id: 'guru',
-    label: 'Guru',
-    fieldLabel: 'NIP / Email Sekolah / Username',
-    placeholder: 'NIP / Email Sekolah / Username',
-    hint: 'Gunakan NIP atau email resmi sekolah pengajar',
-    icon: BookOpen,
-  },
-  {
-    id: 'staf',
-    label: 'Staf',
-    fieldLabel: 'NIP / Username Staf',
-    placeholder: 'NIP / Username Staf',
-    hint: 'Gunakan NIP atau username staf administrasi',
-    icon: Briefcase,
-  },
-];
-
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -74,7 +27,6 @@ export function LoginForm() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [selectedPersona, setSelectedPersona] = useState<PersonaType>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
   React.useEffect(() => {
@@ -85,13 +37,6 @@ export function LoginForm() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState('');
   const [isVerifyingMfa, setIsVerifyingMfa] = useState(false);
-
-  const activePersona = PERSONAS.find((p) => p.id === selectedPersona);
-  const identifierLabel = activePersona ? activePersona.fieldLabel : 'Identitas Pengguna';
-  const identifierPlaceholder = activePersona
-    ? activePersona.placeholder
-    : 'NISN / NIS / NIP / Username / Email';
-  const identifierHint = activePersona?.hint;
 
   const redirectParam = searchParams.get('redirect');
   const sessionExpired = searchParams.get('session_expired');
@@ -123,10 +68,13 @@ export function LoginForm() {
       const result = await login(payload);
 
       if (result.destination) {
-        if (redirectParam && redirectParam.startsWith('/')) {
-          router.push(redirectParam);
+        const targetPath = redirectParam && redirectParam.startsWith('/')
+          ? redirectParam
+          : getDestinationPath(result.destination);
+        if (typeof window !== 'undefined') {
+          window.location.href = targetPath;
         } else {
-          router.push(getDestinationPath(result.destination));
+          router.push(targetPath);
         }
       }
     } catch (err: unknown) {
@@ -157,10 +105,13 @@ export function LoginForm() {
       });
 
       if (result.destination) {
-        if (redirectParam && redirectParam.startsWith('/')) {
-          router.push(redirectParam);
+        const targetPath = redirectParam && redirectParam.startsWith('/')
+          ? redirectParam
+          : getDestinationPath(result.destination);
+        if (typeof window !== 'undefined') {
+          window.location.href = targetPath;
         } else {
-          router.push(getDestinationPath(result.destination));
+          router.push(targetPath);
         }
       }
     } catch (err: unknown) {
@@ -259,52 +210,11 @@ export function LoginForm() {
         </div>
       )}
 
-      {/* Pilihan Persona Masuk (GAP-AUTH-01) */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="block text-xs font-semibold text-slate-700">
-            Pilih Akses Masuk Portal:
-          </label>
-          {selectedPersona && (
-            <button
-              type="button"
-              onClick={() => setSelectedPersona(null)}
-              className="text-[11px] font-medium text-brand-blue hover:underline"
-            >
-              Reset Pilihan
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {PERSONAS.map((p) => {
-            const Icon = p.icon;
-            const isSelected = selectedPersona === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setSelectedPersona(isSelected ? null : p.id)}
-                className={cn(
-                  'flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all cursor-pointer',
-                  isSelected
-                    ? 'border-brand-blue bg-blue-50/80 text-brand-blue font-bold shadow-2xs ring-1 ring-brand-blue'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                )}
-                aria-pressed={isSelected}
-              >
-                <Icon className={cn('h-5 w-5 mb-1', isSelected ? 'text-brand-blue' : 'text-slate-500')} />
-                <span className="text-xs font-semibold">{p.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit(onSubmit)} method="POST" className="space-y-4" noValidate>
         {/* Input Identitas */}
         <div className="space-y-1.5">
           <label htmlFor="identifier" className="block text-xs font-semibold text-slate-700">
-            {identifierLabel}
+            Identitas Pengguna
           </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -314,16 +224,13 @@ export function LoginForm() {
               id="identifier"
               type="text"
               autoComplete="username"
-              placeholder={identifierPlaceholder}
+              placeholder="NISN / NIS / NIP / Username / Email"
               className="pl-9"
               hasError={!!errors.identifier}
               disabled={isSubmitting}
               {...register('identifier')}
             />
           </div>
-          {identifierHint && (
-            <p className="text-[11px] text-slate-500">{identifierHint}</p>
-          )}
           {errors.identifier && (
             <p className="text-[11px] font-medium text-status-danger">{errors.identifier.message}</p>
           )}

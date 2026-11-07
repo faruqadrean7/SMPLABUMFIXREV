@@ -7,7 +7,7 @@ import { Toaster as SonnerToaster } from 'sonner';
 
 export const metadata: Metadata = {
   title: 'SISTLABUM - Portal Sekolah Satu Pintu Labschool UM',
-  description: 'Sistem Informasi Siswa Terpadu SMP-SMA Laboratorium Universitas Negeri Malang',
+  description: 'Sistem Informasi Siswa Terpadu SMP Laboratorium Universitas Negeri Malang',
 };
 
 export default function RootLayout({

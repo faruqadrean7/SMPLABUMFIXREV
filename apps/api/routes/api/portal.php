@@ -5,8 +5,10 @@ use App\Http\Controllers\Api\V1\MeChildController;
 use App\Http\Controllers\Api\V1\MeFinanceController;
 use App\Http\Controllers\Api\V1\MeStaffController;
 use App\Http\Controllers\Api\V1\MeStudentController;
+use App\Http\Controllers\Api\V1\MeStudentProgramController;
 use App\Http\Controllers\Api\V1\MeTeacherController;
 use App\Http\Controllers\Api\V1\TeacherController;
+use App\Http\Controllers\Api\V1\TeacherProgramController;
 use Illuminate\Support\Facades\Route;
 
 // =========================================================================
@@ -39,6 +41,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/tasks/{id}/submit', [MeStudentController::class, 'submitTask']);
         Route::get('/counseling-requests', [MeStudentController::class, 'counselingRequests']);
         Route::post('/counseling-requests', [MeStudentController::class, 'storeCounselingRequest']);
+        Route::post('/program/mood', [MeStudentController::class, 'submitDailyMood']);
+        Route::post('/program/mutabaah', [MeStudentController::class, 'submitMutabaah']);
+        // BE-PROG-01: Program Khusus (Tahfidz, ICP, Inklusi)
+        Route::get('/program/materials', [MeStudentProgramController::class, 'materials']);
+        Route::get('/program/targets', [MeStudentProgramController::class, 'targets']);
+        Route::get('/program/tasks', [MeStudentProgramController::class, 'tasks']);
+        Route::post('/program/tasks/{id}/submit', [MeStudentProgramController::class, 'submitTask']);
         // Keuangan (GAP-FIN-01)
         Route::get('/invoices', [MeFinanceController::class, 'myInvoices']);
         Route::get('/invoices/{id}', [MeFinanceController::class, 'showInvoice']);
@@ -106,6 +115,33 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/leave-requests', [MeStaffController::class, 'leaveRequests']);
         Route::post('/leave-requests', [MeStaffController::class, 'storeLeaveRequest']);
         Route::get('/tickets', [MeStaffController::class, 'tickets']);
+    });
+
+    // =========================================================================
+    // BE-PROG-02: API Pengelolaan Program Khusus Guru Pembina & Admin (P1)
+    // =========================================================================
+    Route::prefix('program')->group(function () {
+        // Materi Program
+        Route::get('/materials', [TeacherProgramController::class, 'indexMaterials']);
+        Route::post('/materials', [TeacherProgramController::class, 'storeMaterial']);
+        Route::patch('/materials/{id}', [TeacherProgramController::class, 'updateMaterial']);
+        Route::delete('/materials/{id}', [TeacherProgramController::class, 'destroyMaterial']);
+
+        // Target Capaian Program
+        Route::get('/targets', [TeacherProgramController::class, 'indexTargets']);
+        Route::post('/targets', [TeacherProgramController::class, 'storeTarget']);
+        Route::patch('/targets/{id}', [TeacherProgramController::class, 'updateTarget']);
+        Route::delete('/targets/{id}', [TeacherProgramController::class, 'destroyTarget']);
+
+        // Tugas Program
+        Route::get('/tasks', [TeacherProgramController::class, 'indexTasks']);
+        Route::post('/tasks', [TeacherProgramController::class, 'storeTask']);
+        Route::patch('/tasks/{id}', [TeacherProgramController::class, 'updateTask']);
+        Route::delete('/tasks/{id}', [TeacherProgramController::class, 'destroyTask']);
+
+        // Submissions & Penilaian
+        Route::get('/tasks/{id}/submissions', [TeacherProgramController::class, 'taskSubmissions']);
+        Route::patch('/submissions/{id}', [TeacherProgramController::class, 'gradeSubmission']);
     });
 });
 

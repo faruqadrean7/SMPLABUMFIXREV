@@ -103,6 +103,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Write operations: permission:master.student.write
     Route::post('/guardians', [GuardianController::class, 'store'])
         ->middleware('permission:master.student.write');
+    Route::post('/guardians/{id}/account', [GuardianController::class, 'provisionAccount'])
+        ->middleware('permission:master.student.write');
     Route::put('/guardians/{id}', [GuardianController::class, 'update'])
         ->middleware('permission:master.student.write');
     Route::delete('/guardians/{id}', [GuardianController::class, 'destroy'])

@@ -49,10 +49,20 @@ import {
 import { useAuth } from '@/providers/auth-provider';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { toast } from '@/components/ui/toast';
+import { useSearchParams } from 'next/navigation';
 
-export default function PublicRelationsAdminPage() {
+function PublicRelationsAdminContent() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'guests' | 'complaints' | 'partnerships' | 'alumni'>('guests');
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const categoryParam = searchParams.get('category');
+
+  const [activeTab, setActiveTab] = useState<'guests' | 'complaints' | 'partnerships' | 'alumni'>(() => {
+    if (tabParam === 'complaints' || tabParam === 'partnerships' || tabParam === 'alumni') {
+      return tabParam;
+    }
+    return 'guests';
+  });
 
   // =========================================================================
   // COMMON STATE
@@ -100,10 +110,11 @@ export default function PublicRelationsAdminPage() {
   // =========================================================================
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [complaintSearch, setComplaintSearch] = useState('');
-  const [complaintCategoryFilter, setComplaintCategoryFilter] = useState('all');
+  const [complaintCategoryFilter, setComplaintCategoryFilter] = useState(categoryParam || 'all');
   const [complaintStatusFilter, setComplaintStatusFilter] = useState('all');
   const [selectedComplaint, setSelectedComplaint] = useState<ComplaintItem | null>(null);
   const [isComplaintModalOpen, setIsComplaintModalOpen] = useState(false);
+  const [isLoadingComplaintDetail, setIsLoadingComplaintDetail] = useState(false);
   const [statusUpdateForm, setStatusUpdateForm] = useState<UpdateComplaintStatusPayload>({
     status: 'ditinjau',
     response_text: '',
@@ -288,7 +299,7 @@ export default function PublicRelationsAdminPage() {
   // =========================================================================
   // COMPLAINT ACTIONS
   // =========================================================================
-  const handleOpenComplaintDetail = (item: ComplaintItem) => {
+  const handleOpenComplaintDetail = async (item: ComplaintItem) => {
     setSelectedComplaint(item);
     setStatusUpdateForm({
       status: item.status === 'baru' ? 'ditinjau' : (item.status as any),
@@ -296,6 +307,19 @@ export default function PublicRelationsAdminPage() {
       assigned_to: item.assigned_to || undefined,
     });
     setIsComplaintModalOpen(true);
+    setIsLoadingComplaintDetail(true);
+
+    try {
+      // ADM-GUEST-02 & BE-REPORT-02: Panggil endpoint detail untuk memicu audit-baca dan memuat timeline terbaru
+      const res = await publicRelationsApi.getComplaint(item.id);
+      if (res && res.data) {
+        setSelectedComplaint(res.data);
+      }
+    } catch (err) {
+      console.error('Gagal mengambil data detail pengaduan teranyar:', err);
+    } finally {
+      setIsLoadingComplaintDetail(false);
+    }
   };
 
   const handleUpdateComplaintStatusSubmit = async (e: React.FormEvent) => {
@@ -424,7 +448,9 @@ export default function PublicRelationsAdminPage() {
     const ditinjau = complaints.filter((c) => c.status === 'ditinjau').length;
     const ditindaklanjuti = complaints.filter((c) => c.status === 'ditindaklanjuti').length;
     const selesai = complaints.filter((c) => c.status === 'selesai').length;
-    return { total, baru, ditinjau, ditindaklanjuti, selesai };
+    const bullyingTotal = complaints.filter((c) => c.category === 'bullying').length;
+    const bullyingBaru = complaints.filter((c) => c.category === 'bullying' && c.status === 'baru').length;
+    return { total, baru, ditinjau, ditindaklanjuti, selesai, bullyingTotal, bullyingBaru };
   }, [complaints]);
 
   const partnershipStats = useMemo(() => {
@@ -756,7 +782,7 @@ export default function PublicRelationsAdminPage() {
       {activeTab === 'complaints' && (
         <div className="space-y-6">
           {/* STAT CARDS */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <Card>
               <CardContent className="pt-4 pb-3">
                 <p className="text-xs text-slate-500 uppercase font-medium">Total Aduan</p>
@@ -785,6 +811,28 @@ export default function PublicRelationsAdminPage() {
               <CardContent className="pt-4 pb-3">
                 <p className="text-xs text-emerald-600 uppercase font-medium">Selesai</p>
                 <p className="text-xl font-bold text-emerald-600 mt-1">{complaintStats.selesai}</p>
+              </CardContent>
+            </Card>
+            <Card
+              className={`cursor-pointer transition-all ${
+                complaintCategoryFilter === 'bullying'
+                  ? 'border-red-400 bg-red-50/50 ring-2 ring-red-400/30'
+                  : 'border-red-200 bg-red-50/20 hover:bg-red-50/40'
+              }`}
+              onClick={() =>
+                setComplaintCategoryFilter((prev) => (prev === 'bullying' ? 'all' : 'bullying'))
+              }
+            >
+              <CardContent className="pt-4 pb-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-red-700 uppercase font-medium">Bullying</p>
+                  {complaintStats.bullyingBaru > 0 && (
+                    <span className="text-[10px] bg-red-600 text-white font-bold px-1.5 py-0.5 rounded-full">
+                      {complaintStats.bullyingBaru} baru
+                    </span>
+                  )}
+                </div>
+                <p className="text-xl font-bold text-red-600 mt-1">{complaintStats.bullyingTotal}</p>
               </CardContent>
             </Card>
           </div>
@@ -885,9 +933,21 @@ export default function PublicRelationsAdminPage() {
                               {c.ticket_code}
                             </td>
                             <td className="py-3 px-4">
-                              <Badge variant="outline" className="capitalize text-xs font-normal">
-                                {c.category}
-                              </Badge>
+                              {c.category === 'bullying' ? (
+                                <div className="flex flex-col gap-1 items-start">
+                                  <Badge className="bg-red-100 text-red-800 border-red-200 text-xs font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3 text-red-600" />
+                                    Perundungan
+                                  </Badge>
+                                  <span className="text-[10px] text-red-700 font-semibold bg-red-50 border border-red-200/80 px-1.5 py-0.5 rounded">
+                                    SLA: ≤ 48 Jam
+                                  </span>
+                                </div>
+                              ) : (
+                                <Badge variant="outline" className="capitalize text-xs font-normal">
+                                  {c.category}
+                                </Badge>
+                              )}
                             </td>
                             <td className="py-3 px-4 max-w-xs">
                               <p className="line-clamp-2 text-slate-800 text-xs leading-relaxed">{c.content}</p>
@@ -1343,6 +1403,33 @@ export default function PublicRelationsAdminPage() {
               </button>
             </div>
             <div className="p-5 space-y-6">
+              {/* ADM-GUEST-02: TRANSPARANSI AUDIT-BACA (DOC 09 §8) */}
+              <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-100/90 px-3.5 py-2 rounded-lg border border-slate-200">
+                <span className="flex items-center gap-2 font-medium">
+                  <ShieldAlert className="w-4 h-4 text-indigo-600 shrink-0" />
+                  Audit Baca Aktif: Pembukaan detail laporan sensitif ini tercatat secara otomatis pada log audit sistem.
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono">BE-REPORT-02</span>
+              </div>
+
+              {/* ADM-GUEST-02: PERINGATAN SLA KHUSUS PERUNDUNGAN / BULLYING */}
+              {selectedComplaint.category === 'bullying' && (
+                <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  <div className="text-xs text-red-950 space-y-1">
+                    <p className="font-semibold flex items-center gap-2 text-red-900">
+                      <span>Perhatian Khusus — Kasus Perundungan (SLA: ≤ 48 Jam)</span>
+                      <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                        Prioritas Tinggi
+                      </span>
+                    </p>
+                    <p className="text-red-800 leading-relaxed">
+                      Sesuai Permendikbudristek No. 46/2023, laporan kekerasan dan perundungan wajib segera diverifikasi oleh Tim PPKSP/Guru BK dalam waktu maksimal 2×24 jam demi keselamatan fisik dan psikologis siswa.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* DETAIL CARD */}
               <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1374,9 +1461,17 @@ export default function PublicRelationsAdminPage() {
 
               {/* TIMELINE */}
               <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-                  Riwayat & Kronologi Penanganan
-                </h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Riwayat & Kronologi Penanganan
+                  </h4>
+                  {isLoadingComplaintDetail && (
+                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <RefreshCw className="w-3 h-3 animate-spin text-indigo-500" />
+                      Menyinkronkan data...
+                    </span>
+                  )}
+                </div>
                 {selectedComplaint.events && selectedComplaint.events.length > 0 ? (
                   <div className="space-y-3 border-l-2 border-slate-200 pl-4 ml-2">
                     {selectedComplaint.events.map((ev, idx) => (
@@ -1613,5 +1708,20 @@ export default function PublicRelationsAdminPage() {
         isLoading={prConfirm.isLoading}
       />
     </div>
+  );
+}
+
+export default function PublicRelationsAdminPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+          <RefreshCw className="w-8 h-8 animate-spin mb-2" />
+          <p className="text-sm">Memuat modul Hubungan Masyarakat & Pengaduan...</p>
+        </div>
+      }
+    >
+      <PublicRelationsAdminContent />
+    </React.Suspense>
   );
 }

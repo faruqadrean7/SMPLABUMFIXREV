@@ -54,6 +54,18 @@ export default function ContactPage() {
 
   const mapsEmbedUrl = siteData?.address?.maps_embed_url || VERIFIED_CONTACT_DETAILS.address.mapsEmbedUrl;
 
+  const socialLinks = React.useMemo(() => {
+    if (!siteData?.social_media) return [];
+    const sm = siteData.social_media;
+    const items: { platform: string; url: string; handle: string }[] = [];
+    if (sm.instagram) items.push({ platform: 'Instagram', url: sm.instagram.startsWith('http') ? sm.instagram : `https://instagram.com/${sm.instagram.replace('@', '')}`, handle: sm.instagram });
+    if (sm.youtube) items.push({ platform: 'YouTube', url: sm.youtube.startsWith('http') ? sm.youtube : `https://youtube.com/${sm.youtube}`, handle: sm.youtube });
+    if (sm.facebook) items.push({ platform: 'Facebook', url: sm.facebook.startsWith('http') ? sm.facebook : `https://facebook.com/${sm.facebook}`, handle: sm.facebook });
+    if (sm.twitter) items.push({ platform: 'Twitter / X', url: sm.twitter.startsWith('http') ? sm.twitter : `https://twitter.com/${sm.twitter.replace('@', '')}`, handle: sm.twitter });
+    if (sm.tiktok) items.push({ platform: 'TikTok', url: sm.tiktok.startsWith('http') ? sm.tiktok : `https://tiktok.com/@${sm.tiktok.replace('@', '')}`, handle: sm.tiktok });
+    return items;
+  }, [siteData?.social_media]);
+
   const directChannels: DirectContactChannel[] = [
     {
       id: 'whatsapp-ppdb',
@@ -387,8 +399,8 @@ export default function ContactPage() {
                     <MessageSquare className="w-5 h-5" aria-hidden="true" />
                   </div>
                   <h3 className="font-pub-heading font-bold text-base text-[#062940]">
-                    <span className="sr-only">Panduan Layanan &amp; </span>
-                    <span>Panduan Konsultasi</span>
+                    <span className="sr-only">Panduan Layanan &amp; Konsultasi</span>
+                    <span aria-hidden="true">Panduan Konsultasi</span>
                   </h3>
                 </div>
 
@@ -406,7 +418,7 @@ export default function ContactPage() {
                         <span className="sr-only">Pertanyaan PPDB &amp; Biaya Pendidikan</span>
                       </h4>
                       <p className="text-gray-500 text-[11px] font-mono mt-0.5">
-                        &rarr; WhatsApp {waDisplay}
+                        &rarr; WhatsApp <span>{waDisplay}</span>
                       </p>
                     </div>
                   </div>
@@ -419,7 +431,7 @@ export default function ContactPage() {
                         <span>Administrasi &amp; Tata Usaha</span>
                       </h4>
                       <p className="text-gray-500 text-[11px] font-mono mt-0.5">
-                        &rarr; Telepon {phoneDisplay}
+                        &rarr; Telepon <span>{phoneDisplay}</span>
                       </p>
                     </div>
                   </div>
@@ -432,7 +444,7 @@ export default function ContactPage() {
                         <span>Kerja Sama / Kemitraan</span>
                       </h4>
                       <p className="text-gray-500 text-[11px] font-mono mt-0.5">
-                        &rarr; Email {emailDisplay}
+                        &rarr; Email <span>{emailDisplay}</span>
                       </p>
                     </div>
                   </div>
@@ -440,6 +452,29 @@ export default function ContactPage() {
               </div>
             </div>
           </div>
+
+          {/* Media Sosial Resmi (Dinamis dari CMS, hanya tampil jika dikonfigurasi) */}
+          {socialLinks.length > 0 && (
+            <div className="mt-8 bg-white border border-gray-200/90 rounded-2xl p-6 shadow-xs">
+              <h3 className="font-pub-heading font-bold text-base text-[#062940] mb-3">
+                Kanal Media Sosial Resmi
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                {socialLinks.map((item) => (
+                  <a
+                    key={item.platform}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-[#062940] hover:bg-[#062940] hover:text-white transition-colors"
+                  >
+                    <span>{item.platform}:</span>
+                    <span className="font-normal text-gray-500 hover:text-white">{item.handle}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
