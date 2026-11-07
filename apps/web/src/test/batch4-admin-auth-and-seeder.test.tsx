@@ -37,7 +37,7 @@ describe('BATCH 4B (GAP-SEC-02): Hardening Login Admin, Hidden Gateway & 404 Gua
   });
 
   describe('1. Civitas Portal Login (LoginForm)', () => {
-    it('renders persona options (Siswa, Orang Tua, Guru, Staf) and submits WITHOUT admin flag', async () => {
+    it('renders login directly by ID & password without persona quick-access and submits WITHOUT admin flag', async () => {
       mockLogin.mockResolvedValueOnce({
         user: { id: 'usr-1', username: 'guru.mtk', roles: ['teacher', 'homeroom'] },
         destination: 'guru',
@@ -46,19 +46,17 @@ describe('BATCH 4B (GAP-SEC-02): Hardening Login Admin, Hidden Gateway & 404 Gua
 
       render(<LoginForm />);
 
-      // Verify persona options exist and NO admin option exists
-      expect(screen.getByText('Siswa')).toBeInTheDocument();
-      expect(screen.getByText('Orang Tua')).toBeInTheDocument();
-      expect(screen.getByText('Guru')).toBeInTheDocument();
-      expect(screen.getByText('Staf')).toBeInTheDocument();
+      // Verify quick-access persona options are removed
+      expect(screen.queryByText('Pilih Akses Masuk Portal:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Siswa')).not.toBeInTheDocument();
+      expect(screen.queryByText('Orang Tua')).not.toBeInTheDocument();
+      expect(screen.queryByText('Guru')).not.toBeInTheDocument();
+      expect(screen.queryByText('Staf')).not.toBeInTheDocument();
       expect(screen.queryByText('Admin')).not.toBeInTheDocument();
       expect(screen.queryByText('Super Admin')).not.toBeInTheDocument();
 
-      // Click on "Guru" persona
-      fireEvent.click(screen.getByText('Guru'));
-
-      // Fill in credentials
-      const idInput = screen.getByPlaceholderText(/NIP \/ Email Sekolah \/ Username/i);
+      // Fill in credentials directly
+      const idInput = screen.getByPlaceholderText(/NISN \/ NIS \/ NIP \/ Username \/ Email/i);
       const passInput = screen.getByPlaceholderText(/Masukkan kata sandi/i);
 
       fireEvent.change(idInput, { target: { value: 'guru.mtk' } });
@@ -144,6 +142,7 @@ describe('BATCH 4B (GAP-SEC-02): Hardening Login Admin, Hidden Gateway & 404 Gua
           mfa_token: 'mfa-temp-token-999',
           totp_code: '123456',
           recovery_code: undefined,
+          remember_device: true,
           platform: 'web',
           isAdminLogin: true,
         });

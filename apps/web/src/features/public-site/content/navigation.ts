@@ -13,6 +13,7 @@ export const PUBLIC_NAV_ITEMS: NavItem[] = [
   { label: 'Agenda', href: '/agenda' },
   { label: 'Galeri', href: '/galeri' },
   { label: 'Unduhan', href: '/unduhan' },
+  { label: 'Buletin', href: '/buletin' },
   { label: 'Kontak', href: '/kontak' },
 ];
 
@@ -52,6 +53,7 @@ export const FOOTER_QUICK_LINKS: QuickLinkItem[] = [
   { label: 'Agenda Kegiatan', href: '/agenda' },
   { label: 'Galeri Aktivitas', href: '/galeri' },
   { label: 'Pusat Unduhan', href: '/unduhan' },
+  { label: 'Buletin & Majalah', href: '/buletin' },
   { label: 'Pendaftaran Siswa Baru (PPDB)', href: '/ppdb' },
 ];
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProfilePage from '@/app/(public)/profil/page';
@@ -23,14 +23,16 @@ function renderWithClient(ui: React.ReactElement) {
 describe('Public School Profile Page Tests (WEB-PRF-01 & INT-02)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: tanpa data CMS → halaman memakai konten statis (hindari fetch nyata ke API saat uji).
+    vi.spyOn(publicApi, 'getPublicSite').mockResolvedValue({} as any);
   });
 
   it('merender hero section dengan judul profil, slogan, dan breadcrumb navigasi', () => {
     const { container } = renderWithClient(<ProfilePage />);
 
-    // H1 Heading
+    // H1 Heading (judul hero: "Profil Sekolah" + sr-only nama sekolah)
     const h1 = screen.getByRole('heading', { level: 1 });
-    expect(h1).toHaveTextContent(/Profil SMP Laboratorium/i);
+    expect(h1).toHaveTextContent(/Profil Sekolah/i);
 
     // Slogan badge
     expect(screen.getByText(/Beradab, Kreatif, Berprestasi/i)).toBeInTheDocument();
@@ -38,7 +40,7 @@ describe('Public School Profile Page Tests (WEB-PRF-01 & INT-02)', () => {
     // Breadcrumb
     const breadcrumb = screen.getByRole('navigation', { name: /Navigasi Halaman/i });
     expect(breadcrumb).toBeInTheDocument();
-    expect(screen.getByText('Profil Sekolah')).toBeInTheDocument();
+    expect(within(breadcrumb).getByText('Profil Sekolah')).toBeInTheDocument();
 
     // Exactly 1 main landmark with correct id
     const mains = container.querySelectorAll('main');
@@ -67,7 +69,7 @@ describe('Public School Profile Page Tests (WEB-PRF-01 & INT-02)', () => {
     renderWithClient(<ProfilePage />);
 
     expect(screen.getByText('Terakreditasi “A” (Unggul)')).toBeInTheDocument();
-    expect(screen.getByText('P2LP Universitas Negeri Malang')).toBeInTheDocument();
+    expect(screen.getAllByText('P2LP Universitas Negeri Malang').length).toBeGreaterThan(0);
     expect(screen.getByText('(0341) 588550')).toBeInTheDocument();
     expect(screen.getByText('0851-2608-8473')).toBeInTheDocument();
     expect(screen.getByText('info@smplab-um.sch.id')).toBeInTheDocument();
@@ -123,7 +125,7 @@ describe('Public School Profile Page Tests (WEB-PRF-01 & INT-02)', () => {
       screen.getByRole('heading', { level: 2, name: /Sejarah Perkembangan Sekolah/i })
     ).toBeInTheDocument();
 
-    expect(screen.getByText('1990')).toBeInTheDocument();
+    expect(screen.getAllByText('1990').length).toBeGreaterThan(0);
     expect(screen.getByText('Pendirian SMP IKIP Malang')).toBeInTheDocument();
 
     expect(screen.getByText('1996')).toBeInTheDocument();
@@ -169,8 +171,9 @@ describe('Public School Profile Page Tests (WEB-PRF-01 & INT-02)', () => {
       expect(link).toHaveAttribute('href', '/ppdb');
     });
 
-    const kontakLink = screen.getByRole('link', { name: /Hubungi Kami/i });
-    expect(kontakLink).toHaveAttribute('href', '/kontak');
+    const kontakLinks = screen.getAllByRole('link', { name: /Hubungi Kami/i });
+    expect(kontakLinks.length).toBeGreaterThan(0);
+    kontakLinks.forEach((link) => expect(link).toHaveAttribute('href', '/kontak'));
 
     const akademikLink = screen.getByRole('link', { name: /Program & Kurikulum/i });
     expect(akademikLink).toHaveAttribute('href', '/akademik');
@@ -260,7 +263,8 @@ describe('Public School Profile Page Tests (WEB-PRF-01 & INT-02)', () => {
     renderWithClient(<ProfilePage />);
 
     // Fallback tetap ter-render tanpa unhandled rejection / blank screen
-    expect(await screen.findByText(/Profil SMP Laboratorium/i)).toBeInTheDocument();
+    const heroHeading = await screen.findByRole('heading', { level: 1 });
+    expect(heroHeading).toHaveTextContent(/Profil Sekolah/i);
     expect(screen.getByText('Terakreditasi "A" (Unggul)')).toBeInTheDocument();
     expect(screen.getByText('(0341) 588550')).toBeInTheDocument();
   });

@@ -2,12 +2,13 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Layers, Award, Calendar, Users, ArrowLeft } from 'lucide-react';
+import { Layers, ArrowLeft } from 'lucide-react';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
+import { ErrorState } from '@/components/ui/error-state';
 
 export default function StudentP5Page() {
-  const { data: studentDash, isLoading } = useStudentDashboard();
+  const { data: studentDash, isLoading, isError, refetch } = useStudentDashboard();
 
   if (isLoading) {
     return (
@@ -17,18 +18,21 @@ export default function StudentP5Page() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="py-12">
+        <ErrorState
+          title="Gagal Memuat Proyek P5"
+          message="Terjadi kendala saat mengambil data proyek P5 dari server. Silakan coba kembali."
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
+
   const profile = studentDash?.programProfile as any;
-  const p5 = profile?.p5_project ?? {
-    title: 'Gaya Hidup Berkelanjutan: Pengolahan Sampah Organik Sekolah',
-    theme: 'Kearifan Lokal & Lingkungan',
-    phase: 'Aksi Nyata & Pembuatan Produk',
-    group_name: 'Kelompok Cendekia 3',
-    deadline: '2026-11-20',
-  };
-  const ekskul = profile?.ekskul ?? [
-    { name: 'Robotika & Coding', day: 'Kamis', time: '15:00 - 17:00' },
-    { name: 'Bina Prestasi OSN IPA', day: 'Sabtu', time: '08:00 - 10:00' },
-  ];
+  const p5 = profile?.p5_project;
+  const ekskul = profile?.ekskul ?? [];
 
   return (
     <div className="flex flex-col gap-4 text-slate-900">
@@ -39,7 +43,7 @@ export default function StudentP5Page() {
             <Layers className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-extrabold tracking-tight">Proyek P5 & Ekstrakurikuler</h1>
+            <h1 className="text-lg font-extrabold tracking-tight">Proyek P5 &amp; Ekstrakurikuler</h1>
             <p className="text-xs text-slate-500">Projek Penguatan Profil Pelajar Pancasila • Kelas Reguler</p>
           </div>
         </div>
@@ -53,39 +57,55 @@ export default function StudentP5Page() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* P5 Project Card */}
-        <div className="lg:col-span-2 p-5 rounded-xl bg-white border border-slate-200">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-            Proyek Kolaborasi Berjalan
-          </span>
-          <h2 className="mt-2 text-base font-extrabold text-slate-900">{p5.title}</h2>
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <span className="text-slate-500">Tema Proyek</span>
-              <p className="font-bold text-slate-900 mt-0.5">{p5.theme}</p>
+        {!p5 ? (
+          <div className="lg:col-span-2 p-5 rounded-xl bg-white border border-slate-200 text-center py-10">
+            <Layers className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-60" />
+            <p className="text-xs font-bold text-slate-700">Belum Ada Proyek P5 Aktif</p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Penugasan projek profil pelajar Pancasila belum diterbitkan untuk rombel Anda.
+            </p>
+          </div>
+        ) : (
+          <div className="lg:col-span-2 p-5 rounded-xl bg-white border border-slate-200">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+              Proyek Kolaborasi Berjalan
+            </span>
+            <h2 className="mt-2 text-base font-extrabold text-slate-900">{p5.title || '-'}</h2>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-500">Tema Proyek</span>
+                <p className="font-bold text-slate-900 mt-0.5">{p5.theme || '-'}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-500">Tahap Pelaksanaan</span>
+                <p className="font-bold text-slate-900 mt-0.5">{p5.phase || '-'}</p>
+              </div>
             </div>
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <span className="text-slate-500">Tahap Pelaksanaan</span>
-              <p className="font-bold text-slate-900 mt-0.5">{p5.phase}</p>
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
+              <span>Kelompok: <strong>{p5.group_name || '-'}</strong></span>
+              <span>Tenggat: <strong>{p5.deadline || '-'}</strong></span>
             </div>
           </div>
-          <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
-            <span>Kelompok: <strong>{p5.group_name}</strong></span>
-            <span>Tenggat: <strong>{p5.deadline}</strong></span>
-          </div>
-        </div>
+        )}
 
         {/* Ekskul Card */}
         <div className="p-5 rounded-xl bg-white border border-slate-200">
           <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-            Bina Prestasi & Ekskul
+            Bina Prestasi &amp; Ekskul
           </span>
           <div className="mt-3 space-y-2.5">
-            {ekskul.map((e: any, idx: number) => (
-              <div key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
-                <p className="font-bold text-slate-900">{e.name}</p>
-                <p className="text-slate-500 mt-0.5">{e.day}, {e.time}</p>
+            {ekskul.length === 0 ? (
+              <div className="p-4 rounded-lg bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
+                Belum ada ekstrakurikuler terdaftar.
               </div>
-            ))}
+            ) : (
+              ekskul.map((e: any, idx: number) => (
+                <div key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                  <p className="font-bold text-slate-900">{e.name || '-'}</p>
+                  <p className="text-slate-500 mt-0.5">{e.day || '-'}, {e.time || '-'}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

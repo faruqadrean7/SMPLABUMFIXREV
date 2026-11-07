@@ -141,7 +141,56 @@ describe('FE-PORTAL-STUDENT-02B: Multi-Program Student Dashboard Widgets', () =>
     expect(screen.getByText('Siswa Program Inklusi')).toBeInTheDocument();
     expect(screen.getByText('Ibu Ratna Dewi, S.Pd (GPK)')).toBeInTheDocument();
     expect(screen.getByText('Menyelesaikan modul membaca terarah')).toBeInTheDocument();
-    expect(screen.getByText(/Perasaan Hari Ini/i)).toBeInTheDocument();
+    expect(screen.getByText(/Perasaan Belajar Hari Ini/i)).toBeInTheDocument();
+  });
+
+  // ==========================================================================
+  // ANTI-FABRIKASI (AGENTS.md §6.2/§9): tanpa data, widget TIDAK boleh
+  // mengarang nama/ID/nilai; wajib menampilkan state kosong yang jujur.
+  // ==========================================================================
+  it('Tahfidz widget tidak memfabrikasi surah/predikat/penilai saat programProfile kosong', () => {
+    vi.spyOn(StudentDataHooks, 'useStudentDashboard').mockReturnValue({
+      data: { programType: 'tahfidz', programProfile: {}, todaySchedule: [], upcomingExams: [] },
+      isLoading: false,
+      isError: false,
+    } as any);
+
+    renderWithClient(<StudentDashboardView />);
+
+    expect(screen.queryByText(/Ustadz Abdullah/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Al-Mulk: 1-30/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Mumtaz/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Belum ada setoran')).toBeInTheDocument();
+    expect(screen.getByText('Belum ada penilai')).toBeInTheDocument();
+  });
+
+  it('ICP widget tidak memfabrikasi candidate ID/skor/vocab saat programProfile kosong', () => {
+    vi.spyOn(StudentDataHooks, 'useStudentDashboard').mockReturnValue({
+      data: { programType: 'icp', programProfile: {}, todaySchedule: [], upcomingExams: [] },
+      isLoading: false,
+      isError: false,
+    } as any);
+
+    renderWithClient(<StudentDashboardView />);
+
+    expect(screen.queryByText(/ID-MAL-2026-042/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Photosynthesis/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Belum Ada Data Kesiapan Checkpoint')).toBeInTheDocument();
+    expect(screen.getByText('Belum ada kosakata hari ini')).toBeInTheDocument();
+  });
+
+  it('Inklusi widget tidak memfabrikasi GPK/milestone saat programProfile kosong', () => {
+    vi.spyOn(StudentDataHooks, 'useStudentDashboard').mockReturnValue({
+      data: { programType: 'inklusi', programProfile: {}, todaySchedule: [], upcomingExams: [] },
+      isLoading: false,
+      isError: false,
+    } as any);
+
+    renderWithClient(<StudentDashboardView />);
+
+    expect(screen.queryByText(/Ibu Ratna Dewi/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Belum ada data Guru Pendamping Khusus.')).toBeInTheDocument();
+    expect(screen.getByText('Belum ada target milestone PPI aktif.')).toBeInTheDocument();
   });
 
   it('renders Reguler widget with KKTP summary and P5 project tracker for Reguler students', () => {

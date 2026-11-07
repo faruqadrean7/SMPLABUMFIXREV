@@ -310,7 +310,7 @@ export function resolveNotificationDeepLink(
     case 'salary_slip':
       return `${B}/guru/dashboard`;
     case 'sarpras_ticket':
-      return `${B}/guru/sarpras`;
+      return `${B}/guru/fasilitas`;
     case 'announcement':
     default:
       return inbox;

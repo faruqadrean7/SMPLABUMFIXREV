@@ -144,6 +144,55 @@ export interface ChildProgressReportItem {
   date: string;
 }
 
+export interface ChildPayment {
+  id: string;
+  amount: number;
+  payment_method: 'tunai' | 'transfer' | string;
+  payment_date: string;
+  status: 'menunggu_verifikasi' | 'terverifikasi' | 'ditolak' | 'void' | string;
+  receipt_number?: string | null;
+  verified_at?: string | null;
+  verified_by?: string | null;
+  rejection_reason?: string | null;
+}
+
+export interface ChildInvoiceItem {
+  id: string;
+  invoice_id: string;
+  fee_type_id: string;
+  description: string;
+  amount: number;
+  discount: number;
+  fee_type?: {
+    id: string;
+    name: string;
+    code?: string;
+  };
+  feeType?: {
+    id: string;
+    name: string;
+    code?: string;
+  };
+}
+
+export interface ChildInvoice {
+  id: string;
+  invoice_number: string;
+  student_id: string;
+  academic_year_id?: string | null;
+  period?: string | null;
+  due_date: string;
+  total_amount: number;
+  paid_amount: number;
+  remaining_amount?: number;
+  status: 'belum_bayar' | 'sebagian' | 'lunas' | 'dibatalkan' | string;
+  notes?: string | null;
+  items?: ChildInvoiceItem[];
+  payments?: ChildPayment[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface LeaveRequestItem {
   id: string;
   student_id: string;
@@ -289,6 +338,19 @@ export function useChildProgressReports(childId: string | undefined | null) {
     queryFn: async () => {
       if (!childId) return null;
       const res = await apiClient.get<ApiResponse<ChildProgressReportItem[]>>(`/me/children/${childId}/progress-reports`);
+      return res.data.data;
+    },
+    enabled: !!childId,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useChildInvoices(childId: string | undefined | null) {
+  return useQuery({
+    queryKey: ['child-invoices', childId],
+    queryFn: async () => {
+      if (!childId) return null;
+      const res = await apiClient.get<ApiResponse<ChildInvoice[]>>(`/me/children/${childId}/invoices`);
       return res.data.data;
     },
     enabled: !!childId,

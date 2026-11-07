@@ -5,6 +5,9 @@ namespace Database\Seeders;
 use App\Models\AcademicYear;
 use App\Models\ClassStudent;
 use App\Models\GradeLevel;
+use App\Models\ProgramMaterial;
+use App\Models\ProgramTarget;
+use App\Models\ProgramTask;
 use App\Models\Role;
 use App\Models\SchoolClass;
 use App\Models\Student;
@@ -197,6 +200,118 @@ class StudentProgramProfileSeeder extends Seeder
                         'meta_data' => $p['meta_data'],
                     ]
                 );
+
+                // Seed sample Program Materials, Targets, & Tasks (BE-PROG-01)
+                if ($p['program_type'] === 'tahfidz') {
+                    ProgramMaterial::firstOrCreate(
+                        ['program_type' => 'tahfidz', 'title' => 'Panduan Tajwid Makharijul Huruf & Sifatul Huruf'],
+                        [
+                            'description' => 'Materi standar pelafalan makharijul huruf untuk setoran Juz 30.',
+                            'material_type' => 'tajwid',
+                            'target_scope' => 'all',
+                        ]
+                    );
+                    ProgramMaterial::firstOrCreate(
+                        ['program_type' => 'tahfidz', 'title' => 'Murottal Juz 30 Syaikh Misyari Rasyid'],
+                        [
+                            'description' => 'Audio murottal untuk sarana talaqqi dan murojaah mandiri.',
+                            'material_type' => 'murottal',
+                            'external_url' => 'https://quran.com',
+                            'target_scope' => 'all',
+                        ]
+                    );
+                    ProgramTarget::firstOrCreate(
+                        ['student_id' => $student->id, 'title' => 'Target Kelulusan Tahfidz: 3 Juz Mutqin'],
+                        [
+                            'program_type' => 'tahfidz',
+                            'domain' => 'tahfidz',
+                            'target_value' => '3 Juz',
+                            'current_value' => '1.5 Juz',
+                            'period' => 'Tahun Ajaran 2024/2025',
+                            'status' => 'aktif',
+                        ]
+                    );
+                    ProgramTask::firstOrCreate(
+                        ['program_type' => 'tahfidz', 'title' => 'Setoran Mandiri Surah An-Naba Ayat 1-20'],
+                        [
+                            'instructions' => 'Rekam bacaan dengan kaidah tajwid yang benar dan unggah link rekaman atau catatan murojaah.',
+                            'due_at' => now()->addDays(5),
+                            'target_scope' => 'all',
+                        ]
+                    );
+                } elseif ($p['program_type'] === 'icp') {
+                    ProgramMaterial::firstOrCreate(
+                        ['program_type' => 'icp', 'title' => 'Cambridge Lower Secondary Mathematics Study Guide'],
+                        [
+                            'description' => 'Algebra and fractions comprehensive guide with practice exercises.',
+                            'material_type' => 'reading',
+                            'target_scope' => 'all',
+                        ]
+                    );
+                    ProgramMaterial::firstOrCreate(
+                        ['program_type' => 'icp', 'title' => 'Past Papers Cambridge English Checkpoint 2024'],
+                        [
+                            'description' => 'Official examination papers for listening and reading comprehension.',
+                            'material_type' => 'past_paper',
+                            'target_scope' => 'all',
+                        ]
+                    );
+                    ProgramTarget::firstOrCreate(
+                        ['student_id' => $student->id, 'title' => 'Target Skor Cambridge Checkpoint: Mathematics 5.0'],
+                        [
+                            'program_type' => 'icp',
+                            'domain' => 'math',
+                            'target_value' => '5.0 / 6.0',
+                            'current_value' => '4.5',
+                            'period' => 'Series May 2025',
+                            'status' => 'aktif',
+                        ]
+                    );
+                    ProgramTask::firstOrCreate(
+                        ['program_type' => 'icp', 'title' => 'Laboratory Report: Photosynthesis Experiment'],
+                        [
+                            'instructions' => 'Write a structured laboratory report of approximately 300 words following the scientific method.',
+                            'due_at' => now()->addDays(7),
+                            'target_scope' => 'all',
+                        ]
+                    );
+                } elseif ($p['program_type'] === 'inklusi') {
+                    ProgramMaterial::firstOrCreate(
+                        ['program_type' => 'inklusi', 'title' => 'Modul Adaptif: Pengenalan Bahasa Isyarat & Ekspresi Wajah'],
+                        [
+                            'description' => 'Bahan ajar bergambar untuk mendukung komunikasi interaktif.',
+                            'material_type' => 'modul_adaptif',
+                            'target_scope' => 'all',
+                        ]
+                    );
+                    ProgramMaterial::firstOrCreate(
+                        ['program_type' => 'inklusi', 'title' => 'Panduan Regulasi Sensori & Audio Relaksasi'],
+                        [
+                            'description' => 'Instruksi teknik pernapasan dan relaksasi saat mengalami overstimulasi.',
+                            'material_type' => 'panduan',
+                            'target_scope' => 'all',
+                        ]
+                    );
+                    ProgramTarget::firstOrCreate(
+                        ['student_id' => $student->id, 'title' => 'Milestone PPI: Kemandirian Membaca & Menulis Terbimbing'],
+                        [
+                            'program_type' => 'inklusi',
+                            'domain' => 'akademik',
+                            'target_value' => '100%',
+                            'current_value' => '75%',
+                            'period' => 'Semester Ganjil 2024/2025',
+                            'status' => 'aktif',
+                        ]
+                    );
+                    ProgramTask::firstOrCreate(
+                        ['program_type' => 'inklusi', 'title' => 'Jurnal Harian Refleksi Perasaan & Aktivitas Terbimbing'],
+                        [
+                            'instructions' => 'Ceritakan aktivitas yang paling menyenangkan minggu ini bersama guru pendamping khusus.',
+                            'due_at' => now()->addDays(3),
+                            'target_scope' => 'all',
+                        ]
+                    );
+                }
             }
         });
     }

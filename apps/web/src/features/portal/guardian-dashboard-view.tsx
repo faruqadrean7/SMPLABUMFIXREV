@@ -17,6 +17,7 @@ import { useSchoolAnnouncements } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { SafetyCounselingCard } from './safety-counseling-card';
 
 function formatDate(value?: string): string {
   if (!value) return '';
@@ -54,7 +55,7 @@ export function GuardianDashboardView() {
   const attendancePct = attendanceDays.length ? Math.round((hadirCount / attendanceDays.length) * 100) : null;
 
   const outstandingFees = (activeFees ?? []).filter(
-    (f) => f.status !== 'Lunas / Bebas Tanggungan',
+    (f) => f.status !== 'Lunas / Bebas Tanggungan' && f.status !== 'Lunas',
   );
   const prestasiCount = (activePoints ?? []).filter((p) => p.kind === 'prestasi').length;
   const pelanggaranCount = (activePoints ?? []).filter((p) => p.kind === 'pelanggaran').length;
@@ -127,6 +128,9 @@ export function GuardianDashboardView() {
         <MetricCard icon={<Wallet className="w-3.5 h-3.5" />} label="Tagihan" value={String(outstandingFees.length)} unit="item" sub={outstandingFees.length === 0 ? 'Bebas tanggungan' : 'Perlu diselesaikan'} href="/ortu/biaya" cta="Lihat tagihan" />
         <MetricCard icon={<Award className="w-3.5 h-3.5" />} label="Poin Sikap" value={String(prestasiCount)} unit="prestasi" sub={pelanggaranCount + ' pelanggaran'} href="/ortu/poin" cta="Lihat poin" />
       </div>
+
+      {/* RUANG AMAN & LAPOR PERUNDUNGAN (FE-REPORT-02) */}
+      <SafetyCounselingCard role="guardian" />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
         {/* Kiri: anak + nilai terbaru */}

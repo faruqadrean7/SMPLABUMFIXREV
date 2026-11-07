@@ -160,9 +160,11 @@ class MeTeacherJournalApiTest extends TestCase
             'joined_at' => '2026-07-01',
         ]);
 
+        // Sinkronisasi nilai memilih periode berdasarkan bulan berjalan (lihat LmsService::gradeSubmission),
+        // jadi periode uji harus mengikuti bulan berjalan agar deterministik kapan pun dijalankan.
         $this->period = GradePeriod::create([
             'semester_id' => $this->semester->id,
-            'month' => 10,
+            'month' => (int) now()->format('m'),
             'status' => 'open',
         ]);
 

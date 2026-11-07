@@ -49,7 +49,9 @@ describe('Public Gallery Page Tests (WEB-GAL-01)', () => {
 
     // H1 Heading
     const h1 = screen.getByRole('heading', { level: 1 });
-    expect(h1).toHaveTextContent(/Galeri Kegiatan & Aktivitas Sekolah/i);
+    // Judul hero dipisah <br/>, jadi cek per potongan agar tahan perubahan whitespace.
+    expect(h1).toHaveTextContent(/Galeri Kegiatan/i);
+    expect(h1).toHaveTextContent(/Aktivitas Sekolah/i);
 
     // Breadcrumb
     const breadcrumb = screen.getByRole('navigation', { name: /Navigasi Halaman/i });

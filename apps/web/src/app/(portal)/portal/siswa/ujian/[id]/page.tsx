@@ -32,7 +32,7 @@ export default function StudentCbtPlayerPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
-  const examId = params.id as string;
+  const examId = Array.isArray(params?.id) ? params.id[0] : (params?.id as string);
 
   const [questions, setQuestions] = useState<StudentSessionQuestionItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -40,6 +40,12 @@ export default function StudentCbtPlayerPage() {
   const [doubts, setDoubts] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Fallback token modal saat sesi belum dimulai di backend
+  const [tokenModalOpen, setTokenModalOpen] = useState<boolean>(false);
+  const [tokenInput, setTokenInput] = useState<string>('');
+  const [tokenSubmitting, setTokenSubmitting] = useState<boolean>(false);
+  const [tokenModalError, setTokenModalError] = useState<string | null>(null);
 
   // Timer & Autosave (Sourced from server, absolute clock skew offset)
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
@@ -64,6 +70,7 @@ export default function StudentCbtPlayerPage() {
   const doubtsRef = useRef<string[]>([]);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
 
   // In-memory storage fallback for private browsing / quota exceeded
   const memoryPendingAnswersRef = useRef<Record<string, any>>({});
@@ -344,6 +351,9 @@ export default function StudentCbtPlayerPage() {
           : (sessionData.questions || []);
 
         setQuestions(loadedQuestions);
+        if (sessionData.session_id) {
+          sessionIdRef.current = sessionData.session_id;
+        }
 
         // 1. Sinkronisasi offset waktu server (Date.now() clock skew handling)
         const serverTimeStr = sessionData.server_time;
@@ -418,6 +428,14 @@ export default function StudentCbtPlayerPage() {
         ) {
           setIsFinished(true);
           clearOfflineQueues();
+        } else if (
+          err?.code === 'NOT_FOUND' ||
+          err?.response?.status === 404 ||
+          err?.message?.includes('tidak ditemukan')
+        ) {
+          // Sesi belum dimulai: aktifkan dialog token darurat agar alur tidak terputus
+          setTokenModalOpen(true);
+          setLoadError(null);
         } else {
           setLoadError(err?.message || 'Gagal memuat butir soal ujian. Pastikan token telah dimasukkan.');
         }
@@ -431,6 +449,49 @@ export default function StudentCbtPlayerPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId]);
+
+  // Handler jika siswa memulai sesi langsung di halaman ujian dengan memasukkan token
+  const handleStartSessionWithToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = tokenInput.trim().toUpperCase();
+    if (!trimmed) {
+      setTokenModalError('Token ruang ujian wajib dimasukkan.');
+      return;
+    }
+    setTokenSubmitting(true);
+    setTokenModalError(null);
+    try {
+      await cbtApi.startStudentSession(examId, { token: trimmed });
+      setTokenModalOpen(false);
+      // Reload session
+      setIsLoading(true);
+      const res = await cbtApi.getStudentSessionQuestions(examId);
+      const sessionData: any = res.data || {};
+      const loadedQuestions: StudentSessionQuestionItem[] = Array.isArray(sessionData)
+        ? sessionData
+        : (sessionData.questions || []);
+      setQuestions(loadedQuestions);
+      if (sessionData.session_id) {
+        sessionIdRef.current = sessionData.session_id;
+      }
+      const endsAtStr = sessionData.ends_at || sessionData.deadline_at;
+      if (endsAtStr) {
+        endsAtMsRef.current = new Date(endsAtStr).getTime();
+      } else if (sessionData.remaining_seconds) {
+        endsAtMsRef.current = Date.now() + sessionData.remaining_seconds * 1000;
+      }
+      setRemainingSeconds(computeRemaining());
+    } catch (err: any) {
+      setTokenModalError(
+        err?.message ||
+        err?.response?.data?.message ||
+        'Token ruang ujian tidak valid atau telah kedaluwarsa. Silakan tanyakan ke pengawas ruang.'
+      );
+    } finally {
+      setIsLoading(false);
+      setTokenSubmitting(false);
+    }
+  };
 
   // Timer Countdown (Interval hanya memicu re-render; waktu mutlak dihitung absolut)
   useEffect(() => {
@@ -453,8 +514,9 @@ export default function StudentCbtPlayerPage() {
   // Heartbeat Presence Ping (every 30 seconds)
   useEffect(() => {
     heartbeatIntervalRef.current = setInterval(() => {
-      if (examId && !isFinishedRef.current) {
-        cbtApi.sendStudentHeartbeat(examId).catch(() => {});
+      const targetId = sessionIdRef.current || examId;
+      if (targetId && !isFinishedRef.current) {
+        cbtApi.sendStudentHeartbeat(targetId).catch(() => {});
       }
     }, 30000);
 
@@ -703,6 +765,74 @@ export default function StudentCbtPlayerPage() {
     );
   }
 
+  // State: Token belum dimasukkan / sesi belum dimulai di backend
+  if (tokenModalOpen) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+        <div className="w-full max-w-md rounded-2xl bg-white p-6 sm:p-8 shadow-2xl space-y-5">
+          <div className="text-center space-y-2">
+            <div className="h-14 w-14 rounded-2xl bg-blue-50 text-blue-800 border border-blue-200 flex items-center justify-center mx-auto mb-2">
+              <Clock className="h-7 w-7" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">Mulai Sesi Ujian CBT</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Sesi ujian Anda belum dimulai di server. Masukkan token yang tertera di papan pengawas lab komputer untuk memulai.
+            </p>
+          </div>
+
+          <form onSubmit={handleStartSessionWithToken} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider text-center">
+                Token Ruang Ujian *
+              </label>
+              <Input
+                type="text"
+                required
+                placeholder="Contoh: UH2026"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
+                className="w-full text-center font-mono font-black text-xl uppercase tracking-widest text-slate-900 h-12"
+                autoFocus
+              />
+              <p className="text-[11px] text-slate-500 text-center">
+                Token otomatis diubah ke huruf kapital.
+              </p>
+            </div>
+
+            {tokenModalError && (
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{tokenModalError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2.5 pt-2">
+              <Link href="/portal/siswa/cbt" className="flex-1">
+                <Button type="button" variant="outline" className="w-full text-xs h-10">
+                  Kembali
+                </Button>
+              </Link>
+              <Button
+                type="submit"
+                disabled={tokenSubmitting}
+                className="flex-1 bg-blue-900 hover:bg-blue-950 text-white text-xs font-bold h-10"
+              >
+                {tokenSubmitting ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Memulai...
+                  </span>
+                ) : (
+                  'Mulai Ujian'
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (loadError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
@@ -778,6 +908,28 @@ export default function StudentCbtPlayerPage() {
           </p>
           <Link href="/portal/siswa/cbt">
             <Button size="sm" variant="outline" className="w-full text-xs">
+              Kembali ke Katalog CBT
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // State: Empty Soal (AC8)
+  if (questions.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+        <div className="w-full max-w-md rounded-2xl bg-white p-6 sm:p-8 shadow-2xl text-center space-y-4">
+          <div className="h-14 w-14 rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center mx-auto">
+            <HelpCircle className="h-7 w-7" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900">Belum Ada Soal Ujian</h2>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Paket butir soal untuk sesi ujian ini belum dikonfigurasi atau belum di-assign oleh pengampu ujian.
+          </p>
+          <Link href="/portal/siswa/cbt">
+            <Button size="sm" className="bg-slate-900 hover:bg-slate-800 text-white text-xs">
               Kembali ke Katalog CBT
             </Button>
           </Link>

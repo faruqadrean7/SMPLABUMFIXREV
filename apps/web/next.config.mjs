@@ -83,6 +83,16 @@ export default function nextConfigFunction(phase) {
         permanent: false,
       },
       {
+        source: '/guru/sarpras',
+        destination: '/portal/guru/fasilitas',
+        permanent: false,
+      },
+      {
+        source: '/portal/guru/sarpras',
+        destination: '/portal/guru/fasilitas',
+        permanent: false,
+      },
+      {
         source: '/guru/:path*',
         destination: '/portal/guru/:path*',
         permanent: false,

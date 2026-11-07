@@ -82,6 +82,11 @@ export function PublicFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/buletin" className="hover:text-white transition-colors">
+                  Buletin
+                </Link>
+              </li>
+              <li>
                 <Link href="/kontak" className="hover:text-white transition-colors">
                   Kontak
                 </Link>
@@ -113,6 +118,15 @@ export function PublicFooter() {
               <li>
                 <Link href="/portal/ortu" className="hover:text-white transition-colors">
                   Portal Orang Tua
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/lapor"
+                  className="inline-flex items-center gap-1.5 text-amber-300 hover:text-white font-medium transition-colors"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  Lapor Bullying & Pengaduan
                 </Link>
               </li>
               <li>

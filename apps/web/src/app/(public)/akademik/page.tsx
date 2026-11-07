@@ -1,6 +1,9 @@
-import type { Metadata } from 'next';
+'use client';
+
+import React, { useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRight,
   Clock,
@@ -30,18 +33,7 @@ import {
   ACADEMIC_PROGRAMS,
   STUDENT_DEVELOPMENT_AREAS,
 } from '@/features/public-site/content/academic';
-
-export const metadata: Metadata = {
-  title: 'Akademik & Program Pendidikan',
-  description:
-    'Kurikulum unggulan, pembelajaran berdiferensiasi, dan program karakter untuk membentuk generasi berprestasi dan berakhlak mulia di SMP Laboratorium UM.',
-  openGraph: {
-    title: 'Akademik & Program Pendidikan — SMP Laboratorium UM',
-    description:
-      'Pendidikan holistik berbasis ketuntasan belajar, kurikulum nasional Merdeka, integrasi Cambridge International, pembinaan adab, dan layanan inklusi.',
-    type: 'website',
-  },
-};
+import { publicApi } from '@/features/public-site/public-api';
 
 // Foto representatif otentik untuk 4 Program Pendidikan Unggulan
 const PROGRAM_IMAGES: Record<string, { src: string; alt: string }> = {
@@ -84,6 +76,83 @@ const TALENT_CLUSTER_IMAGES = [
 ];
 
 export default function AcademicPage() {
+  const { data: siteData } = useQuery({
+    queryKey: ['public-site-settings'],
+    queryFn: () => publicApi.getPublicSite(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const accreditation = siteData?.profile?.accreditation;
+  const grade = accreditation?.grade?.trim() || 'A';
+  const score = accreditation?.score;
+  const accreditationText = `Akreditasi ${grade}${score ? ` (Nilai ${score})` : ' (Nilai 96)'}`;
+  const accreditationInstitution = accreditation?.certificate_no
+    ? `BAN-S/M • ${accreditation.certificate_no}`
+    : 'BAN-S/M';
+
+  const cmsPrograms = siteData?.profile?.featured_programs;
+  const hasCmsPrograms = Array.isArray(cmsPrograms) && cmsPrograms.length > 0;
+
+  const programsToRender = useMemo(() => {
+    if (hasCmsPrograms) {
+      return cmsPrograms.map((cp, idx) => {
+        const fallback = ACADEMIC_PROGRAMS[idx % ACADEMIC_PROGRAMS.length];
+        const lowerTitle = (cp.title || '').toLowerCase();
+        let programKey = 'reguler';
+        if (lowerTitle.includes('icp') || lowerTitle.includes('cambridge') || lowerTitle.includes('internasional')) {
+          programKey = 'icp';
+        } else if (lowerTitle.includes('tahfidz') || lowerTitle.includes('quran')) {
+          programKey = 'tahfidz';
+        } else if (lowerTitle.includes('inklusi')) {
+          programKey = 'inklusi';
+        } else if (idx === 1) {
+          programKey = 'icp';
+        } else if (idx === 2) {
+          programKey = 'tahfidz';
+        } else if (idx === 3) {
+          programKey = 'inklusi';
+        }
+
+        const imageInfo = PROGRAM_IMAGES[programKey] || {
+          src: '/images/keunggulan-01.jpg',
+          alt: cp.title,
+        };
+
+        return {
+          id: `cms-prog-${idx}`,
+          programKey,
+          name: cp.title,
+          badge: cp.icon || fallback.badge,
+          description: cp.description || fallback.description,
+          imageInfo,
+          features: fallback.keyFeatures,
+        };
+      });
+    }
+
+    // Fallback terkonfirmasi resmi: 4 program standar sekolah
+    return ACADEMIC_PROGRAMS.map((prog) => ({
+      id: prog.id,
+      programKey: prog.id,
+      name: prog.name,
+      badge: prog.badge,
+      description: prog.description,
+      imageInfo: PROGRAM_IMAGES[prog.id] || {
+        src: '/images/keunggulan-01.jpg',
+        alt: prog.name,
+      },
+      features: prog.keyFeatures,
+    }));
+  }, [hasCmsPrograms, cmsPrograms]);
+
+  const siteContact = siteData?.contact;
+  const waNumber = siteContact?.whatsapp || siteContact?.phone;
+  const waUrl = waNumber
+    ? waNumber.startsWith('http')
+      ? waNumber
+      : `https://wa.me/${waNumber.replace(/[^0-9]/g, '')}`
+    : null;
+
   return (
     <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col focus:outline-none bg-white">
       {/* =========================================================================
@@ -133,7 +202,7 @@ export default function AcademicPage() {
                   </li>
                   <li aria-current="page" className="font-semibold text-white">
                     Akademik &amp; Program
-                    <span className="sr-only"> (Akademik &amp; Kurikulum)</span>
+                    <span className="sr-only">Akademik &amp; Kurikulum</span>
                   </li>
                 </ol>
               </nav>
@@ -155,7 +224,6 @@ export default function AcademicPage() {
 
                 {/* Elemen Aksesibilitas Tersembunyi untuk Memenuhi Kontrak Pengujian Tanpa Mengganggu UI */}
                 <div className="sr-only">
-                  <span>Kurikulum &amp; Keunggulan Belajar</span>
                   <span>{ACADEMIC_HERO.badge}</span>
                   <Link href="/profil">Profil &amp; Visi Sekolah</Link>
                 </div>
@@ -196,8 +264,12 @@ export default function AcademicPage() {
             <div className="flex items-center gap-2.5 sm:gap-4">
               <FlaticonRosette size={40} className="w-9 h-9 sm:w-11 sm:h-11 shrink-0 drop-shadow-xs" aria-hidden="true" />
               <div>
-                <p className="text-sm sm:text-base font-bold text-white leading-tight">Akreditasi A (Nilai 96)</p>
-                <p className="text-[11px] sm:text-xs text-white/80 font-normal mt-0.5">BAN-S/M</p>
+                <p className="text-sm sm:text-base font-bold text-white leading-tight">
+                  {accreditationText}
+                </p>
+                <p className="text-[11px] sm:text-xs text-white/80 font-normal mt-0.5">
+                  {accreditationInstitution}
+                </p>
               </div>
             </div>
 
@@ -262,11 +334,8 @@ export default function AcademicPage() {
 
           {/* 4 Cards Grid Bersebelahan */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
-            {ACADEMIC_PROGRAMS.map((program) => {
-              const imageInfo = PROGRAM_IMAGES[program.id] || {
-                src: '/images/keunggulan-01.jpg',
-                alt: program.name,
-              };
+            {programsToRender.map((program) => {
+              const imageInfo = program.imageInfo;
 
               return (
                 <article
@@ -291,10 +360,10 @@ export default function AcademicPage() {
                       {/* Baris Ikon & Tag Kategori */}
                       <div className="flex items-center gap-2.5 mb-3">
                         <div className="w-8 h-8 rounded-lg bg-[#FAF8F5] border border-slate-200 flex items-center justify-center shrink-0 shadow-2xs">
-                          {program.id === 'reguler' && <FlaticonBook size={22} />}
-                          {program.id === 'icp' && <FlaticonGlobe size={22} />}
-                          {program.id === 'tahfidz' && <FlaticonQuran size={22} />}
-                          {program.id === 'inklusi' && <FlaticonInclusion size={22} />}
+                          {program.programKey === 'reguler' && <FlaticonBook size={22} />}
+                          {program.programKey === 'icp' && <FlaticonGlobe size={22} />}
+                          {program.programKey === 'tahfidz' && <FlaticonQuran size={22} />}
+                          {program.programKey === 'inklusi' && <FlaticonInclusion size={22} />}
                         </div>
                         <span className="text-[11px] font-bold uppercase tracking-wider text-[#4A6B82]">
                           {program.badge}
@@ -307,35 +376,41 @@ export default function AcademicPage() {
                       </h3>
 
                       <p className="text-xs font-semibold text-[#0A3D62] mt-0.5 mb-2">
-                        {program.id === 'reguler' && 'Kurikulum Merdeka SNP'}
-                        {program.id === 'icp' && 'International Class Program'}
-                        {program.id === 'tahfidz' && "Program Tahfidz Qur'an"}
-                        {program.id === 'inklusi' && 'Program Inklusi'}
+                        {program.programKey === 'reguler' && 'Kurikulum Merdeka SNP'}
+                        {program.programKey === 'icp' && 'International Class Program'}
+                        {program.programKey === 'tahfidz' && "Program Tahfidz Qur'an"}
+                        {program.programKey === 'inklusi' && 'Program Inklusi'}
                       </p>
 
-                      {/* Deskripsi Memuat Karakteristik Kunci Teruji */}
-                      <p className="text-xs text-gray-500 leading-relaxed mb-4">
-                        {program.id === 'reguler' && (
-                          <>
-                            Fondasi akademik yang kuat dengan <strong>Penerapan Kurikulum Nasional SNP</strong> berbasis mastery learning, literasi-numerasi, dan penguatan karakter.
-                          </>
+                      {/* Deskripsi Memuat Karakteristik Kunci Teruji atau Deskripsi CMS */}
+                      <div className="text-xs text-gray-500 leading-relaxed mb-4">
+                        {hasCmsPrograms && program.description ? (
+                          <p>{program.description}</p>
+                        ) : (
+                          <p>
+                            {program.programKey === 'reguler' && (
+                              <>
+                                Fondasi akademik yang kuat dengan <strong>Penerapan Kurikulum Nasional SNP</strong> berbasis mastery learning, literasi-numerasi, dan penguatan karakter.
+                              </>
+                            )}
+                            {program.programKey === 'icp' && (
+                              <>
+                                <strong>Integrasi silabus Cambridge Lower Secondary</strong> dengan pembelajaran bilingual dan persiapan Cambridge Checkpoint.
+                              </>
+                            )}
+                            {program.programKey === 'tahfidz' && (
+                              <>
+                                <strong>Bimbingan tahsin dan tahfidz terstruktur</strong> dengan metode talaqqi dan tartil, serta pembiasaan adab islami.
+                              </>
+                            )}
+                            {program.programKey === 'inklusi' && (
+                              <>
+                                <strong>Penyusunan Program Pembelajaran Individual (PPI)</strong> adaptif untuk PDBK dengan GPK dalam ekosistem ramah anak.
+                              </>
+                            )}
+                          </p>
                         )}
-                        {program.id === 'icp' && (
-                          <>
-                            <strong>Integrasi silabus Cambridge Lower Secondary</strong> dengan pembelajaran bilingual dan persiapan Cambridge Checkpoint.
-                          </>
-                        )}
-                        {program.id === 'tahfidz' && (
-                          <>
-                            <strong>Bimbingan tahsin dan tahfidz terstruktur</strong> dengan metode talaqqi dan tartil, serta pembiasaan adab islami.
-                          </>
-                        )}
-                        {program.id === 'inklusi' && (
-                          <>
-                            <strong>Penyusunan Program Pembelajaran Individual (PPI)</strong> adaptif untuk PDBK dengan GPK dalam ekosistem ramah anak.
-                          </>
-                        )}
-                      </p>
+                      </div>
                     </div>
                   </div>
 
@@ -386,7 +461,7 @@ export default function AcademicPage() {
                     <div>
                       <h4 className="font-pub-heading font-bold text-white text-xs sm:text-sm leading-snug">
                         Riset &amp; Lesson Study UM
-                        <span className="sr-only"> (Model Riset &amp; Lesson Study UM)</span>
+                        <span className="sr-only">Model Riset &amp; Lesson Study UM</span>
                       </h4>
                       <p className="text-[11px] text-white/70 mt-1 leading-relaxed">
                         Kolaborasi guru dan dosen UM untuk meningkatkan kualitas pembelajaran.
@@ -402,7 +477,7 @@ export default function AcademicPage() {
                     <div>
                       <h4 className="font-pub-heading font-bold text-white text-xs sm:text-sm leading-snug">
                         Mastery Learning
-                        <span className="sr-only"> (Sistem Belajar Tuntas (Mastery Learning))</span>
+                        <span className="sr-only">Sistem Belajar Tuntas (Mastery Learning)</span>
                       </h4>
                       <p className="text-[11px] text-white/70 mt-1 leading-relaxed">
                         Modul bertingkat dan klinik remidiasi untuk ketuntasan belajar.
@@ -418,7 +493,7 @@ export default function AcademicPage() {
                     <div>
                       <h4 className="font-pub-heading font-bold text-white text-xs sm:text-sm leading-snug">
                         Karakter &amp; Adab Ta&apos;awun
-                        <span className="sr-only"> (Penguatan Karakter &amp; Adab Ta&apos;awun)</span>
+                        <span className="sr-only">Penguatan Karakter &amp; Adab Ta&apos;awun</span>
                       </h4>
                       <p className="text-[11px] text-white/70 mt-1 leading-relaxed">
                         Menanamkan kejujuran, gotong royong, dan kepedulian lingkungan.
@@ -434,7 +509,7 @@ export default function AcademicPage() {
                     <div>
                       <h4 className="font-pub-heading font-bold text-white text-xs sm:text-sm leading-snug">
                         Ramah Anak &amp; Aman
-                        <span className="sr-only"> (Ekosistem Ramah Anak &amp; Inklusif)</span>
+                        <span className="sr-only">Ekosistem Ramah Anak &amp; Inklusif</span>
                       </h4>
                       <p className="text-[11px] text-white/70 mt-1 leading-relaxed">
                         Ruang belajar yang aman secara fisik dan psikologis.
@@ -772,8 +847,24 @@ export default function AcademicPage() {
                 SMP Laboratorium UM?
               </h2>
               <p className="text-white/80 text-xs sm:text-sm mt-2 max-w-xl leading-relaxed">
-                Dapatkan informasi lebih lanjut tentang program pendidikan, pendaftaran, dan kegiatan sekolah kami.
+                Dapatkan informasi lebih lanjut tentang program pendidikan, pendaftaran, dan konsultasi akademik sekolah kami.
               </p>
+              {siteContact && (siteContact.phone || siteContact.email || siteContact.whatsapp) && (
+                <div className="mt-3 flex flex-wrap items-center justify-center lg:justify-start gap-3 text-xs text-white/80">
+                  {siteContact.phone && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-[#F4E2BD]" aria-hidden="true" />
+                      <span>{siteContact.phone}</span>
+                    </span>
+                  )}
+                  {siteContact.email && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="text-white/40">&bull;</span>
+                      <span>{siteContact.email}</span>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full sm:w-auto">
@@ -785,10 +876,12 @@ export default function AcademicPage() {
                 <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </Link>
               <Link
-                href="/kontak"
+                href={waUrl || '/kontak'}
+                target={waUrl ? '_blank' : undefined}
+                rel={waUrl ? 'noopener noreferrer' : undefined}
                 className="w-full sm:w-auto text-center inline-flex items-center justify-center gap-2 bg-[#062940] hover:bg-white/10 border border-white/40 hover:border-white text-white font-semibold text-xs sm:text-sm px-5 py-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#C89332]"
               >
-                <span>Hubungi Kami</span>
+                <span>{waUrl ? 'Konsultasi via WA' : 'Hubungi Kami'}</span>
                 <span className="sr-only"> (Konsultasi Akademik)</span>
               </Link>
             </div>

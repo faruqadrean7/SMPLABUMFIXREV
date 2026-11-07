@@ -12,6 +12,7 @@ import { TahfidzWidget } from './student-programs/tahfidz-widget';
 import { IcpWidget } from './student-programs/icp-widget';
 import { InklusiWidget } from './student-programs/inklusi-widget';
 import { RegulerWidget } from './student-programs/reguler-widget';
+import { SafetyCounselingCard } from './safety-counseling-card';
 
 function formatDate(value?: string): string {
   if (!value) return '';
@@ -80,6 +81,9 @@ export function StudentDashboardView() {
       {data?.programType === 'icp' && <IcpWidget profile={data.programProfile} />}
       {data?.programType === 'inklusi' && <InklusiWidget profile={data.programProfile} />}
       {(!data?.programType || data?.programType === 'reguler') && <RegulerWidget profile={data?.programProfile} />}
+
+      {/* RUANG AMAN & LAPOR PERUNDUNGAN (FE-REPORT-02) */}
+      <SafetyCounselingCard role="student" />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
         <div className="lg:col-span-7 flex flex-col gap-3">
