@@ -1,3 +1,44 @@
+# ============================================================================
+# Shared anchors — dipakai ulang oleh api / worker / scheduler (DRY)
+# ============================================================================
+x-api-build: &api-build
+  context: ./apps/api
+  dockerfile: Dockerfile
+
+x-api-environment: &api-environment
+  PHP_CLI_SERVER_WORKERS: "35"
+  TEST_DISABLE_RATE_LIMIT: ${TEST_DISABLE_RATE_LIMIT:-true}
+  APP_ENV: local
+  APP_DEBUG: "true"
+  APP_KEY: ${APP_KEY:-base64:w6oCVlMI64nU2Pmfg4Zp4LzcQXDC+lPJsZ63sL4wwTQ=}
+  APP_URL: http://localhost:8000
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: ${DB_DATABASE:-sistlabum}
+  DB_USERNAME: ${DB_USERNAME:-postgres}
+  DB_PASSWORD: ${DB_PASSWORD:-postgres}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  QUEUE_CONNECTION: redis
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+  # Default "local" agar `docker compose up` polos tetap jalan tanpa MinIO.
+  # Set FILESYSTEM_DISK=s3 di .env + jalankan profil storage untuk pakai MinIO.
+  FILESYSTEM_DISK: ${FILESYSTEM_DISK:-local}
+  AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-minioadmin}
+  AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-minioadmin}
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_BUCKET: ${S3_BUCKET:-sistlabum-files}
+  AWS_ENDPOINT: http://minio:9000
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+  MAIL_MAILER: smtp
+  MAIL_HOST: mailpit
+  MAIL_PORT: 1025
+  UAT_SEED_ENABLED: ${UAT_SEED_ENABLED:-true}
+  # DEV ONLY: lewati 2FA login admin (diabaikan bila APP_ENV=production).
+  ADMIN_2FA_BYPASS: ${ADMIN_2FA_BYPASS:-false}
+
 services:
   # ============================================================================
   # PostgreSQL Database (v16)
@@ -77,13 +118,17 @@ services:
 
   # ============================================================================
   # Backend API (Laravel / PHP-FPM / Artisan Server)
+  # Startup: composer install -> migrate (idempoten) -> serve.
+  # Seeding TIDAK otomatis (seeder di-guard opt-in & bisa duplikat); jalankan
+  # sekali manual: docker compose exec api php artisan migrate --seed
   # ============================================================================
   api:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+    build: *api-build
     container_name: sistlabum-api
-    command: php artisan serve --host=0.0.0.0 --port=8000 --no-reload
+    command: >
+      sh -c "composer install --no-interaction --no-progress --prefer-dist &&
+             php artisan migrate --force &&
+             php artisan serve --host=0.0.0.0 --port=8000 --no-reload"
     restart: unless-stopped
     depends_on:
       postgres:
@@ -92,35 +137,47 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
-    environment:
-      PHP_CLI_SERVER_WORKERS: "35"
-      TEST_DISABLE_RATE_LIMIT: ${TEST_DISABLE_RATE_LIMIT:-true}
-      APP_ENV: local
-      APP_DEBUG: "true"
-      APP_KEY: ${APP_KEY:-base64:w6oCVlMI64nU2Pmfg4Zp4LzcQXDC+lPJsZ63sL4wwTQ=}
-      APP_URL: http://localhost:8000
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: ${DB_DATABASE:-sistlabum}
-      DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      QUEUE_CONNECTION: redis
-      CACHE_STORE: redis
-      SESSION_DRIVER: redis
-      FILESYSTEM_DISK: ${FILESYSTEM_DISK:-s3}
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-minioadmin}
-      AWS_DEFAULT_REGION: us-east-1
-      AWS_BUCKET: ${S3_BUCKET:-sistlabum-files}
-      AWS_ENDPOINT: http://minio:9000
-      AWS_USE_PATH_STYLE_ENDPOINT: "true"
-      MAIL_MAILER: smtp
-      MAIL_HOST: mailpit
-      MAIL_PORT: 1025
-      UAT_SEED_ENABLED: ${UAT_SEED_ENABLED:-true}
+    environment: *api-environment
+    volumes:
+      - ./apps/api:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - sistlabum-network
+
+  # ============================================================================
+  # Queue Worker (Laravel queue:work) — memproses job antrean Redis
+  # ============================================================================
+  worker:
+    build: *api-build
+    container_name: sistlabum-worker
+    command: php artisan queue:work --tries=3 --timeout=90 --sleep=3 --max-jobs=1000
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *api-environment
+    volumes:
+      - ./apps/api:/var/www/html
+    networks:
+      - sistlabum-network
+
+  # ============================================================================
+  # Scheduler (Laravel schedule:work) — menjalankan task terjadwal
+  # ============================================================================
+  scheduler:
+    build: *api-build
+    container_name: sistlabum-scheduler
+    command: php artisan schedule:work
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *api-environment
     volumes:
       - ./apps/api:/var/www/html
     networks:
@@ -136,10 +193,10 @@ services:
     container_name: sistlabum-web
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "3000:3000"
-      - "3001:3000"
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
