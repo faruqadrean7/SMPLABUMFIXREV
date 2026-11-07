@@ -210,6 +210,7 @@ Validasi token, cek jendela waktu, tampilan instruksi, persetujuan aturan.
 
 ### MOB-CBT-02: Layar pengerjaan [P0]
 Tampil soal (teks, gambar, audio, rumus), komponen per tipe (PG, PG kompleks, B/S, menjodohkan, isian, uraian), navigasi nomor (terjawab/kosong/ragu), tombol sebelumnya/berikutnya, penanda ragu, timer (sinkron waktu server), zoom gambar.
+> **Catatan tindak lanjut (2026-10-30 - BE-CBT-11/12/13):** Kontrak API `body.content` dan opsi jawaban kini menyajikan format HTML tersanitasi (termasuk tabel dan gambar dengan tag `<img>` bertanda-tangan dari backend). Tim mobile perlu mengintegrasikan komponen renderer HTML (seperti Jetpack Compose HTML parser atau WebView sandboxed) agar tag HTML tidak tampil sebagai string mentah.
 
 ### MOB-CBT-03: Autosave & pemulihan [P0]
 Setiap perubahan jawaban dikirim idempotent; indikator status simpan; jika koneksi putus, jawaban antre dan sesi dilanjutkan saat tersambung (sisa waktu dari server).

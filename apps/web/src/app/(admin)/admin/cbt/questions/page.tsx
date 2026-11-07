@@ -34,6 +34,8 @@ import { QuestionBankItem, QuestionItem, QuestionType } from '@/types/cbt';
 import { SubjectItem } from '@/types/master';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { toast } from '@/components/ui/toast';
+import { RichQuestionEditor } from '@/features/cbt/rich-editor/RichQuestionEditor';
+import { RichContent } from '@/features/cbt/rich-editor/RichContent';
 
 export default function QuestionBanksPage() {
   const [banks, setBanks] = useState<QuestionBankItem[]>([]);
@@ -216,13 +218,13 @@ export default function QuestionBanksPage() {
     setEditingQuestion(q);
     setQuestionForm({
       question_type: q.question_type,
-      stem: q.stem,
+      stem: q.body?.content || q.stem,
       media_url: q.media_url || q.body?.media_url || q.body?.image_url || '',
       weight: q.weight,
       options: q.options?.map((opt) => ({
         id: opt.id,
         label: opt.label,
-        text: opt.text,
+        text: opt.body?.content || opt.text,
         is_correct: opt.is_correct ?? false,
         match_key: opt.match_key || null,
       })) || [],
@@ -499,9 +501,10 @@ export default function QuestionBanksPage() {
                       </div>
                     </div>
 
-                    <div className="text-xs text-slate-800 font-medium leading-relaxed pl-8">
-                      {q.stem}
-                    </div>
+                    <RichContent
+                      html={q.body?.content || q.stem}
+                      className="text-xs text-slate-800 font-medium leading-relaxed pl-8"
+                    />
 
                     {/* Options Preview */}
                     {q.options && q.options.length > 0 && (
@@ -509,15 +512,19 @@ export default function QuestionBanksPage() {
                         {q.options.map((opt) => (
                           <div
                             key={opt.id || opt.label}
-                            className={`p-2 rounded border text-[11px] flex items-center justify-between ${
+                            className={`p-2 rounded border text-[11px] flex items-center justify-between gap-2 ${
                               opt.is_correct
                                 ? 'border-emerald-300 bg-emerald-50/50 text-emerald-900 font-medium'
                                 : 'border-slate-100 bg-slate-50 text-slate-600'
                             }`}
                           >
-                            <span>
-                              <b className="mr-1">{opt.label}.</b> {opt.text}
-                            </span>
+                            <div className="flex items-start gap-1">
+                              <b className="mr-1">{opt.label}.</b>
+                              <RichContent
+                                html={opt.body?.content || opt.text}
+                                className="inline-block"
+                              />
+                            </div>
                             {opt.is_correct && (
                               <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                             )}
@@ -676,14 +683,14 @@ export default function QuestionBanksPage() {
 
               <div>
                 <label className="text-xs font-semibold text-slate-700">Teks Pertanyaan (Stem) *</label>
-                <Textarea
-                  rows={4}
-                  value={questionForm.stem}
-                  onChange={(e) => setQuestionForm({ ...questionForm, stem: e.target.value })}
-                  placeholder="Tuliskan butir soal atau narasi permasalahan di sini..."
-                  className="text-xs mt-1"
-                  required
-                />
+                <div className="mt-1">
+                  <RichQuestionEditor
+                    value={questionForm.stem}
+                    onChange={(html) => setQuestionForm((prev) => ({ ...prev, stem: html }))}
+                    bankId={selectedBankId}
+                    placeholder="Tuliskan butir soal atau narasi permasalahan di sini..."
+                  />
+                </div>
               </div>
 
               {/* Upload Gambar Stimulus / Ilustrasi Soal */}
@@ -815,17 +822,21 @@ export default function QuestionBanksPage() {
                           />
                         )}
                         <span className="font-bold text-xs w-5">{opt.label}.</span>
-                        <Input
-                          value={opt.text}
-                          onChange={(e) => {
-                            const updated = [...questionForm.options];
-                            updated[i].text = e.target.value;
-                            setQuestionForm({ ...questionForm, options: updated });
-                          }}
-                          placeholder={`Teks pilihan ${opt.label}`}
-                          className="text-xs flex-1"
-                          required
-                        />
+                        <div className="flex-1">
+                          <RichQuestionEditor
+                            dense
+                            value={opt.text}
+                            onChange={(html) => {
+                              setQuestionForm((prev) => {
+                                const updated = [...prev.options];
+                                updated[i] = { ...updated[i], text: html };
+                                return { ...prev, options: updated };
+                              });
+                            }}
+                            bankId={selectedBankId}
+                            placeholder={`Teks pilihan ${opt.label}`}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>

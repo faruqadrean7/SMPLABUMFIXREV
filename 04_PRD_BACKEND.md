@@ -309,6 +309,18 @@ Paket ujian diekspor ke server lokal; hasil disinkronkan kembali.
 Pencatatan pergantian IP, perubahan user-agent/fingerprint, atau lonjakan jeda waktu janggal selama ujian berlangsung; dicatat ke tabel pelanggaran/log audit untuk ditinjau pengawas tanpa memblokir sesi ujian siswa secara otomatis.
 Endpoint: `POST /exam-sessions/{id}/heartbeat`, `GET /exams/{id}/anomalies`.
 
+### BE-CBT-11-RTE: Sanitasi & Validasi Konten Kaya Butir Soal [P0]
+Format teks kaya (HTML tersanitasi) pada `body.content` (max 100.000 karakter) dan opsi jawaban (max 20.000 karakter per opsi). Sanitasi menggunakan whitelist tag (`p, br, strong, em, u, s, ul, ol, li, table, thead, tbody, tr, td, th, img, span`) dan menghapus atribut berbahaya (XSS, inline style, event handler, script) serta atribut `src` eksternal saat persist.
+Endpoint: `POST /questions`, `PUT /questions/{id}`.
+
+### BE-CBT-12-RTE: Unggah Media Gambar Butir Soal [P0]
+Unggah berkas gambar pendukung soal (JPEG, PNG, WebP, GIF; maksimal 2 MB) dengan verifikasi magic bytes fisik (`getimagesize`) dan otorisasi kepemilikan bank soal (Anti-IDOR). Berkas disimpan privat dengan visibility `privat` dan bucket `cbt`, mengembalikan `file_id` dan `preview_url` bertanda-tangan (TTL 15 menit).
+Endpoint: `POST /cbt/question-media` (`permission:cbt.bank.write`).
+
+### BE-CBT-13-RTE: Resolusi Media Bertanda-Tangan & Penjagaan Kunci Jawaban [P0]
+Server menyuntikkan URL bertanda-tangan (`src`) secara dinamis ke elemen `<img data-file-id="...">` pada saat pembacaan data soal terotorisasi (guru/admin show, sesi siswa). Memastikan invarian keamanan ketat: kunci jawaban (`is_correct`, `match_key`, `explanation`) tidak pernah bocor ke payload siswa saat sesi ujian aktif.
+Endpoint: `GET /questions/{id}`, `GET /exams/{id}/session-questions`.
+
 ---
 
 ## 10. STD: Kesiswaan

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Cbt\ExamReportController;
 use App\Http\Controllers\Api\V1\Cbt\ExamRoomTokenController;
 use App\Http\Controllers\Api\V1\Cbt\ExamSessionController;
 use App\Http\Controllers\Api\V1\Cbt\ExamSyncController;
+use App\Http\Controllers\Api\V1\Cbt\QuestionMediaController;
 use App\Http\Controllers\Api\V1\ExamController;
 use App\Http\Controllers\Api\V1\QuestionBankController;
 use App\Http\Controllers\Api\V1\QuestionController;
@@ -51,6 +52,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/questions/{id}', [QuestionController::class, 'destroy'])
         ->middleware('permission:cbt.bank.write');
     Route::post('/questions/import', [QuestionController::class, 'import'])
+        ->middleware('permission:cbt.bank.write');
+
+    // BE-CBT-12: Unggah Media Gambar Soal
+    Route::post('/cbt/question-media', [QuestionMediaController::class, 'store'])
         ->middleware('permission:cbt.bank.write');
 
     // =====================================================================

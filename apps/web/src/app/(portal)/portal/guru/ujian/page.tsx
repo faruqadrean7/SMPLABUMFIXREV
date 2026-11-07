@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { RichQuestionEditor } from '@/features/cbt/rich-editor/RichQuestionEditor';
 import {
   Monitor,
   ArrowLeft,
@@ -110,7 +111,7 @@ export default function TeacherExamsPage() {
     try {
       await guruApi.createQuestion(selectedBankId, {
         question_type: questionType,
-        body: { text: questionText },
+        body: { text: questionText, content: questionText },
         cognitive_level: cognitiveLevel,
         difficulty: Number(difficulty),
       });
@@ -457,13 +458,14 @@ export default function TeacherExamsPage() {
               </div>
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Teks Pertanyaan</label>
-                <Textarea
-                  value={questionText}
-                  onChange={(e) => setQuestionText(e.target.value)}
-                  placeholder="Tuliskan stimulus atau instruksi pertanyaan soal di sini..."
-                  rows={4}
-                  required
-                />
+                <div className="mt-1">
+                  <RichQuestionEditor
+                    value={questionText}
+                    onChange={(html) => setQuestionText(html)}
+                    bankId={selectedBankId || ''}
+                    placeholder="Tuliskan stimulus atau instruksi pertanyaan soal di sini..."
+                  />
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => setIsQuestionModalOpen(false)}>

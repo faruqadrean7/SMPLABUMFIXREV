@@ -57,7 +57,7 @@ class UpdateQuestionRequest extends FormRequest
             'bank_id' => ['nullable', 'uuid', 'exists:question_banks,id'],
             'question_type' => ['nullable', 'string', 'in:pg,pg_kompleks,bs,menjodohkan,isian,uraian'],
             'body' => ['nullable', 'array'],
-            'body.content' => ['required_with:body', 'string'],
+            'body.content' => ['required_with:body', 'string', 'max:100000'],
             'body.formula' => ['nullable', 'string'],
             'body.media_url' => ['nullable', 'string'],
             'cp_code' => ['nullable', 'string', 'max:100'],
@@ -69,6 +69,7 @@ class UpdateQuestionRequest extends FormRequest
             'options' => ['nullable', 'array'],
             'options.*.label' => ['required_with:options', 'string', 'max:10'],
             'options.*.body' => ['required_with:options', 'array'],
+            'options.*.body.content' => ['nullable', 'string', 'max:20000'],
             'options.*.is_correct' => ['nullable', 'boolean'],
             'options.*.match_key' => ['nullable', 'string', 'max:100'],
         ];

@@ -239,6 +239,8 @@ class ExamSessionService
         // Format butir soal yang aman (STRIP jawaban yang benar)
         $formattedQuestions = [];
         $index = 1;
+        /** @var QuestionMediaService $mediaService */
+        $mediaService = app(QuestionMediaService::class);
 
         foreach ($questionItems as $q) {
             /** @var Question $q */
@@ -251,7 +253,7 @@ class ExamSessionService
             // Sanitasi opsi secara ketat (WHITELIST): Hanya field id, label, text, dan body ter-whitelist
             $sanitizedOptions = [];
             if (! in_array($q->question_type, ['isian', 'uraian'])) {
-                $sanitizedOptions = $options->map(function ($opt) {
+                $sanitizedOptions = $options->map(function ($opt) use ($mediaService) {
                     $optText = is_array($opt->body)
                         ? ($opt->body['text'] ?? $opt->body['content'] ?? '')
                         : (string) $opt->body;
@@ -262,7 +264,7 @@ class ExamSessionService
                             $optBody['text'] = (string) $opt->body['text'];
                         }
                         if (isset($opt->body['content'])) {
-                            $optBody['content'] = (string) $opt->body['content'];
+                            $optBody['content'] = $mediaService->resolveMediaInHtml((string) $opt->body['content'], 60);
                         }
                         if (isset($opt->body['media_url'])) {
                             $optBody['media_url'] = (string) $opt->body['media_url'];
@@ -287,7 +289,7 @@ class ExamSessionService
             $sanitizedBody = [];
             if (is_array($q->body)) {
                 if (isset($q->body['content'])) {
-                    $sanitizedBody['content'] = (string) $q->body['content'];
+                    $sanitizedBody['content'] = $mediaService->resolveMediaInHtml((string) $q->body['content'], 60);
                 }
                 if (isset($q->body['text'])) {
                     $sanitizedBody['text'] = (string) $q->body['text'];
@@ -308,8 +310,9 @@ class ExamSessionService
                     $sanitizedBody['audio_url'] = (string) $q->body['audio_url'];
                 }
             } else {
+                $resolvedContent = $mediaService->resolveMediaInHtml((string) $q->body, 60);
                 $sanitizedBody = [
-                    'content' => (string) $q->body,
+                    'content' => $resolvedContent,
                     'text' => (string) $q->body,
                 ];
             }
@@ -1237,6 +1240,8 @@ class ExamSessionService
         $totalAnswered = 0;
         $totalCorrect = 0;
         $hasEssay = false;
+        /** @var QuestionMediaService $mediaService */
+        $mediaService = app(QuestionMediaService::class);
 
         foreach ($questionItems as $index => $q) {
             $answer = $savedAnswers->get($q->id);
@@ -1258,15 +1263,25 @@ class ExamSessionService
                 $options = $this->shuffleWithSeed($options, $session->seed.'_opt_'.$q->id);
             }
 
-            $optionsData = $options->map(function ($opt) {
+            $optionsData = $options->map(function ($opt) use ($mediaService) {
+                $optBody = $opt->body;
+                if (is_array($optBody) && isset($optBody['content'])) {
+                    $optBody['content'] = $mediaService->resolveMediaInHtml((string) $optBody['content'], 60);
+                }
+
                 return [
                     'id' => $opt->id,
                     'label' => $opt->label,
-                    'body' => $opt->body,
+                    'body' => $optBody,
                     'is_correct' => (bool) $opt->is_correct,
                     'match_key' => $opt->match_key,
                 ];
             })->values()->all();
+
+            $resolvedQBody = $q->body;
+            if (is_array($resolvedQBody) && isset($resolvedQBody['content'])) {
+                $resolvedQBody['content'] = $mediaService->resolveMediaInHtml((string) $resolvedQBody['content'], 60);
+            }
 
             $score = $answer?->score !== null ? (float) $answer->score : null;
             $isCorrect = null;
@@ -1284,7 +1299,7 @@ class ExamSessionService
                 'number' => $index + 1,
                 'question_id' => $q->id,
                 'question_type' => $q->question_type,
-                'body' => $q->body,
+                'body' => $resolvedQBody,
                 'options' => $optionsData,
                 'max_score' => $maxWeight,
                 'student_answer' => $userAnswer,
