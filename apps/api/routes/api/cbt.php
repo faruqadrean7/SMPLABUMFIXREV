@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Cbt\ExamReportController;
 use App\Http\Controllers\Api\V1\Cbt\ExamRoomTokenController;
 use App\Http\Controllers\Api\V1\Cbt\ExamSessionController;
 use App\Http\Controllers\Api\V1\Cbt\ExamSyncController;
+use App\Http\Controllers\Api\V1\Cbt\QuestionImportController;
 use App\Http\Controllers\Api\V1\ExamController;
 use App\Http\Controllers\Api\V1\QuestionBankController;
 use App\Http\Controllers\Api\V1\QuestionController;
@@ -51,6 +52,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/questions/{id}', [QuestionController::class, 'destroy'])
         ->middleware('permission:cbt.bank.write');
     Route::post('/questions/import', [QuestionController::class, 'import'])
+        ->middleware('permission:cbt.bank.write');
+
+    // =====================================================================
+    // BE-CBT-13: Impor Soal dari DOCX (Mandiri Admin/Guru)
+    // =====================================================================
+    Route::get('/question-imports/template', [QuestionImportController::class, 'template'])
+        ->middleware('permission:cbt.bank.write');
+    Route::post('/question-imports', [QuestionImportController::class, 'store'])
+        ->middleware('permission:cbt.bank.write');
+    Route::get('/question-imports/{id}', [QuestionImportController::class, 'show'])
+        ->middleware('permission:cbt.bank.write');
+    Route::patch('/question-imports/{id}', [QuestionImportController::class, 'update'])
+        ->middleware('permission:cbt.bank.write');
+    Route::post('/question-imports/{id}/commit', [QuestionImportController::class, 'commit'])
         ->middleware('permission:cbt.bank.write');
 
     // =====================================================================
