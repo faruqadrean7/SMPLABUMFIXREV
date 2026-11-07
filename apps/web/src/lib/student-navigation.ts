@@ -10,6 +10,7 @@ import {
   Globe,
   Target,
   Layers,
+  ShieldAlert,
   LucideIcon,
 } from 'lucide-react';
 import { StudentProgramType, StudentProgramProfileData } from './use-student-data';
@@ -117,6 +118,13 @@ export function getStudentNavLinks(
       icon: HeartHandshake,
       badge: 'Privat',
       badgeColor: 'bg-teal-800 text-white',
+    },
+    {
+      name: 'Lapor Bullying',
+      href: '/lapor',
+      icon: ShieldAlert,
+      badge: 'Aman',
+      badgeColor: 'bg-rose-700 text-white',
     },
   ];
 

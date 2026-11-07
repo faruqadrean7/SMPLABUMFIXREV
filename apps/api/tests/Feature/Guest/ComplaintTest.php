@@ -405,4 +405,44 @@ class ComplaintTest extends TestCase
         $response->assertStatus(403);
         $this->assertStringContainsString('di luar sekolah penugasan', $response->json('error.message'));
     }
+
+    /**
+     * FE-REPORT-01 / BE-GUEST-02: Bullying category complaint submission, tracking, and counselor review flow.
+     */
+    public function test_fe_report_01_bullying_complaint_submission_and_tracking_flow(): void
+    {
+        $payload = [
+            'category' => 'bullying',
+            'content' => 'Terjadi perundungan verbal dan pemalakan di area kantin belakang sekolah.',
+            'is_anonymous' => true,
+        ];
+
+        // 1. Public submission (FE-REPORT-01)
+        $submitResponse = $this->postJson('/api/v1/public/complaints', $payload);
+        $submitResponse->assertStatus(201)
+            ->assertJsonPath('data.category', 'bullying')
+            ->assertJsonPath('data.status', 'baru')
+            ->assertJsonPath('data.is_anonymous', true);
+
+        $ticketCode = $submitResponse->json('data.ticket_code');
+        $this->assertNotNull($ticketCode);
+
+        // 2. Public tracking (FE-REPORT-01)
+        $trackResponse = $this->getJson("/api/v1/public/complaints/{$ticketCode}");
+        $trackResponse->assertStatus(200)
+            ->assertJsonPath('data.ticket_code', $ticketCode)
+            ->assertJsonPath('data.category', 'bullying')
+            ->assertJsonPath('data.status', 'baru')
+            ->assertJsonPath('data.content', $payload['content']);
+
+        $this->assertCount(1, $trackResponse->json('data.timeline'));
+
+        // 3. Counselor review (ADM-GUEST-01)
+        $counselorListResponse = $this->actingAs($this->counselorUser)
+            ->getJson('/api/v1/complaints?category=bullying');
+
+        $counselorListResponse->assertStatus(200);
+        $items = $counselorListResponse->json('data');
+        $this->assertTrue(collect($items)->contains('ticket_code', $ticketCode));
+    }
 }
