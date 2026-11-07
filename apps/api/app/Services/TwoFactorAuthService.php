@@ -46,9 +46,9 @@ class TwoFactorAuthService
     }
 
     /**
-     * Verify user code against secret with a 1-window discrepancy tolerance (+/- 30s).
+     * Verify user code against secret with discrepancy tolerance (+/- 60s default).
      */
-    public function verifyKey(string $secret, string $code, int $discrepancy = 1): bool
+    public function verifyKey(string $secret, string $code, int $discrepancy = 2): bool
     {
         $cleanCode = preg_replace('/\s+/', '', $code);
         if (strlen($cleanCode) !== 6 || ! ctype_digit($cleanCode)) {
@@ -67,20 +67,31 @@ class TwoFactorAuthService
     }
 
     /**
-     * Verify user code against secret AND prevent replay attack by checking last used time-step.
+     * Verify user code against secret AND prevent replay attack by checking last used time-step (+/- 60s default).
      */
-    public function verifyKeyWithUser(User $user, string $code, int $discrepancy = 1): bool
+    public function verifyKeyWithUser(User $user, string $code, int $discrepancy = 2): bool
+    {
+        return $this->verifyKeyWithUserDetailed($user, $code, $discrepancy) === 'valid';
+    }
+
+    /**
+     * Verify user code with detailed status outcome:
+     * Returns: 'valid' | 'already_used' | 'invalid' | 'not_configured'
+     */
+    public function verifyKeyWithUserDetailed(User $user, string $code, int $discrepancy = 2): string
     {
         if (! $user->two_factor_secret) {
-            return false;
+            return 'not_configured';
         }
 
         $cleanCode = preg_replace('/\s+/', '', $code);
         if (strlen($cleanCode) !== 6 || ! ctype_digit($cleanCode)) {
-            return false;
+            return 'invalid';
         }
 
         $currentTime = time();
+        $matchedReplay = false;
+
         for ($i = -$discrepancy; $i <= $discrepancy; $i++) {
             $stepTime = $currentTime + ($i * 30);
             $timeSlice = (int) floor($stepTime / 30);
@@ -89,17 +100,19 @@ class TwoFactorAuthService
             if (hash_equals($calc, $cleanCode)) {
                 // Check if this time slice has already been used (prevent replay attack)
                 if ($user->two_factor_last_step !== null && $timeSlice <= $user->two_factor_last_step) {
-                    return false;
+                    $matchedReplay = true;
+
+                    continue;
                 }
 
                 $user->two_factor_last_step = $timeSlice;
                 $user->saveQuietly();
 
-                return true;
+                return 'valid';
             }
         }
 
-        return false;
+        return $matchedReplay ? 'already_used' : 'invalid';
     }
 
     /**

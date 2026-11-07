@@ -95,7 +95,10 @@ class TwoFactorAuthController extends Controller
             ], 400);
         }
 
-        $isValid = $this->twoFactorService->verifyKeyWithUser($user, (string) $request->input('code'));
+        // FIX-BE-AUTH-2FA-01: Verifikasi initial code memakai verifyKey (bukan verifyKeyWithUser)
+        // agar enrollment tidak "membakar" time-step, sehingga kode 6-digit yang sama masih valid
+        // saat admin diarahkan langsung ke challenge login pertama.
+        $isValid = $this->twoFactorService->verifyKey($user->two_factor_secret, (string) $request->input('code'));
 
         if (! $isValid) {
             return response()->json([
@@ -113,6 +116,7 @@ class TwoFactorAuthController extends Controller
 
         $user->two_factor_confirmed_at = now();
         $user->two_factor_recovery_codes = $hashedCodes;
+        $user->two_factor_last_step = null;
         $user->save();
 
         try {

@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\AuthService;
-use App\Services\TwoFactorAuthService;
 use App\Services\TrustedDeviceService;
+use App\Services\TwoFactorAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -134,6 +134,30 @@ class AdminAuthController extends Controller
             ], 403);
         }
 
+        // DEV-ONLY: optional 2FA bypass for local/staging convenience.
+        // Fail-safe: never honored in production (see twoFactorBypassEnabled).
+        if ($this->twoFactorBypassEnabled()) {
+            RateLimiter::clear($rateLimitKey);
+            $user->last_login_at = now();
+            $user->saveQuietly();
+
+            $this->logAudit(
+                $user->id,
+                'auth.admin_login_2fa_bypassed',
+                'User',
+                $user->id,
+                ['identifier' => $identifier, 'method' => 'dev_2fa_bypass', 'app_env' => app()->environment()],
+                $request
+            );
+
+            $authData = $this->authService->issueTokensForUser($user, $request);
+
+            return response()->json([
+                'message' => 'Login admin berhasil (mode pengembangan tanpa 2FA).',
+                'data' => $authData,
+            ], 200);
+        }
+
         // Check mandatory 2FA enrollment for all admin shell roles
         $isMandatory2Fa = ! empty(array_intersect($userRoleCodes, self::MANDATORY_2FA_ROLES));
         if ($isMandatory2Fa && $user->two_factor_confirmed_at === null) {
@@ -217,6 +241,21 @@ class AdminAuthController extends Controller
         ], 200);
     }
 
+    /**
+     * Whether admin 2FA may be bypassed for this request.
+     *
+     * Fail-safe: the bypass is permanently disabled in production regardless of
+     * configuration, so a stray ADMIN_2FA_BYPASS=true can never weaken prod.
+     */
+    protected function twoFactorBypassEnabled(): bool
+    {
+        if (app()->environment('production')) {
+            return false;
+        }
+
+        return (bool) config('auth.admin_two_factor.bypass_in_non_production', false);
+    }
+
     protected function verifyTwoFactorAndLogin(User $user, Request $request): JsonResponse
     {
         $rateLimitKey = 'admin_2fa_attempts:'.$user->id;
@@ -234,9 +273,11 @@ class AdminAuthController extends Controller
 
         $isValid = false;
         $isRecoveryUsed = false;
+        $totpStatus = 'invalid';
 
         if ($totpCode && $user->two_factor_secret) {
-            $isValid = $this->twoFactorService->verifyKeyWithUser($user, (string) $totpCode);
+            $totpStatus = $this->twoFactorService->verifyKeyWithUserDetailed($user, (string) $totpCode);
+            $isValid = ($totpStatus === 'valid');
         } elseif ($recoveryCode) {
             $isValid = $this->twoFactorService->verifyAndConsumeRecoveryCode($user, (string) $recoveryCode);
             if ($isValid) {
@@ -252,14 +293,20 @@ class AdminAuthController extends Controller
                 'auth.admin_2fa_failed',
                 'User',
                 $user->id,
-                ['reason' => 'invalid_or_replayed_code'],
+                ['reason' => $totpStatus === 'already_used' ? 'replayed_code' : 'invalid_code'],
                 $request
             );
 
+            $errorCode = 'INVALID_2FA_CODE';
+            $errorMessage = ($totpStatus === 'already_used')
+                ? 'Kode autentikasi ini baru saja digunakan. Mohon tunggu kode berikutnya di aplikasi Authenticator (berganti setiap 30 detik).'
+                : 'Kode autentikasi dua faktor atau kode pemulihan tidak valid.';
+
             return response()->json([
                 'error' => [
-                    'code' => 'INVALID_2FA_CODE',
-                    'message' => 'Kode autentikasi dua faktor atau kode pemulihan tidak valid.',
+                    'code' => $errorCode,
+                    'message' => $errorMessage,
+                    'is_replayed' => ($totpStatus === 'already_used'),
                 ],
             ], 401);
         }
