@@ -49,3 +49,6 @@ playwright-report/
 # Paket ujian asli (soal + kunci) & manifest impor CBT — JANGAN di-commit (AGENTS.md §6.2/§6.6/§9)
 docs/mtk/
 /apps/api/storage/app/import/
+
+# Claude Code: setelan mesin-lokal (config bersama seperti launch.json tetap di-track)
+.claude/settings.local.json
