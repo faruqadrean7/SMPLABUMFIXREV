@@ -286,8 +286,9 @@ export const guruApi = {
     return unwrapItem<TeacherQuestionBankItem>(res, res.data);
   },
 
-  async createQuestion(bankId: string, payload: any): Promise<any> {
-    const res = await apiClient.post(`/me/teacher/question-banks/${bankId}/questions`, payload);
+  async createQuestion(bankId: string, payload: any, idempotencyKey?: string): Promise<any> {
+    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined;
+    const res = await apiClient.post(`/me/teacher/question-banks/${bankId}/questions`, payload, { headers });
     return unwrapItem(res, res.data);
   },
 
@@ -393,6 +394,17 @@ export const guruApi = {
   },
 
   // === FITUR B: POIN KARAKTER & RUJUKAN BK ===
+  async getStudentPoints(params?: {
+    student_id?: string;
+    class_id?: string;
+    type?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<any> {
+    const res = await apiClient.get('/me/teacher/student-points', { params });
+    return res.data;
+  },
+
   async recordStudentPoint(payload: StudentPointPayload): Promise<{ success: boolean; message: string; data?: any }> {
     const res = await apiClient.post<{ message: string; data: any }>('/me/teacher/student-points', payload);
     return {
@@ -400,6 +412,17 @@ export const guruApi = {
       message: res.data?.message || 'Poin karakter siswa berhasil dicatat.',
       data: res.data?.data,
     };
+  },
+
+  async getCounselingReferrals(params?: {
+    student_id?: string;
+    class_id?: string;
+    status?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<any> {
+    const res = await apiClient.get('/me/teacher/counseling-referrals', { params });
+    return res.data;
   },
 
   async createCounselingReferral(payload: CounselingReferralPayload): Promise<{ success: boolean; message: string; data?: any }> {
@@ -425,6 +448,13 @@ export const guruApi = {
 
   // FIX-GURU-11: daftar fasilitas nyata untuk mengisi dropdown reservasi (hindari UUID dummy).
   async getFacilities(params?: { per_page?: number; q?: string }): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const res = await apiClient.get('/me/teacher/facilities', { params });
+      const list = unwrapList<{ id: string; name: string }>(res);
+      if (list && list.length > 0) return list;
+    } catch {
+      // Fallback ke endpoint umum fasilitas
+    }
     const res = await apiClient.get('/facilities', { params: { per_page: 100, ...params } });
     return unwrapList<{ id: string; name: string }>(res);
   },
@@ -435,6 +465,11 @@ export const guruApi = {
       timeout: 30000,
     });
     return unwrapItem<FacilityBookingItem>(res, res.data);
+  },
+
+  async getSarprasTickets(): Promise<SarprasTicketItem[]> {
+    const res = await apiClient.get<SarprasTicketItem[]>('/me/teacher/tickets');
+    return unwrapList<SarprasTicketItem>(res);
   },
 
   async createSarprasTicket(payload: SarprasTicketPayload): Promise<SarprasTicketItem> {

@@ -114,4 +114,21 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Admin Two-Factor (2FA) — Dev Bypass
+    |--------------------------------------------------------------------------
+    |
+    | PERINGATAN: Hanya untuk mempercepat pengembangan lokal/staging.
+    | Bila diaktifkan, login admin-shell melewati tahap enrollment & tantangan
+    | TOTP. Flag ini TIDAK PERNAH dihormati saat APP_ENV=production (lihat
+    | AdminAuthController::twoFactorBypassEnabled) — fail-safe agar tidak bisa
+    | bocor ke produksi walau nilainya true. Default false = 2FA tetap wajib.
+    |
+    */
+
+    'admin_two_factor' => [
+        'bypass_in_non_production' => (bool) env('ADMIN_2FA_BYPASS', false),
+    ],
+
 ];

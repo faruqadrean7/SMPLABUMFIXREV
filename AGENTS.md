@@ -102,6 +102,7 @@ flowchart TD
 8. Validasi & sanitasi semua input; unggahan dicek tipe/ukuran/magic bytes.
 9. Jangan menonaktifkan fitur keamanan (CORS, CSRF, rate limit, validasi) demi memperlancar pengembangan.
 10. Jangan menambah dependency tanpa alasan; pilih paket yang aktif dipelihara, catat di PR.
+11. **Bebas 2FA / Autentikasi Dua Faktor Dinonaktifkan**: Sesuai instruksi pengguna, 2FA (TOTP/MFA) dinonaktifkan di seluruh sistem. Login admin, staf, dan civitas langsung menggunakan kredensial (username/email dan kata sandi) tanpa tantangan atau kewajiban aktivasi 2FA.
 
 ## 7. Git & Rilis
 | Aturan | Nilai |

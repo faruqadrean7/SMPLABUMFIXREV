@@ -16,7 +16,7 @@ Sistem menyimpan data anak dan catatan konseling. Keamanan adalah **persyaratan 
 - Token: access 15 menit, refresh 14 hari dengan rotasi dan deteksi pemakaian ulang.
 - Web/Admin: refresh token di cookie `HttpOnly; Secure; SameSite=Lax`; proteksi CSRF untuk endpoint cookie.
 - Mobile: token di Keychain/Keystore; biometrik opsional.
-- 2FA (TOTP) wajib untuk `super_admin`, `admin_tu`, `principal` (P1).
+- 2FA (TOTP) dinonaktifkan: login langsung menggunakan kredensial (password) tanpa tahapan 2FA/MFA.
 - Reset password: token sekali pakai, kedaluwarsa 15 menit, diganti hash di DB.
 
 ## 3. Otorisasi (RBAC + cakupan data)

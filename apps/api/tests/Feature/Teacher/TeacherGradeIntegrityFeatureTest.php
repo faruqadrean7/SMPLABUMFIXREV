@@ -281,6 +281,55 @@ class TeacherGradeIntegrityFeatureTest extends TestCase
     }
 
     /**
+     * FIX-GURU-03: Validasi batas skor dinamis mengacu pada max_score tugas (bukan hardcoded 100).
+     */
+    public function test_fix_guru_03_dynamic_max_score_validation(): void
+    {
+        $assignment = Assignment::where('teacher_id', $this->teacherMtk->id)->firstOrFail();
+        $submission = AssignmentSubmission::where('assignment_id', $assignment->id)->firstOrFail();
+
+        // 1. Set max_score = 50
+        $assignment->update(['max_score' => 50]);
+
+        // Coba input skor 60 (> 50) -> ditolak 422
+        $overLimitRes = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/submissions/{$submission->id}/grade", [
+                'score' => 60,
+                'feedback' => 'Melebihi max_score tugas',
+            ]);
+        $overLimitRes->assertStatus(422)
+            ->assertJsonValidationErrors(['score']);
+
+        // Input skor 45 (<= 50) -> sukses 200
+        $validRes = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/submissions/{$submission->id}/grade", [
+                'score' => 45,
+                'feedback' => 'Sesuai batas dinamis',
+            ]);
+        $validRes->assertOk();
+        $this->assertEquals(45, (float) $submission->fresh()->score);
+
+        // 2. Set max_score = 150
+        $assignment->update(['max_score' => 150]);
+
+        // Input skor 120 (> 100, tapi <= 150) -> sekarang diterima
+        $above100Res = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/submissions/{$submission->id}/grade", [
+                'score' => 120,
+            ]);
+        $above100Res->assertOk();
+        $this->assertEquals(120, (float) $submission->fresh()->score);
+
+        // Input skor 160 (> 150) -> ditolak 422
+        $overNewMaxRes = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/submissions/{$submission->id}/grade", [
+                'score' => 160,
+            ]);
+        $overNewMaxRes->assertStatus(422)
+            ->assertJsonValidationErrors(['score']);
+    }
+
+    /**
      * Jalur 5: Publikasi nilai ujian CBT ke Buku Nilai (POST /api/v1/exams/{id}/publish-gradebook)
      */
     public function test_path_5_cbt_publish_gradebook_rejects_locked_period(): void

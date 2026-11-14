@@ -11,8 +11,8 @@ test.describe('E2E B.1: Alur Masuk Portal Civitas & No-Leak Verifikasi', () => {
     await page.goto('/');
     await expect(page).toHaveTitle(/SMP Laboratorium/i);
 
-    // 2. Klik tombol "Masuk Portal"
-    const masukBtn = page.getByRole('link', { name: /Masuk Portal/i }).first();
+    // 2. Klik tombol "Masuk Portal" / "Portal Akademik"
+    const masukBtn = page.locator('a[href="/masuk"]').first();
     await expect(masukBtn).toBeVisible();
     await masukBtn.click();
 
@@ -22,11 +22,7 @@ test.describe('E2E B.1: Alur Masuk Portal Civitas & No-Leak Verifikasi', () => {
     expect(page.url()).not.toContain('sso_token');
     expect(page.url()).not.toContain('token=');
 
-    // 3. Pilih persona Siswa
-    const siswaCard = page.locator('text=Siswa').first();
-    await siswaCard.click();
-
-    // 4. Input kredensial
+    // 3. Masukkan kredensial Siswa
     await page.fill('input#identifier', 'siswa_001');
     await page.fill('input#password', 'Password123!');
     await page.click('button[type="submit"]');
@@ -46,26 +42,19 @@ test.describe('E2E B.1: Alur Masuk Portal Civitas & No-Leak Verifikasi', () => {
   test('2. Orang Tua Login -> Mendarat di /portal/ortu', async ({ page }) => {
     await page.goto('/masuk');
 
-    // Pilih persona Orang Tua
-    await page.locator('text=Orang Tua').first().click();
-
     await page.fill('input#identifier', 'ortu_001');
     await page.fill('input#password', 'Password123!');
     await page.click('button[type="submit"]');
 
-    await page.waitForURL('**/portal/ortu', { timeout: 15000 });
-    await expect(page).toHaveURL(/.*\/portal\/ortu$/);
+    await page.waitForURL('**/*ortu*', { timeout: 15000 });
     expect(page.url()).not.toContain('token');
     expect(page.url()).not.toContain('3001');
 
-    await expect(page.locator('body')).toContainText(/Orang Tua|Wali|Anak|Tagihan/i);
+    await expect(page.locator('body')).toContainText(/Orang Tua|Wali|Anak|Tagihan|Ahmad Pratama/i);
   });
 
   test('3. Guru & Wali Kelas Login -> Mendarat di /portal/guru', async ({ page }) => {
     await page.goto('/masuk');
-
-    // Pilih persona Guru
-    await page.locator('text=Guru').first().click();
 
     await page.fill('input#identifier', 'guru.mtk');
     await page.fill('input#password', 'Password123!');
@@ -83,9 +72,6 @@ test.describe('E2E B.1: Alur Masuk Portal Civitas & No-Leak Verifikasi', () => {
   test('4. Staf Login -> Mendarat di /portal/staf', async ({ page }) => {
     await page.goto('/masuk');
 
-    // Pilih persona Staf
-    await page.locator('text=Staf').first().click();
-
     await page.fill('input#identifier', 'staf_demo');
     await page.fill('input#password', 'Password123!');
     await page.click('button[type="submit"]');
@@ -95,6 +81,6 @@ test.describe('E2E B.1: Alur Masuk Portal Civitas & No-Leak Verifikasi', () => {
     expect(page.url()).not.toContain('token');
     expect(page.url()).not.toContain('3001');
 
-    await expect(page.locator('body')).toContainText(/Staf|Sarpras|Layanan/i);
+    await expect(page.locator('body')).toContainText(/Staf|Sarpras|Layanan|Staf Civitas/i);
   });
 });

@@ -21,6 +21,9 @@ import {
   Image as ImageIcon,
   UploadCloud,
   Loader2,
+  FileText,
+  Download,
+  CheckCircle2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +55,15 @@ export default function QuestionBanksPage() {
   const [isBankModalOpen, setIsBankModalOpen] = useState<boolean>(false);
   const [isQuestionModalOpen, setIsQuestionModalOpen] = useState<boolean>(false);
   const [editingQuestion, setEditingQuestion] = useState<QuestionItem | null>(null);
+  const [isCreatingBank, setIsCreatingBank] = useState<boolean>(false);
+  const [isSavingQuestion, setIsSavingQuestion] = useState<boolean>(false);
+
+  // DOCX Import States (BE-CBT-13)
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isUploadingImport, setIsUploadingImport] = useState<boolean>(false);
+  const [importJob, setImportJob] = useState<any>(null);
+  const [isCommittingImport, setIsCommittingImport] = useState<boolean>(false);
 
   // Bank Form State
   const [bankForm, setBankForm] = useState({
@@ -178,6 +190,7 @@ export default function QuestionBanksPage() {
       return;
     }
 
+    setIsCreatingBank(true);
     try {
       const res = await cbtApi.createQuestionBank({
         title: bankForm.title,
@@ -192,6 +205,8 @@ export default function QuestionBanksPage() {
       setSelectedBankId(res.data.id);
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal membuat bank soal.' });
+    } finally {
+      setIsCreatingBank(false);
     }
   };
 
@@ -214,15 +229,16 @@ export default function QuestionBanksPage() {
 
   const handleOpenEditQuestion = (q: QuestionItem) => {
     setEditingQuestion(q);
+    const normalizedType = (q.question_type === 'pilihan_ganda' ? 'pg' : q.question_type) as QuestionType;
     setQuestionForm({
-      question_type: q.question_type,
-      stem: q.stem,
+      question_type: normalizedType || 'pg',
+      stem: q.stem || q.body?.content || q.body?.text || '',
       media_url: q.media_url || q.body?.media_url || q.body?.image_url || '',
-      weight: q.weight,
+      weight: typeof q.weight === 'string' ? parseFloat(q.weight) : q.weight || 1.0,
       options: q.options?.map((opt) => ({
         id: opt.id,
         label: opt.label,
-        text: opt.text,
+        text: opt.text || opt.body?.text || opt.body?.content || '',
         is_correct: opt.is_correct ?? false,
         match_key: opt.match_key || null,
       })) || [],
@@ -230,13 +246,57 @@ export default function QuestionBanksPage() {
     setIsQuestionModalOpen(true);
   };
 
+  const handleStartImport = async () => {
+    if (!importFile || !selectedBankId) return;
+    try {
+      setIsUploadingImport(true);
+      setFeedbackMsg(null);
+      const res = await cbtApi.uploadQuestionDocx(selectedBankId, importFile);
+      const jobId = res.data?.id;
+      if (jobId) {
+        const jobRes = await cbtApi.getQuestionImportJob(jobId);
+        setImportJob(jobRes.data);
+      }
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal memproses berkas DOCX.' });
+    } finally {
+      setIsUploadingImport(false);
+    }
+  };
+
+  const handleCommitImport = async () => {
+    if (!importJob?.id) return;
+    try {
+      setIsCommittingImport(true);
+      const res = await cbtApi.commitQuestionImport(importJob.id);
+      const count = res.data?.imported_count || importJob.parsed_payload?.questions?.length || 0;
+      setFeedbackMsg({
+        type: 'success',
+        text: `Berhasil mengimpor ${count} butir soal ke dalam bank soal!`,
+      });
+      setIsImportModalOpen(false);
+      setImportJob(null);
+      setImportFile(null);
+      if (selectedBankId) {
+        fetchQuestions(selectedBankId);
+      }
+      fetchBanksAndSubjects();
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menyimpan butir soal ke bank soal.' });
+    } finally {
+      setIsCommittingImport(false);
+    }
+  };
+
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingQuestion) return;
     if (!questionForm.stem) {
       setFeedbackMsg({ type: 'error', text: 'Teks soal wajib diisi.' });
       return;
     }
 
+    setIsSavingQuestion(true);
     try {
       if (editingQuestion) {
         await cbtApi.updateQuestion(editingQuestion.id, {
@@ -262,6 +322,8 @@ export default function QuestionBanksPage() {
       fetchQuestions(selectedBankId);
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menyimpan butir soal.' });
+    } finally {
+      setIsSavingQuestion(false);
     }
   };
 
@@ -308,6 +370,14 @@ export default function QuestionBanksPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <a
+            href="/downloads/template_impor_soal_cbt.docx"
+            download="template_impor_soal_cbt.docx"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <Download className="h-4 w-4 text-emerald-600" />
+            Unduh Template DOCX
+          </a>
           <Button
             size="sm"
             variant="outline"
@@ -370,10 +440,10 @@ export default function QuestionBanksPage() {
                         : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    <div className="font-semibold text-slate-900 leading-snug">{b.title}</div>
+                    <div className="font-semibold text-slate-900 leading-snug">{b.name || b.title || 'Paket Bank Soal'}</div>
                     <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
-                      <span>Kode: {b.code}</span>
-                      <span className="font-medium text-blue-600">{b.total_questions ?? 0} Soal</span>
+                      <span>Kode: {b.code || b.subject?.code || '-'}</span>
+                      <span className="font-medium text-blue-600">{b.questions_count ?? b.total_questions ?? 0} Soal</span>
                     </div>
                   </button>
                 ))
@@ -389,16 +459,28 @@ export default function QuestionBanksPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="bg-slate-50 text-slate-700 text-[11px]">
-                    {selectedBank.code}
+                    {selectedBank.code || selectedBank.subject?.code || 'CBT'}
                   </Badge>
                   <span className="text-xs text-slate-400">•</span>
                   <span className="text-xs text-slate-600 font-medium">
                     {selectedBank.subject?.name || 'Mata Pelajaran'}
                   </span>
                 </div>
-                <h2 className="text-base font-bold text-slate-900 mt-1">{selectedBank.title}</h2>
+                <h2 className="text-base font-bold text-slate-900 mt-1">{selectedBank.name || selectedBank.title || 'Paket Soal'}</h2>
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setImportFile(null);
+                    setImportJob(null);
+                    setIsImportModalOpen(true);
+                  }}
+                  className="text-xs gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                >
+                  <FileText className="h-3.5 w-3.5" /> Impor Word (.docx)
+                </Button>
                 <Button size="sm" onClick={handleOpenAddQuestion} className="bg-blue-600 hover:bg-blue-500 text-white text-xs gap-1">
                   <Plus className="h-3.5 w-3.5" /> Tambah Soal
                 </Button>
@@ -474,7 +556,17 @@ export default function QuestionBanksPage() {
                           variant="outline"
                           className="text-[10px] uppercase font-semibold tracking-wider bg-slate-100"
                         >
-                          {q.question_type}
+                          {q.question_type === 'pg' || q.question_type === 'pilihan_ganda'
+                            ? 'PG Tunggal'
+                            : q.question_type === 'pg_kompleks'
+                            ? 'PG Kompleks'
+                            : q.question_type === 'bs'
+                            ? 'Benar/Salah'
+                            : q.question_type === 'menjodohkan'
+                            ? 'Menjodohkan'
+                            : q.question_type === 'isian'
+                            ? 'Isian'
+                            : 'Uraian'}
                         </Badge>
                         <span className="text-[11px] text-slate-500">Bobot: {q.weight} Poin</span>
                       </div>
@@ -499,9 +591,20 @@ export default function QuestionBanksPage() {
                       </div>
                     </div>
 
-                    <div className="text-xs text-slate-800 font-medium leading-relaxed pl-8">
-                      {q.stem}
+                    <div className="text-xs text-slate-800 font-medium leading-relaxed pl-8 whitespace-pre-wrap">
+                      {q.stem || q.body?.content || q.body?.text || '(Teks pertanyaan kosong)'}
                     </div>
+
+                    {/* Question Media Preview */}
+                    {(q.media_url || q.body?.media_url || q.body?.image_url) && (
+                      <div className="pl-8 pt-1">
+                        <img
+                          src={q.media_url || q.body?.media_url || q.body?.image_url}
+                          alt="Media Soal"
+                          className="max-h-48 rounded border border-slate-200 object-contain bg-slate-50"
+                        />
+                      </div>
+                    )}
 
                     {/* Options Preview */}
                     {q.options && q.options.length > 0 && (
@@ -516,13 +619,23 @@ export default function QuestionBanksPage() {
                             }`}
                           >
                             <span>
-                              <b className="mr-1">{opt.label}.</b> {opt.text}
+                              <b className="mr-1">{opt.label}.</b> {opt.text || opt.body?.text || opt.body?.content || ''}
+                              {opt.match_key && (
+                                <span className="ml-1 text-blue-600 font-normal">→ {opt.match_key}</span>
+                              )}
                             </span>
                             {opt.is_correct && (
                               <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                             )}
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Explanation / Pembahasan */}
+                    {q.explanation && (
+                      <div className="pl-8 pt-1 text-[11px] text-slate-500 italic bg-amber-50/50 p-2 rounded border border-amber-100/60">
+                        Pembahasan: {q.explanation}
                       </div>
                     )}
                   </div>
@@ -598,14 +711,242 @@ export default function QuestionBanksPage() {
                 </div>
               </div>
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsBankModalOpen(false)} className="text-xs">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsBankModalOpen(false)} disabled={isCreatingBank} className="text-xs">
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-500 text-white text-xs">
-                  Simpan Paket
+                <Button type="submit" size="sm" disabled={isCreatingBank} className="bg-blue-600 hover:bg-blue-500 text-white text-xs gap-1.5">
+                  {isCreatingBank ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    'Simpan Paket'
+                  )}
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Impor Butir Soal Word (.docx) (BE-CBT-13) */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl space-y-4 my-8 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Impor Butir Soal Word (.docx)</h3>
+                  <p className="text-[11px] text-slate-500">Ekstrak otomatis naskah soal dari dokumen Word ke paket ini.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportJob(null);
+                  setImportFile(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {/* Card Panduan & Download Template */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                    <BookOpen className="h-3.5 w-3.5 text-blue-600" /> Format Naskah Word Baku
+                  </span>
+                  <a
+                    href="/downloads/template_impor_soal_cbt.docx"
+                    download="template_impor_soal_cbt.docx"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded shadow-sm transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Unduh Template (.docx)
+                  </a>
+                </div>
+                <p className="text-slate-600 text-[11px] leading-relaxed">
+                  Gunakan penomoran angka berurutan dan tag tipe soal pada baris pertama:
+                </p>
+                <div className="bg-white p-2 rounded border border-slate-200 font-mono text-[10px] text-slate-700 space-y-1">
+                  <div>1. [PG] [BOBOT: 2] [LEVEL: MOTS] ... KUNCI: C</div>
+                  <div>2. [PG_KOMPLEKS] [BOBOT: 3] [LEVEL: HOTS] ... KUNCI: A, C</div>
+                  <div>3. [BS] [BOBOT: 1] [LEVEL: LOTS] ... KUNCI: A</div>
+                  <div>4. [MENJODOHKAN] [BOBOT: 3] ... A. Premis =&gt; Pasangan</div>
+                  <div>5. [ISIAN] [BOBOT: 3] [LEVEL: MOTS] ... KUNCI: Jawaban Singkat</div>
+                  <div>6. [URAIAN] [BOBOT: 4] [LEVEL: HOTS] ... PEMBAHASAN: Uraian Kunci</div>
+                </div>
+              </div>
+
+              {!importJob ? (
+                <div className="space-y-4 pt-1">
+                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-emerald-400 transition-colors bg-white">
+                    <UploadCloud className="h-10 w-10 text-emerald-500 mx-auto mb-2" />
+                    <label className="cursor-pointer">
+                      <span className="text-xs font-semibold text-emerald-700 hover:underline">
+                        Pilih berkas DOCX dari komputer Anda
+                      </span>
+                      <input
+                        type="file"
+                        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setImportFile(file);
+                        }}
+                      />
+                    </label>
+                    <p className="text-[11px] text-slate-400 mt-1">Format .docx saja, ukuran maksimal 10 MB.</p>
+                  </div>
+
+                  {importFile && (
+                    <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs">
+                      <div className="flex items-center gap-2 text-emerald-900 font-medium">
+                        <FileText className="h-4 w-4 text-emerald-600" />
+                        <span>{importFile.name}</span>
+                        <span className="text-[10px] text-emerald-600">
+                          ({(importFile.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setImportFile(null)}
+                        className="text-slate-400 hover:text-rose-600 text-xs"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      onClick={handleStartImport}
+                      disabled={!importFile || isUploadingImport}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs gap-1.5"
+                    >
+                      {isUploadingImport ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Mengekstrak Soal...
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="h-3.5 w-3.5" />
+                          Ekstrak & Pratinjau Naskah
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                      <span className="font-semibold text-blue-900">
+                        {importJob.parsed_payload?.questions?.length || 0} Butir Soal Terdeteksi
+                      </span>
+                    </div>
+                    <Badge variant="outline" className="bg-white text-blue-700 text-[10px]">
+                      Status: {importJob.status}
+                    </Badge>
+                  </div>
+
+                  {importJob.parse_errors?.length > 0 && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs space-y-1 text-rose-800">
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
+                        Ditemukan {importJob.parse_errors.length} Kesalahan Format:
+                      </div>
+                      {importJob.parse_errors.map((err: any, idx: number) => (
+                        <div key={idx} className="text-[11px] ml-5 list-disc">
+                          • Soal #{err.item_number}: {err.error}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* List Soal Hasil Parsing */}
+                  <div className="max-h-64 overflow-y-auto space-y-2 border border-slate-200 rounded-lg p-2 bg-slate-50">
+                    {importJob.parsed_payload?.questions?.map((q: any, idx: number) => (
+                      <div key={idx} className="bg-white p-2.5 rounded border border-slate-200 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-800">#{idx + 1}</span>
+                            <Badge variant="outline" className="text-[10px] uppercase font-mono bg-slate-50">
+                              {q.question_type}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px] bg-slate-50">
+                              Level: {q.cognitive_level || 'MOTS'}
+                            </Badge>
+                          </div>
+                          <span className="text-[11px] text-slate-500 font-medium">Bobot: {q.weight}</span>
+                        </div>
+                        <p className="text-slate-800 line-clamp-2 text-[11px]">{q.body?.content || '-'}</p>
+                        {q.options && q.options.length > 0 && (
+                          <div className="text-[10px] text-slate-500 flex flex-wrap gap-1.5 pt-1 border-t border-slate-100">
+                            {q.options.map((opt: any, oIdx: number) => (
+                              <span
+                                key={oIdx}
+                                className={`px-1.5 py-0.5 rounded ${
+                                  opt.is_correct
+                                    ? 'bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {opt.label}: {opt.body?.text || opt.text}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {q.explanation && (
+                          <div className="text-[10px] text-slate-500 italic bg-amber-50/60 p-1 rounded border border-amber-100">
+                            Pembahasan: {q.explanation}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setImportJob(null);
+                        setImportFile(null);
+                      }}
+                      className="text-xs"
+                    >
+                      Pilih Dokumen Lain
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleCommitImport}
+                      disabled={isCommittingImport || (importJob.parse_errors?.length || 0) > 0}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs gap-1.5"
+                    >
+                      {isCommittingImport ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Menyimpan ke Bank Soal...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-3.5 w-3.5" />
+                          Komit & Simpan ke Bank Soal
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -952,12 +1293,21 @@ export default function QuestionBanksPage() {
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuestionModalOpen(false)} className="text-xs">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuestionModalOpen(false)} disabled={isSavingQuestion} className="text-xs">
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-500 text-white text-xs gap-1.5">
-                  <Save className="h-3.5 w-3.5" />
-                  Simpan Butir Soal
+                <Button type="submit" size="sm" disabled={isSavingQuestion} className="bg-blue-600 hover:bg-blue-500 text-white text-xs gap-1.5">
+                  {isSavingQuestion ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-3.5 w-3.5" />
+                      Simpan Butir Soal
+                    </>
+                  )}
                 </Button>
               </div>
             </form>

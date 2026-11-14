@@ -35,6 +35,8 @@ dist/
 /apps/api/storage/logs/*.log
 /apps/api/public/storage
 /apps/api/database/database.sqlite
+documentations/
+documentations.zip
 **/seed-credentials.txt
 
 # Test artifacts and temporary load test tokens

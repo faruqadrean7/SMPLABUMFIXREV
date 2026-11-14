@@ -51,6 +51,8 @@ import {
 } from '@/lib/use-teacher-program-data';
 import { useTeacherClasses } from '@/lib/use-teacher-data';
 import { PermissionGate } from '@/components/shared/permission-gate';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 
 // =========================================================================
@@ -121,6 +123,17 @@ export default function TeacherProgramKhususPage() {
 
   const [inspectingTask, setInspectingTask] = useState<TeacherProgramTaskItem | null>(null);
   const [gradingSubmission, setGradingSubmission] = useState<TeacherTaskSubmissionItem | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    type: 'material' | 'task' | 'target';
+    id: string;
+    title: string;
+  }>({
+    isOpen: false,
+    type: 'material',
+    id: '',
+    title: '',
+  });
 
   // Queries
   const programFilter = selectedProgram !== 'all' ? selectedProgram : undefined;
@@ -285,6 +298,24 @@ export default function TeacherProgramKhususPage() {
       feedback: submission.feedback || '',
       status: (submission.status === 'perlu_revisi' ? 'perlu_revisi' : 'dinilai') as any,
     });
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      if (deleteConfirmation.type === 'material') {
+        await deleteMaterialMutation.mutateAsync(deleteConfirmation.id);
+        toast.success('Materi berhasil dihapus.');
+      } else if (deleteConfirmation.type === 'task') {
+        await deleteTaskMutation.mutateAsync(deleteConfirmation.id);
+        toast.success('Tugas berhasil dihapus.');
+      } else if (deleteConfirmation.type === 'target') {
+        await deleteTargetMutation.mutateAsync(deleteConfirmation.id);
+        toast.success('Target capaian berhasil dihapus.');
+      }
+      setDeleteConfirmation((prev) => ({ ...prev, isOpen: false }));
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Gagal menghapus item.', 'Kesalahan');
+    }
   };
 
   // Submit actions
@@ -535,9 +566,18 @@ export default function TeacherProgramKhususPage() {
               <div className="py-12 text-center border border-dashed border-slate-200 rounded-xl p-4">
                 <BookOpen className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-xs font-bold text-slate-700">Belum Ada Materi Program</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-3">
                   Klik tombol &quot;Tambah Materi&quot; untuk mengunggah bahan ajar baru.
                 </p>
+                <PermissionGate permission="program.manage">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenMaterialModal()}
+                    className="px-3.5 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-950 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Tambah Materi
+                  </button>
+                </PermissionGate>
               </div>
             )}
 
@@ -604,9 +644,12 @@ export default function TeacherProgramKhususPage() {
                               </button>
                               <button
                                 onClick={() => {
-                                  if (confirm('Yakin ingin menghapus materi ini?')) {
-                                    deleteMaterialMutation.mutate(mat.id);
-                                  }
+                                  setDeleteConfirmation({
+                                    isOpen: true,
+                                    type: 'material',
+                                    id: mat.id,
+                                    title: mat.title,
+                                  });
                                 }}
                                 className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
                                 title="Hapus Materi"
@@ -675,9 +718,18 @@ export default function TeacherProgramKhususPage() {
               <div className="py-12 text-center border border-dashed border-slate-200 rounded-xl p-4">
                 <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-xs font-bold text-slate-700">Belum Ada Tugas Program</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-3">
                   Klik tombol &quot;Tambah Tugas&quot; untuk membuat lembar penugasan baru.
                 </p>
+                <PermissionGate permission="program.manage">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTaskModal()}
+                    className="px-3.5 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-950 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Tambah Tugas
+                  </button>
+                </PermissionGate>
               </div>
             )}
 
@@ -746,9 +798,12 @@ export default function TeacherProgramKhususPage() {
                               </button>
                               <button
                                 onClick={() => {
-                                  if (confirm('Yakin ingin menghapus tugas ini?')) {
-                                    deleteTaskMutation.mutate(task.id);
-                                  }
+                                  setDeleteConfirmation({
+                                    isOpen: true,
+                                    type: 'task',
+                                    id: task.id,
+                                    title: task.title,
+                                  });
                                 }}
                                 className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
                                 title="Hapus Tugas"
@@ -817,9 +872,18 @@ export default function TeacherProgramKhususPage() {
               <div className="py-12 text-center border border-dashed border-slate-200 rounded-xl p-4">
                 <Target className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-xs font-bold text-slate-700">Belum Ada Target Capaian</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-3">
                   Klik tombol &quot;Tambah Target Siswa&quot; untuk menetapkan target pembelajaran baru.
                 </p>
+                <PermissionGate permission="program.manage">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTargetModal()}
+                    className="px-3.5 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-950 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Tambah Target Siswa
+                  </button>
+                </PermissionGate>
               </div>
             )}
 
@@ -890,9 +954,12 @@ export default function TeacherProgramKhususPage() {
                               </button>
                               <button
                                 onClick={() => {
-                                  if (confirm('Yakin ingin menghapus target ini?')) {
-                                    deleteTargetMutation.mutate(target.id);
-                                  }
+                                  setDeleteConfirmation({
+                                    isOpen: true,
+                                    type: 'target',
+                                    id: target.id,
+                                    title: target.title,
+                                  });
                                 }}
                                 className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
                                 title="Hapus Target"
@@ -1522,6 +1589,36 @@ export default function TeacherProgramKhususPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirmation.isOpen}
+        onClose={() => setDeleteConfirmation((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={handleConfirmDelete}
+        title={
+          deleteConfirmation.type === 'material'
+            ? 'Hapus Materi'
+            : deleteConfirmation.type === 'task'
+            ? 'Hapus Tugas'
+            : 'Hapus Target Capaian'
+        }
+        description={
+          deleteConfirmation.type === 'material'
+            ? 'Apakah Anda yakin ingin menghapus materi ini? Tindakan ini tidak dapat dibatalkan.'
+            : deleteConfirmation.type === 'task'
+            ? 'Apakah Anda yakin ingin menghapus tugas ini? Tindakan ini tidak dapat dibatalkan.'
+            : 'Apakah Anda yakin ingin menghapus target capaian ini? Tindakan ini tidak dapat dibatalkan.'
+        }
+        affectedItemName={deleteConfirmation.title}
+        confirmLabel="Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+        isLoading={
+          deleteMaterialMutation.isPending ||
+          deleteTaskMutation.isPending ||
+          deleteTargetMutation.isPending
+        }
+      />
     </div>
   );
 }

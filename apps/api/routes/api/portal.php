@@ -7,6 +7,13 @@ use App\Http\Controllers\Api\V1\MeStaffController;
 use App\Http\Controllers\Api\V1\MeStudentController;
 use App\Http\Controllers\Api\V1\MeStudentProgramController;
 use App\Http\Controllers\Api\V1\MeTeacherController;
+use App\Http\Controllers\Api\V1\Teacher\TeacherAttendanceController;
+use App\Http\Controllers\Api\V1\Teacher\TeacherDashboardController;
+use App\Http\Controllers\Api\V1\Teacher\TeacherExamController;
+use App\Http\Controllers\Api\V1\Teacher\TeacherGradingController;
+use App\Http\Controllers\Api\V1\Teacher\TeacherHomeroomController;
+use App\Http\Controllers\Api\V1\Teacher\TeacherLeaveController;
+use App\Http\Controllers\Api\V1\Teacher\TeacherLmsController;
 use App\Http\Controllers\Api\V1\TeacherController;
 use App\Http\Controllers\Api\V1\TeacherProgramController;
 use Illuminate\Support\Facades\Route;
@@ -28,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{child}/report-cards', [MeChildController::class, 'reportCards']);
         Route::get('/{child}/character-notes', [MeChildController::class, 'characterNotes']);
         Route::get('/{child}/progress-reports', [MeChildController::class, 'progressReports']);
+        Route::get('/{child}/points', [MeChildController::class, 'points']);
         Route::get('/{child}/invoices', [MeFinanceController::class, 'childInvoices']);
     });
 
@@ -41,6 +49,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/tasks/{id}/submit', [MeStudentController::class, 'submitTask']);
         Route::get('/counseling-requests', [MeStudentController::class, 'counselingRequests']);
         Route::post('/counseling-requests', [MeStudentController::class, 'storeCounselingRequest']);
+        Route::get('/points', [MeStudentController::class, 'points']);
+        Route::get('/extracurriculars', [MeStudentController::class, 'extracurriculars']);
+        Route::post('/extracurriculars/register', [MeStudentController::class, 'registerExtracurricular']);
         Route::post('/program/mood', [MeStudentController::class, 'submitDailyMood']);
         Route::post('/program/mutabaah', [MeStudentController::class, 'submitMutabaah']);
         // BE-PROG-01: Program Khusus (Tahfidz, ICP, Inklusi)
@@ -56,55 +67,70 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/payment-providers', [MeFinanceController::class, 'paymentProviders']);
     });
 
-    // Portal Guru
+    // Portal Guru (BE-02: De-monolith MeTeacherController ke Sub-Domain Controllers)
     Route::prefix('me/teacher')->group(function () {
-        Route::get('/dashboard', [MeTeacherController::class, 'dashboard']);
-        Route::get('/subjects', [MeTeacherController::class, 'subjects']);
-        Route::get('/assignments/{id}', [MeTeacherController::class, 'showAssignment']);
-        Route::get('/classes', [MeTeacherController::class, 'classes']);
-        Route::get('/schedules', [MeTeacherController::class, 'schedules']);
-        Route::get('/classes/{classId}/students', [MeTeacherController::class, 'classStudents']);
-        Route::get('/attendance/sessions', [MeTeacherController::class, 'attendanceSessions']);
-        Route::post('/attendance/sessions', [MeTeacherController::class, 'recordAttendanceSession']);
-        Route::get('/journals', [MeTeacherController::class, 'journals']);
-        Route::post('/journals', [MeTeacherController::class, 'storeJournal']);
-        Route::get('/grade-components', [MeTeacherController::class, 'gradeComponents']);
-        Route::get('/grades', [MeTeacherController::class, 'grades']);
-        Route::post('/grades/bulk', [MeTeacherController::class, 'updateBulkGrades']);
-        Route::get('/materials', [MeTeacherController::class, 'materials']);
-        Route::post('/materials', [MeTeacherController::class, 'storeMaterial']);
-        Route::get('/assignments', [MeTeacherController::class, 'assignments']);
-        Route::post('/assignments', [MeTeacherController::class, 'storeAssignment']);
-        Route::get('/assignments/{id}/submissions', [MeTeacherController::class, 'submissions']);
-        Route::post('/submissions/{id}/grade', [MeTeacherController::class, 'gradeSubmission']);
-        Route::get('/exams', [MeTeacherController::class, 'exams']);
-        Route::post('/exams', [MeTeacherController::class, 'storeExam']);
-        Route::get('/question-banks', [MeTeacherController::class, 'questionBanks']);
-        Route::post('/question-banks', [MeTeacherController::class, 'storeQuestionBank']);
-        Route::get('/question-banks/{id}', [MeTeacherController::class, 'showQuestionBank']);
-        Route::put('/question-banks/{id}', [MeTeacherController::class, 'updateQuestionBank']);
-        Route::delete('/question-banks/{id}', [MeTeacherController::class, 'destroyQuestionBank']);
-        Route::post('/question-banks/{id}/questions', [MeTeacherController::class, 'storeQuestion']);
-        Route::get('/questions', [MeTeacherController::class, 'questions']);
-        Route::post('/questions', [MeTeacherController::class, 'storeDirectQuestion']);
-        Route::get('/questions/{id}', [MeTeacherController::class, 'showQuestion']);
-        Route::put('/questions/{id}', [MeTeacherController::class, 'updateQuestion']);
-        Route::delete('/questions/{id}', [MeTeacherController::class, 'destroyQuestion']);
-        Route::get('/leave-requests', [MeTeacherController::class, 'leaveRequests']);
-        Route::post('/leave-requests', [MeTeacherController::class, 'storeLeaveRequest']);
-        Route::get('/self-attendance', [MeTeacherController::class, 'selfAttendance']);
-        Route::post('/self-attendance', [MeTeacherController::class, 'recordSelfAttendance']);
-        Route::get('/homeroom', [MeTeacherController::class, 'homeroom']);
+        // Sub-domain 1: Dashboard, Jadwal & Kelas
+        Route::get('/dashboard', [TeacherDashboardController::class, 'dashboard']);
+        Route::get('/subjects', [TeacherDashboardController::class, 'subjects']);
+        Route::get('/classes', [TeacherDashboardController::class, 'classes']);
+        Route::get('/schedules', [TeacherDashboardController::class, 'schedules']);
+        Route::get('/classes/{classId}/students', [TeacherDashboardController::class, 'classStudents']);
 
-        // Remediasi Kesenjangan Portal Guru (Fitur A - E)
-        Route::get('/homeroom/leave-requests', [MeTeacherController::class, 'homeroomLeaveRequests']);
-        Route::patch('/homeroom/leave-requests/{id}/decision', [MeTeacherController::class, 'decideHomeroomLeaveRequest']);
-        Route::post('/student-points', [MeTeacherController::class, 'storeStudentPoint']);
-        Route::post('/counseling-referrals', [MeTeacherController::class, 'storeCounselingReferral']);
-        Route::get('/facility-bookings', [MeTeacherController::class, 'facilityBookings']);
-        Route::post('/facility-bookings', [MeTeacherController::class, 'storeFacilityBooking']);
-        Route::post('/tickets', [MeTeacherController::class, 'storeTicket']);
-        Route::post('/grades/lock', [MeTeacherController::class, 'lockGrades']);
+        // Sub-domain 2: Presensi & Jurnal KBM
+        Route::get('/attendance/sessions', [TeacherAttendanceController::class, 'attendanceSessions']);
+        Route::post('/attendance/sessions', [TeacherAttendanceController::class, 'recordAttendanceSession']);
+        Route::get('/journals', [TeacherAttendanceController::class, 'journals']);
+        Route::post('/journals', [TeacherAttendanceController::class, 'storeJournal']);
+
+        // Sub-domain 3: Buku Nilai & Penguncian Ledger
+        Route::get('/grade-components', [TeacherGradingController::class, 'gradeComponents']);
+        Route::get('/grades', [TeacherGradingController::class, 'grades']);
+        Route::post('/grades/bulk', [TeacherGradingController::class, 'updateBulkGrades']);
+        Route::post('/grades/lock', [TeacherGradingController::class, 'lockGrades']);
+
+        // Sub-domain 4: LMS (Materi & Tugas)
+        Route::get('/materials', [TeacherLmsController::class, 'materials']);
+        Route::post('/materials', [TeacherLmsController::class, 'storeMaterial']);
+        Route::get('/assignments', [TeacherLmsController::class, 'assignments']);
+        Route::post('/assignments', [TeacherLmsController::class, 'storeAssignment']);
+        Route::get('/assignments/{id}', [TeacherLmsController::class, 'showAssignment']);
+        Route::get('/assignments/{id}/submissions', [TeacherLmsController::class, 'submissions']);
+        Route::post('/submissions/{id}/grade', [TeacherLmsController::class, 'gradeSubmission']);
+
+        // Sub-domain 5: Ujian & Bank Soal CBT
+        Route::get('/exams', [TeacherExamController::class, 'exams']);
+        Route::post('/exams', [TeacherExamController::class, 'storeExam']);
+        Route::get('/question-banks', [TeacherExamController::class, 'questionBanks']);
+        Route::post('/question-banks', [TeacherExamController::class, 'storeQuestionBank']);
+        Route::get('/question-banks/{id}', [TeacherExamController::class, 'showQuestionBank']);
+        Route::put('/question-banks/{id}', [TeacherExamController::class, 'updateQuestionBank']);
+        Route::delete('/question-banks/{id}', [TeacherExamController::class, 'destroyQuestionBank']);
+        Route::post('/question-banks/{id}/questions', [TeacherExamController::class, 'storeQuestion']);
+        Route::get('/questions', [TeacherExamController::class, 'questions']);
+        Route::post('/questions', [TeacherExamController::class, 'storeDirectQuestion']);
+        Route::get('/questions/{id}', [TeacherExamController::class, 'showQuestion']);
+        Route::put('/questions/{id}', [TeacherExamController::class, 'updateQuestion']);
+        Route::delete('/questions/{id}', [TeacherExamController::class, 'destroyQuestion']);
+
+        // Sub-domain 6: Perizinan & Presensi Mandiri Guru
+        Route::get('/leave-requests', [TeacherLeaveController::class, 'leaveRequests']);
+        Route::post('/leave-requests', [TeacherLeaveController::class, 'storeLeaveRequest']);
+        Route::get('/self-attendance', [TeacherLeaveController::class, 'selfAttendance']);
+        Route::post('/self-attendance', [TeacherLeaveController::class, 'recordSelfAttendance']);
+
+        // Sub-domain 7: Wali Kelas, Poin, Konseling, Sarpras & Tiket
+        Route::get('/homeroom', [TeacherHomeroomController::class, 'homeroom']);
+        Route::get('/homeroom/leave-requests', [TeacherHomeroomController::class, 'homeroomLeaveRequests']);
+        Route::patch('/homeroom/leave-requests/{id}/decision', [TeacherHomeroomController::class, 'decideHomeroomLeaveRequest']);
+        Route::get('/student-points', [TeacherHomeroomController::class, 'studentPoints']);
+        Route::post('/student-points', [TeacherHomeroomController::class, 'storeStudentPoint']);
+        Route::get('/counseling-referrals', [TeacherHomeroomController::class, 'counselingReferrals']);
+        Route::post('/counseling-referrals', [TeacherHomeroomController::class, 'storeCounselingReferral']);
+        Route::get('/facilities', [TeacherHomeroomController::class, 'facilities']);
+        Route::get('/facility-bookings', [TeacherHomeroomController::class, 'facilityBookings']);
+        Route::post('/facility-bookings', [TeacherHomeroomController::class, 'storeFacilityBooking']);
+        Route::get('/tickets', [TeacherHomeroomController::class, 'tickets']);
+        Route::post('/tickets', [TeacherHomeroomController::class, 'storeTicket']);
     });
 
     // Portal Staf

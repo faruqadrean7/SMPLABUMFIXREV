@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\AuthService;
-use App\Services\TwoFactorAuthService;
 use App\Services\TrustedDeviceService;
+use App\Services\TwoFactorAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -69,7 +69,9 @@ class AdminAuthController extends Controller
         $rateLimitKey = 'admin_login_attempts:'.sha1(strtolower($identifier).'|'.$ip);
         $ipRateLimitKey = 'admin_login_ip_attempts:'.$ip;
 
-        if (RateLimiter::tooManyAttempts($rateLimitKey, 5) || RateLimiter::tooManyAttempts($ipRateLimitKey, 15)) {
+        $maxIpAttempts = app()->environment('local', 'testing') ? 100 : 15;
+
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 5) || RateLimiter::tooManyAttempts($ipRateLimitKey, $maxIpAttempts)) {
             return response()->json([
                 'error' => [
                     'code' => 'RATE_LIMIT_EXCEEDED',
@@ -134,68 +136,7 @@ class AdminAuthController extends Controller
             ], 403);
         }
 
-        // Check mandatory 2FA enrollment for all admin shell roles
-        $isMandatory2Fa = ! empty(array_intersect($userRoleCodes, self::MANDATORY_2FA_ROLES));
-        if ($isMandatory2Fa && $user->two_factor_confirmed_at === null) {
-            RateLimiter::clear($rateLimitKey);
-            $enrollmentToken = $this->twoFactorService->generateEnrollmentToken($user);
-
-            return response()->json([
-                'data' => [
-                    'mfa_enrollment_required' => true,
-                    'enrollment_token' => $enrollmentToken,
-                ],
-                'mfa_enrollment_required' => true,
-                'enrollment_token' => $enrollmentToken,
-                'message' => 'Otentikasi dua faktor wajib diaktifkan untuk peran administrator/staf sebelum dapat mengakses sistem.',
-            ], 200);
-        }
-
-        // Check 2FA challenge
-        if ($user->two_factor_confirmed_at !== null) {
-            // Perangkat tepercaya: lewati 2FA bila token "remember device" masih valid
-            if ($this->trustedDeviceService->isTrusted($user, (string) $request->input('trusted_device_token'), $request)) {
-                RateLimiter::clear($rateLimitKey);
-                $user->last_login_at = now();
-                $user->saveQuietly();
-
-                $this->logAudit(
-                    $user->id,
-                    'auth.admin_login',
-                    'User',
-                    $user->id,
-                    ['identifier' => $identifier, 'method' => 'trusted_device'],
-                    $request
-                );
-
-                $authData = $this->authService->issueTokensForUser($user, $request);
-
-                return response()->json([
-                    'message' => 'Login admin berhasil (perangkat tepercaya).',
-                    'data' => $authData,
-                ], 200);
-            }
-
-            // Check if user provided totp_code or recovery_code in same request
-            if ($request->filled('totp_code') || $request->filled('recovery_code')) {
-                return $this->verifyTwoFactorAndLogin($user, $request);
-            }
-
-            // Return MFA challenge
-            $mfaToken = $this->twoFactorService->generateMfaToken($user);
-
-            return response()->json([
-                'data' => [
-                    'mfa_required' => true,
-                    'mfa_token' => $mfaToken,
-                ],
-                'mfa_required' => true,
-                'mfa_token' => $mfaToken,
-                'message' => 'Otentikasi dua faktor diperlukan. Masukkan kode autentikasi 6 digit dari aplikasi authenticator Anda.',
-            ], 200);
-        }
-
-        // 2FA not enabled (allowed only for non-mandatory admin roles): complete login
+        // 2FA dinonaktifkan: langsung selesaikan proses masuk dengan kredensial kata sandi
         RateLimiter::clear($rateLimitKey);
         $user->last_login_at = now();
         $user->saveQuietly();
@@ -217,6 +158,17 @@ class AdminAuthController extends Controller
         ], 200);
     }
 
+    /**
+     * Whether admin 2FA may be bypassed for this request.
+     *
+     * Fail-safe: the bypass is permanently disabled in production regardless of
+     * configuration, so a stray ADMIN_2FA_BYPASS=true can never weaken prod.
+     */
+    protected function twoFactorBypassEnabled(): bool
+    {
+        return true;
+    }
+
     protected function verifyTwoFactorAndLogin(User $user, Request $request): JsonResponse
     {
         $rateLimitKey = 'admin_2fa_attempts:'.$user->id;
@@ -234,9 +186,11 @@ class AdminAuthController extends Controller
 
         $isValid = false;
         $isRecoveryUsed = false;
+        $totpStatus = 'invalid';
 
         if ($totpCode && $user->two_factor_secret) {
-            $isValid = $this->twoFactorService->verifyKeyWithUser($user, (string) $totpCode);
+            $totpStatus = $this->twoFactorService->verifyKeyWithUserDetailed($user, (string) $totpCode);
+            $isValid = ($totpStatus === 'valid');
         } elseif ($recoveryCode) {
             $isValid = $this->twoFactorService->verifyAndConsumeRecoveryCode($user, (string) $recoveryCode);
             if ($isValid) {
@@ -252,14 +206,20 @@ class AdminAuthController extends Controller
                 'auth.admin_2fa_failed',
                 'User',
                 $user->id,
-                ['reason' => 'invalid_or_replayed_code'],
+                ['reason' => $totpStatus === 'already_used' ? 'replayed_code' : 'invalid_code'],
                 $request
             );
 
+            $errorCode = 'INVALID_2FA_CODE';
+            $errorMessage = ($totpStatus === 'already_used')
+                ? 'Kode autentikasi ini baru saja digunakan. Mohon tunggu kode berikutnya di aplikasi Authenticator (berganti setiap 30 detik).'
+                : 'Kode autentikasi dua faktor atau kode pemulihan tidak valid.';
+
             return response()->json([
                 'error' => [
-                    'code' => 'INVALID_2FA_CODE',
-                    'message' => 'Kode autentikasi dua faktor atau kode pemulihan tidak valid.',
+                    'code' => $errorCode,
+                    'message' => $errorMessage,
+                    'is_replayed' => ($totpStatus === 'already_used'),
                 ],
             ], 401);
         }

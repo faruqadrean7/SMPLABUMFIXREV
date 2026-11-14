@@ -25,6 +25,79 @@ import { Assignment } from '@/types/lms';
 import { useTeacherClasses, useTeacherSubjects } from '@/lib/use-teacher-data';
 import { toast } from 'sonner';
 
+export type AssignmentStatusType =
+  | 'locked'
+  | 'needs_grading'
+  | 'all_graded'
+  | 'past_due_empty'
+  | 'active';
+
+export interface AssignmentStatusInfo {
+  type: AssignmentStatusType;
+  label: string;
+  unreviewedCount: number;
+}
+
+// FIX-GURU-04: Helper untuk menghitung default tenggat selalu di masa depan (+7 hari).
+export function getDefaultDueDate(daysAhead = 7, baseDate: Date = new Date()): string {
+  const d = new Date(baseDate);
+  d.setDate(d.getDate() + daysAhead);
+  d.setHours(23, 59, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// FIX-GURU-04: Derivasi status tugas yang tepat
+// "Selesai Dinilai" HANYA jika ada pengumpulan (collected > 0) dan semua telah dinilai (unreviewed === 0).
+export function getAssignmentStatus(
+  assignment: {
+    is_locked?: boolean;
+    due_at: string;
+    submissions_count?: number;
+    reviewed_count?: number;
+  },
+  now: number = Date.now()
+): AssignmentStatusInfo {
+  if (assignment.is_locked) {
+    return { type: 'locked', label: 'Terkunci', unreviewedCount: 0 };
+  }
+
+  const collected = assignment.submissions_count || 0;
+  const reviewed = assignment.reviewed_count || 0;
+  const unreviewed = Math.max(0, collected - reviewed);
+  const isPastDue = new Date(assignment.due_at).getTime() < now;
+
+  if (unreviewed > 0) {
+    return {
+      type: 'needs_grading',
+      label: `${unreviewed} Perlu Dinilai`,
+      unreviewedCount: unreviewed,
+    };
+  }
+
+  if (collected > 0) {
+    return {
+      type: 'all_graded',
+      label: 'Selesai Dinilai',
+      unreviewedCount: 0,
+    };
+  }
+
+  if (isPastDue) {
+    return {
+      type: 'past_due_empty',
+      label: 'Berakhir (Tanpa Pengumpulan)',
+      unreviewedCount: 0,
+    };
+  }
+
+  return {
+    type: 'active',
+    label: 'Sedang Berjalan',
+    unreviewedCount: 0,
+  };
+}
+
 export default function GuruTugasPage() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,18 +114,20 @@ export default function GuruTugasPage() {
   const [subjectId, setSubjectId] = useState('');
   const [gradeComponentId, setGradeComponentId] = useState('');
   // FIX-GURU-04: default tenggat selalu di masa depan (+7 hari) agar tugas baru tidak langsung "lewat".
-  const [dueDate, setDueDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    d.setHours(23, 59, 0, 0);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  });
+  const [dueDate, setDueDate] = useState(() => getDefaultDueDate(7));
   const [maxScore, setMaxScore] = useState(100);
   const [allowLate, setAllowLate] = useState(true);
   const [lockAfterDue, setLockAfterDue] = useState(false);
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const handleOpenModal = () => {
+    const currentDueTime = new Date(dueDate).getTime();
+    if (isNaN(currentDueTime) || currentDueTime <= Date.now()) {
+      setDueDate(getDefaultDueDate(7));
+    }
+    setIsModalOpen(true);
+  };
 
   React.useEffect(() => {
     if (!classId && teacherClasses.length > 0) {
@@ -147,6 +222,7 @@ export default function GuruTugasPage() {
       setTitle('');
       setDescription('');
       setSelectedFile(null);
+      setDueDate(getDefaultDueDate(7));
     },
     onError: () => {
       toast.error('Gagal menerbitkan tugas. Periksa input data.');
@@ -190,7 +266,7 @@ export default function GuruTugasPage() {
   const totalSubmissions = assignments.reduce((acc, curr) => acc + (curr.submissions_count || 0), 0);
   const totalExpected = assignments.reduce((acc, curr) => acc + (curr.total_students || 32), 0);
   const complianceRate = totalExpected > 0 ? Math.round((totalSubmissions / totalExpected) * 100) : 92;
-  const needsGrading = assignments.reduce((acc, curr) => acc + ((curr.submissions_count || 0) - (curr.reviewed_count || 0)), 0);
+  const needsGrading = assignments.reduce((acc, curr) => acc + Math.max(0, (curr.submissions_count || 0) - (curr.reviewed_count || 0)), 0);
 
   return (
     <div className="flex flex-col gap-3 max-w-full xl:h-[calc(100vh-112px)] xl:overflow-hidden text-slate-900">
@@ -221,7 +297,7 @@ export default function GuruTugasPage() {
           </button>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenModal}
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-900 text-white text-xs font-black hover:bg-blue-950 transition-all shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -388,7 +464,7 @@ export default function GuruTugasPage() {
             </div>
             {!searchQuery && (
               <button
-                onClick={() => setIsModalOpen(true)}
+                onClick={handleOpenModal}
                 className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg bg-blue-900 text-white hover:bg-blue-950 shadow-xs"
               >
                 <Plus className="w-4 h-4" />
@@ -506,33 +582,46 @@ export default function GuruTugasPage() {
 
                       {/* Status Badges - SOLID */}
                       <td className="py-4 px-4 text-center whitespace-nowrap">
-                        {assignment.is_locked ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-rose-700 text-white shadow-xs">
-                            <Lock className="w-3.5 h-3.5" />
-                            Terkunci
-                          </span>
-                        ) : unreviewed > 0 ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-amber-600 text-white shadow-xs">
-                            <Clock className="w-3.5 h-3.5" />
-                            {unreviewed} Perlu Dinilai
-                          </span>
-                        ) : collected > 0 ? (
-                          /* FIX-GURU-04: "Selesai Dinilai" hanya jika ada pengumpulan & semua sudah dinilai. */
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-emerald-700 text-white shadow-xs">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Selesai Dinilai
-                          </span>
-                        ) : isPastDue ? (
-                          /* FIX-GURU-04: lewat tenggat tanpa satu pun pengumpulan. */
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-slate-500 text-white shadow-xs">
-                            <Clock className="w-3.5 h-3.5" />
-                            Berakhir (Tanpa Pengumpulan)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-blue-900 text-white shadow-xs">
-                            Sedang Berjalan
-                          </span>
-                        )}
+                        {(() => {
+                          const status = getAssignmentStatus(assignment);
+                          switch (status.type) {
+                            case 'locked':
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-rose-700 text-white shadow-xs">
+                                  <Lock className="w-3.5 h-3.5" />
+                                  {status.label}
+                                </span>
+                              );
+                            case 'needs_grading':
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-amber-600 text-white shadow-xs">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  {status.label}
+                                </span>
+                              );
+                            case 'all_graded':
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-emerald-700 text-white shadow-xs">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  {status.label}
+                                </span>
+                              );
+                            case 'past_due_empty':
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-slate-500 text-white shadow-xs">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  {status.label}
+                                </span>
+                              );
+                            case 'active':
+                            default:
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-blue-900 text-white shadow-xs">
+                                  {status.label}
+                                </span>
+                              );
+                          }
+                        })()}
                       </td>
 
                       {/* Aksi Button */}
@@ -668,10 +757,11 @@ export default function GuruTugasPage() {
               {/* Deadline & Max Score */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
+                  <label htmlFor="input-tenggat-waktu" className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5">
                     Tenggat Waktu (Due Date) <span className="text-rose-600">*</span>
                   </label>
                   <input
+                    id="input-tenggat-waktu"
                     type="datetime-local"
                     required
                     value={dueDate}

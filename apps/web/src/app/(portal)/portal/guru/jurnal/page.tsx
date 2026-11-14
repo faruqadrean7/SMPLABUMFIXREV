@@ -127,6 +127,8 @@ export default function JurnalPresensiPage() {
     mutationFn: async () => {
       return lmsApi.createJournalWithAttendance({
         schedule_id: selectedScheduleId,
+        class_id: activeSchedule?.class_id || selectedClassId || undefined,
+        subject_id: activeSchedule?.subject_id || undefined,
         session_date: sessionDate,
         topic,
         method,
@@ -841,77 +843,93 @@ export default function JurnalPresensiPage() {
 
           {/* List Riwayat Jurnal as Distinct Scrollable Cards */}
           <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 mt-3">
-            {journals.map((journal) => (
-              <div 
-                key={journal.id} 
-                className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-xs border-l-4 border-l-blue-900 space-y-2.5"
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-lg bg-blue-900 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
-                      #{journal.meeting_number}
-                    </span>
-                    <div>
-                      <h3 className="font-extrabold text-sm text-slate-900 leading-tight">
-                        {journal.topic}
-                      </h3>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
-                        <span className="font-bold text-slate-700">{journal.class?.name || 'Kelas IX-A'}</span>
-                        <span>•</span>
-                        <span>{journal.session_date}</span>
-                        <span>•</span>
-                        <span>{journal.time_range}</span>
-                        <span>•</span>
-                        <span className="text-slate-600">{journal.room_name}</span>
+            {isLoadingJournals ? (
+              <div className="py-12 text-center flex flex-col items-center justify-center gap-2">
+                <RefreshCw className="w-6 h-6 text-blue-900 animate-spin" />
+                <span className="text-xs font-bold text-slate-700">Memuat riwayat jurnal mengajar...</span>
+                <span className="text-[11px] text-slate-500">Mengambil data arsip KBM dan rekap presensi</span>
+              </div>
+            ) : journals.length === 0 ? (
+              <div className="py-12 text-center flex flex-col items-center justify-center gap-2">
+                <History className="w-8 h-8 text-slate-300" />
+                <span className="text-xs font-bold text-slate-700">Belum ada riwayat jurnal mengajar</span>
+                <span className="text-[11px] text-slate-500">
+                  Jurnal KBM yang Anda simpan akan muncul di sini beserta rekap presensi pertemuan.
+                </span>
+              </div>
+            ) : (
+              journals.map((journal) => (
+                <div 
+                  key={journal.id} 
+                  className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-xs border-l-4 border-l-blue-900 space-y-2.5"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-lg bg-blue-900 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                        #{journal.meeting_number}
+                      </span>
+                      <div>
+                        <h3 className="font-extrabold text-sm text-slate-900 leading-tight">
+                          {journal.topic}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
+                          <span className="font-bold text-slate-700">{journal.class?.name || 'Kelas IX-A'}</span>
+                          <span>•</span>
+                          <span>{journal.session_date}</span>
+                          <span>•</span>
+                          <span>{journal.time_range}</span>
+                          <span>•</span>
+                          <span className="text-slate-600">{journal.room_name}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Attendance Pill Group */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-800 text-white shadow-xs">
-                      H: {journal.attendance_summary.hadir}
-                    </span>
-                    {journal.attendance_summary.sakit > 0 && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-600 text-white shadow-xs">
-                        S: {journal.attendance_summary.sakit}
+                    {/* Attendance Pill Group */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-800 text-white shadow-xs">
+                        H: {journal.attendance_summary.hadir}
                       </span>
-                    )}
-                    {journal.attendance_summary.izin > 0 && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-800 text-white shadow-xs">
-                        I: {journal.attendance_summary.izin}
+                      {journal.attendance_summary.sakit > 0 && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-600 text-white shadow-xs">
+                          S: {journal.attendance_summary.sakit}
+                        </span>
+                      )}
+                      {journal.attendance_summary.izin > 0 && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-800 text-white shadow-xs">
+                          I: {journal.attendance_summary.izin}
+                        </span>
+                      )}
+                      {journal.attendance_summary.alpa > 0 && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-700 text-white shadow-xs">
+                          A: {journal.attendance_summary.alpa}
+                        </span>
+                      )}
+                      {journal.attendance_summary.terlambat > 0 && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-orange-600 text-white shadow-xs">
+                          T: {journal.attendance_summary.terlambat}
+                        </span>
+                      )}
+                      <span className="px-2.5 py-0.5 rounded text-[11px] font-black bg-slate-900 text-white ml-1 shadow-xs">
+                        {journal.attendance_summary.attendance_rate}%
                       </span>
-                    )}
-                    {journal.attendance_summary.alpa > 0 && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-700 text-white shadow-xs">
-                        A: {journal.attendance_summary.alpa}
-                      </span>
-                    )}
-                    {journal.attendance_summary.terlambat > 0 && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-orange-600 text-white shadow-xs">
-                        T: {journal.attendance_summary.terlambat}
-                      </span>
-                    )}
-                    <span className="px-2.5 py-0.5 rounded text-[11px] font-black bg-slate-900 text-white ml-1 shadow-xs">
-                      {journal.attendance_summary.attendance_rate}%
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-2.5 text-xs space-y-1">
-                  <div>
-                    <span className="font-bold text-slate-700">Metode KBM: </span>
-                    <span className="text-slate-600">{journal.method}</span>
-                  </div>
-                  {journal.notes && (
-                    <div>
-                      <span className="font-bold text-slate-700">Catatan Guru: </span>
-                      <span className="text-slate-600">{journal.notes}</span>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-2.5 text-xs space-y-1">
+                    <div>
+                      <span className="font-bold text-slate-700">Metode KBM: </span>
+                      <span className="text-slate-600">{journal.method}</span>
+                    </div>
+                    {journal.notes && (
+                      <div>
+                        <span className="font-bold text-slate-700">Catatan Guru: </span>
+                        <span className="text-slate-600">{journal.notes}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}

@@ -153,5 +153,6 @@ Aturan: migrasi DB dijalankan sebelum rilis aplikasi, kompatibel mundur satu ver
 Tabel utama memiliki `school_id`. Pada v1 nilainya tunggal; query selalu memfilter lewat konteks tenant sehingga bisa dikembangkan ke multi-sekolah tanpa refactor besar.
 
 ## Changelog
+- 1.2 (2026-11-04): Sinkronisasi arsitektur Fase 4 & 5 (GOV-01), penegasan modularisasi rute dan pemecahan controller guru per sub-domain di backend Laravel 11.
 - 1.1 (2026-10-27): Sinkronisasi arsitektur backend ke Laravel 11 (`apps/api`) modular monolith sesuai implementasi aktual repositori (Fase 5 GOV-01).
 - 1.0: Draf awal.

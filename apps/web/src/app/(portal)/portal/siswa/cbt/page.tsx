@@ -21,12 +21,13 @@ import {
   HelpCircle,
   Inbox
 } from 'lucide-react';
-import { StudentCBTExamItem } from '@/lib/mock-student-data';
+import { StudentCBTExamItem } from '@/types/student';
 import { useStudentExams, useStudentDashboard } from '@/lib/use-student-data';
 import { cbtApi } from '@/features/cbt/cbt-api';
 import { ExamListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { toast } from '@/components/ui/toast';
 
 export default function StudentCBTListPage() {
   const router = useRouter();
@@ -733,7 +734,7 @@ export default function StudentCBTListPage() {
               <div className="grid grid-cols-2 gap-2 pt-0.5">
                 <button
                   type="button"
-                  onClick={() => alert(activeExamToday ? 'Pemberitahuan telah dikirimkan ke layar pengawas lab. Pengawas akan menghampiri workstation Anda.' : 'Pemberitahuan kendala teknis telah terkirim ke tim teknisi lab.')}
+                  onClick={() => toast.info(activeExamToday ? 'Pemberitahuan telah dikirimkan ke layar pengawas lab. Pengawas akan menghampiri workstation Anda.' : 'Pemberitahuan kendala teknis telah terkirim ke tim teknisi lab.', 'Bantuan Pengawas')}
                   className="px-3 py-2 rounded-xl bg-blue-900 hover:bg-blue-950 text-white text-xs font-bold text-center transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <LifeBuoy className="w-3.5 h-3.5 text-white" />
@@ -742,7 +743,7 @@ export default function StudentCBTListPage() {
 
                 <button
                   type="button"
-                  onClick={() => alert(activeExamToday ? `Token ruang ujian aktif diumumkan di papan tulis lab: ${activeExamToday.token_required}` : 'Tidak ada sesi ujian aktif saat ini. Token baru akan dibagikan saat jadwal sesi dimulai.')}
+                  onClick={() => toast.info(activeExamToday ? `Token ruang ujian aktif diumumkan di papan tulis lab: ${activeExamToday.token_required}` : 'Tidak ada sesi ujian aktif saat ini. Token baru akan dibagikan saat jadwal sesi dimulai.', 'Panduan Token')}
                   className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold text-center transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-white" />

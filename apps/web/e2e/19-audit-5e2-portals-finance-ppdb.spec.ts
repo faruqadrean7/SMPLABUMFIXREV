@@ -130,7 +130,7 @@ test.describe.serial('BATCH 5E-2: Persona Portals, Keuangan & PPDB', () => {
     await page.goto('/portal/guru/materi');
     await waitForLoaders(page);
     await expect(page.locator('body')).not.toHaveText(/500 Internal Server Error/i);
-    await expect(page.locator('text=/Materi Pembelajaran|Bahan Ajar|Materi/i').first()).toBeVisible();
+    await expect(page.locator('text=/Materi Pembelajaran|Bahan Ajar|Modul Ajar|Materi/i').first()).toBeVisible();
 
     // 1.G. Portal Wali Kelas
     await page.goto('/portal/guru/wali-kelas');

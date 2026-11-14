@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\AcademicYear;
 use App\Models\Achievement;
-use App\Models\Announcement;
 use App\Models\Assignment;
 use App\Models\AssignmentSubmission;
 use App\Models\Attendance;
@@ -13,11 +12,11 @@ use App\Models\CounselingRequest;
 use App\Models\Exam;
 use App\Models\ExamParticipant;
 use App\Models\ExamRoom;
-use App\Models\File;
 use App\Models\Grade;
 use App\Models\GradeComponent;
 use App\Models\GradeLevel;
-use App\Models\GradePeriod;
+use App\Models\Guardian;
+use App\Models\LeaveRequest;
 use App\Models\Role;
 use App\Models\Room;
 use App\Models\Schedule;
@@ -28,13 +27,24 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeachingAssignment;
-use App\Models\TeachingMaterial;
 use App\Models\TimeSlot;
 use App\Models\User;
+use App\Models\Announcement;
+use App\Models\File;
+use App\Models\TeachingMaterial;
+use App\Models\Extracurricular;
+use App\Models\ExtracurricularMember;
+use App\Models\PointType;
+use App\Models\StudentPoint;
+use App\Models\Question;
+use App\Models\QuestionBank;
+use App\Models\QuestionOption;
+use App\Models\ExamQuestion;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class StudentPortalDataSeeder extends Seeder
 {
@@ -375,7 +385,7 @@ class StudentPortalDataSeeder extends Seeder
                 $sCm->school_id = $schoolId;
                 $sCm->nis = $cm['nis'];
                 $sCm->nisn = $cm['nisn'];
-                $sCm->nik_enc = '357801010109'.substr($cm['nis'], -4);
+                $sCm->nik_enc = '357801010109' . substr($cm['nis'], -4);
                 $sCm->full_name = $cm['name'];
                 $sCm->gender = $cm['gender'];
                 $sCm->birth_place = 'Malang';
@@ -390,6 +400,23 @@ class StudentPortalDataSeeder extends Seeder
                     ['class_id' => $class7A->id, 'student_id' => $sCm->id],
                     ['joined_at' => '2026-07-01']
                 );
+            }
+
+            // 9b. Guardian / Orang Tua: ortu.siswa.001
+            $userOrtu = $makeUser('ortu.siswa.001', 'ortu.siswa.001@smp-labum.sch.id', ['guardian'], 'Hendra Adrean, S.E.');
+            $guardian = Guardian::firstOrNew(['user_id' => $userOrtu->id]);
+            $guardian->school_id = $schoolId;
+            $guardian->full_name = 'Hendra Adrean, S.E.';
+            $guardian->phone = '0812-3456-7890';
+            $guardian->occupation = 'Wiraswasta / Konsultan';
+            $guardian->address = 'Jl. Simpang Bogor No. 1, Malang';
+            $guardian->save();
+
+            if (! $student->guardians()->where('guardian_id', $guardian->id)->exists()) {
+                $student->guardians()->attach($guardian->id, [
+                    'relationship' => 'ayah',
+                    'is_primary' => true,
+                ]);
             }
 
             // 10. Attendance Records for siswa.lab.001 (25 past school days)
@@ -429,7 +456,7 @@ class StudentPortalDataSeeder extends Seeder
             }
 
             // 11. Grade Components & Grades for all subjects
-            $gradePeriod = GradePeriod::firstOrCreate(
+            $gradePeriod = \App\Models\GradePeriod::firstOrCreate(
                 [
                     'semester_id' => $semester->id,
                     'month' => 10,
@@ -600,7 +627,7 @@ class StudentPortalDataSeeder extends Seeder
                     'start_at' => Carbon::now()->startOfDay()->addHours(7),
                     'end_at' => Carbon::now()->endOfDay(),
                     'passing_grade' => 75.0,
-                    'status' => 'berlangsung',
+                    'status' => 'aktif',
                     'shuffle_questions' => true,
                     'shuffle_options' => true,
                 ]
@@ -633,7 +660,7 @@ class StudentPortalDataSeeder extends Seeder
                     'start_at' => Carbon::now()->addDays(3)->setTime(8, 0, 0),
                     'end_at' => Carbon::now()->addDays(3)->setTime(10, 0, 0),
                     'passing_grade' => 75.0,
-                    'status' => 'dijadwalkan',
+                    'status' => 'scheduled',
                     'shuffle_questions' => true,
                     'shuffle_options' => true,
                 ]
@@ -666,7 +693,7 @@ class StudentPortalDataSeeder extends Seeder
                     'start_at' => Carbon::now()->subDays(7)->setTime(8, 0, 0),
                     'end_at' => Carbon::now()->subDays(7)->setTime(9, 30, 0),
                     'passing_grade' => 75.0,
-                    'status' => 'selesai',
+                    'status' => 'completed',
                 ]
             );
 
@@ -697,7 +724,7 @@ class StudentPortalDataSeeder extends Seeder
                     'preferred_date' => '2026-09-10',
                     'preferred_time' => '10:00',
                     'counselor_id' => $userBk->id,
-                    'status' => 'selesai',
+                    'status' => 'completed',
                     'scheduled_at' => Carbon::parse('2026-09-12 10:00:00'),
                     'notes' => 'Siswa telah berdiskusi mengenai pembagian jam belajar persiapan lomba robotika tingkat provinsi.',
                 ]
@@ -714,9 +741,43 @@ class StudentPortalDataSeeder extends Seeder
                     'preferred_date' => '2026-10-22',
                     'preferred_time' => '13:00',
                     'counselor_id' => $userBk->id,
-                    'status' => 'dijadwalkan',
+                    'status' => 'scheduled',
                     'scheduled_at' => Carbon::parse('2026-10-22 13:00:00'),
                     'notes' => 'Janji temu dijadwalkan di Ruang BK Lantai 2 pukul 13:00 WIB.',
+                ]
+            );
+
+            CounselingRequest::firstOrCreate(
+                [
+                    'student_id' => $student->id,
+                    'topic' => 'Konsultasi Penjurusan & Minat Belajar Faris',
+                ],
+                [
+                    'requested_by' => $userOrtu->id,
+                    'requester_role' => 'guardian',
+                    'preferred_date' => '2026-10-25',
+                    'preferred_time' => '13:00',
+                    'counselor_id' => $userWalas->id,
+                    'status' => 'scheduled',
+                    'scheduled_at' => Carbon::parse('2026-10-25 13:00:00'),
+                    'notes' => 'Diskusi tatap muka bersama Wali Kelas di Ruang Rapat Lt 1.',
+                ]
+            );
+
+            // Leave Requests
+            LeaveRequest::firstOrCreate(
+                [
+                    'student_id' => $student->id,
+                    'start_date' => '2026-10-18',
+                    'end_date' => '2026-10-18',
+                ],
+                [
+                    'requested_by' => $userOrtu->id,
+                    'leave_type' => 'izin',
+                    'reason' => 'Menghadiri acara keluarga di luar kota',
+                    'status' => 'disetujui',
+                    'decided_by' => $userWalas->id,
+                    'decision_notes' => 'Diizinkan oleh wali kelas.',
                 ]
             );
 
@@ -888,6 +949,218 @@ class StudentPortalDataSeeder extends Seeder
                     'version' => 2,
                     'description' => 'Kumpulan soal latihan mandiri materi bentuk aljabar dan penyelesaian kalimat terbuka.',
                 ]
+            );
+
+            // 18. Extracurriculars & Membership
+            $ekskulRobotics = Extracurricular::firstOrCreate(
+                ['name' => 'Coding & Robotika Club (Robotics Team)'],
+                [
+                    'school_id' => $schoolId,
+                    'coach_id' => $teacherInf->id,
+                    'category' => 'Teknologi & Sains',
+                    'description' => 'Eksplorasi pemrograman web, robotika Arduino/IoT, dan persiapan kejuaraan lomba robotika.',
+                    'quota' => 25,
+                    'schedule_day' => 'Setiap Rabu',
+                    'schedule_time' => '15:00 - 17:00 WIB',
+                    'is_active' => true,
+                ]
+            );
+            ExtracurricularMember::firstOrCreate(
+                [
+                    'extracurricular_id' => $ekskulRobotics->id,
+                    'student_id' => $student->id,
+                ],
+                [
+                    'role' => 'Anggota Inti (Programmer)',
+                    'status' => 'aktif',
+                    'joined_at' => '2026-07-20',
+                    'final_grade' => 'A',
+                ]
+            );
+
+            $ekskulPmr = Extracurricular::firstOrCreate(
+                ['name' => 'Palang Merah Remaja (PMR Madya)'],
+                [
+                    'school_id' => $schoolId,
+                    'coach_id' => $teacherIpa->id,
+                    'category' => 'Kemanusiaan & Kesehatan',
+                    'description' => 'Pelatihan pertolongan pertama, donor darah, tandu darurat, dan siaga bencana.',
+                    'quota' => 30,
+                    'schedule_day' => 'Setiap Sabtu',
+                    'schedule_time' => '08:00 - 10:00 WIB',
+                    'is_active' => true,
+                ]
+            );
+            ExtracurricularMember::firstOrCreate(
+                [
+                    'extracurricular_id' => $ekskulPmr->id,
+                    'student_id' => $student->id,
+                ],
+                [
+                    'role' => 'Anggota Reguler',
+                    'status' => 'aktif',
+                    'joined_at' => '2026-07-25',
+                    'final_grade' => 'A',
+                ]
+            );
+
+            Extracurricular::firstOrCreate(
+                ['name' => 'Futsal & Sepak Bola'],
+                [
+                    'school_id' => $schoolId,
+                    'coach_id' => $teacherMtk->id,
+                    'category' => 'Olahraga',
+                    'description' => 'Pembinaan tim futsal sekolah dan kebugaran jasmani.',
+                    'quota' => 20,
+                    'schedule_day' => 'Selasa & Jumat',
+                    'schedule_time' => '15:30 - 17:00 WIB',
+                    'is_active' => true,
+                ]
+            );
+
+            Extracurricular::firstOrCreate(
+                ['name' => 'Paduan Suara & Ansambel Musik Remaja'],
+                [
+                    'school_id' => $schoolId,
+                    'coach_id' => $teacherBin->id,
+                    'category' => 'Seni Musik',
+                    'description' => 'Olah vokal, paduan suara resmi peringatan upacara hari besar dan kompetisi paduan suara.',
+                    'quota' => 25,
+                    'schedule_day' => 'Kamis Sore',
+                    'schedule_time' => '15:30 - 17:00 WIB',
+                    'is_active' => true,
+                ]
+            );
+
+            Extracurricular::firstOrCreate(
+                ['name' => 'Klub Bahasa Inggris (EDC)'],
+                [
+                    'school_id' => $schoolId,
+                    'coach_id' => $teacherEng->id,
+                    'category' => 'Bahasa & Komunikasi',
+                    'description' => 'English Debate Club, storytelling, dan public speaking.',
+                    'quota' => 20,
+                    'schedule_day' => 'Senin Sore',
+                    'schedule_time' => '15:30 - 17:00 WIB',
+                    'is_active' => true,
+                ]
+            );
+
+            Extracurricular::firstOrCreate(
+                ['name' => 'Jurnalistik & Fotografi'],
+                [
+                    'school_id' => $schoolId,
+                    'coach_id' => $teacherPpkn->id,
+                    'category' => 'Media & Publikasi',
+                    'description' => 'Liputan kegiatan sekolah, majalah dinding digital, dan fotografi jurnalistik.',
+                    'quota' => 15,
+                    'schedule_day' => 'Sabtu Pagi',
+                    'schedule_time' => '09:00 - 11:00 WIB',
+                    'is_active' => true,
+                ]
+            );
+
+            // 19. Point Types & Student Points
+            $ptTeladan = PointType::firstOrCreate(
+                ['name' => 'Apresiasi Pemimpin Upacara Hari Kemerdekaan RI'],
+                [
+                    'school_id' => $schoolId,
+                    'kind' => 'prestasi',
+                    'points' => 25,
+                    'severity' => 'rendah',
+                ]
+            );
+
+            StudentPoint::firstOrCreate(
+                [
+                    'student_id' => $student->id,
+                    'point_type_id' => $ptTeladan->id,
+                ],
+                [
+                    'recorded_by' => $userWalas->id,
+                    'point_date' => '2026-08-17',
+                    'notes' => 'Petugas inti pemimpin upacara bendera HUT RI ke-81 di kampus Labschool.',
+                ]
+            );
+
+            // 20. Exam Questions for exam1
+            $qBank = QuestionBank::firstOrCreate(
+                ['name' => 'Bank Soal Algoritma & Logika Informatika 7', 'school_id' => $schoolId],
+                [
+                    'subject_id' => $subjectMap['INF-7']->id,
+                    'owner_id' => $userInf->id,
+                    'grade_level_id' => $gradeLevel7->id,
+                ]
+            );
+
+            $q1 = Question::firstOrCreate(
+                [
+                    'bank_id' => $qBank->id,
+                    'cp_code' => 'CP-INF-01',
+                ],
+                [
+                    'question_type' => 'pilihan_ganda',
+                    'body' => ['text' => 'Manakah di bawah ini yang merupakan fungsi utama dari tag semantik dalam HTML5?'],
+                    'difficulty' => 2,
+                    'weight' => 10.0,
+                    'explanation' => 'Tag semantik memberikan makna struktural bagi peramban dan mesin pencari.',
+                ]
+            );
+            QuestionOption::firstOrCreate(
+                ['question_id' => $q1->id, 'label' => 'A'],
+                ['body' => ['text' => 'Mengatur warna dan latar belakang tampilan halaman web'], 'is_correct' => false]
+            );
+            QuestionOption::firstOrCreate(
+                ['question_id' => $q1->id, 'label' => 'B'],
+                ['body' => ['text' => 'Menyusun struktur hierarki dan arti konten dokumen secara terstandar'], 'is_correct' => true]
+            );
+            QuestionOption::firstOrCreate(
+                ['question_id' => $q1->id, 'label' => 'C'],
+                ['body' => ['text' => 'Menjalankan skrip logika JavaScript secara asinkron'], 'is_correct' => false]
+            );
+            QuestionOption::firstOrCreate(
+                ['question_id' => $q1->id, 'label' => 'D'],
+                ['body' => ['text' => 'Mengompresi ukuran berkas gambar yang dimuat'], 'is_correct' => false]
+            );
+
+            ExamQuestion::firstOrCreate(
+                ['exam_id' => $exam1->id, 'question_id' => $q1->id],
+                ['sort_order' => 1, 'weight_override' => 10.0]
+            );
+
+            $q2 = Question::firstOrCreate(
+                [
+                    'bank_id' => $qBank->id,
+                    'cp_code' => 'CP-INF-02',
+                ],
+                [
+                    'question_type' => 'pilihan_ganda',
+                    'body' => ['text' => 'Dalam berpikir komputasional, proses memecah masalah besar menjadi bagian-bagian yang lebih kecil dan mudah dikelola disebut...'],
+                    'difficulty' => 1,
+                    'weight' => 10.0,
+                    'explanation' => 'Dekomposisi adalah langkah awal memecah masalah kompleks.',
+                ]
+            );
+            QuestionOption::firstOrCreate(
+                ['question_id' => $q2->id, 'label' => 'A'],
+                ['body' => ['text' => 'Dekomposisi (Decomposition)'], 'is_correct' => true]
+            );
+            QuestionOption::firstOrCreate(
+                ['question_id' => $q2->id, 'label' => 'B'],
+                ['body' => ['text' => 'Pengenalan Pola (Pattern Recognition)'], 'is_correct' => false]
+            );
+            QuestionOption::firstOrCreate(
+                ['question_id' => $q2->id, 'label' => 'C'],
+                ['body' => ['text' => 'Abstraksi (Abstraction)'], 'is_correct' => false]
+            );
+            QuestionOption::firstOrCreate(
+                ['question_id' => $q2->id, 'label' => 'D'],
+                ['body' => ['text' => 'Perancangan Algoritma (Algorithm Design)'], 'is_correct' => false]
+            );
+
+            ExamQuestion::firstOrCreate(
+                ['exam_id' => $exam1->id, 'question_id' => $q2->id],
+                ['sort_order' => 2, 'weight_override' => 10.0]
             );
         });
     }

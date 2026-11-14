@@ -43,6 +43,14 @@ class Complaint extends Model
         return $this->hasMany(ComplaintEvent::class, 'complaint_id')->orderBy('created_at', 'asc');
     }
 
+    /**
+     * BE-GUEST-04: Lampiran foto pengaduan di bucket privat.
+     */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(File::class, 'owner_id')->where('owner_type', 'complaint');
+    }
+
     // Compatibility accessors
     public function getTicketNumberAttribute(): string
     {

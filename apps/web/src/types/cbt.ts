@@ -10,7 +10,8 @@ export interface QuestionOptionItem {
   id: string;
   question_id?: string;
   label: string;
-  text: string;
+  text?: string;
+  body?: { text?: string; content?: string; [key: string]: any } | any;
   is_correct?: boolean;
   match_key?: string | null;
 }
@@ -18,11 +19,14 @@ export interface QuestionOptionItem {
 export interface QuestionItem {
   id: string;
   bank_id: string;
-  question_type: QuestionType;
-  stem: string;
+  question_type: QuestionType | string;
+  stem?: string;
   media_url?: string;
-  body?: any;
-  weight: number;
+  body?: { text?: string; content?: string; media_url?: string; image_url?: string; [key: string]: any } | any;
+  weight: number | string;
+  cognitive_level?: string;
+  difficulty?: number;
+  explanation?: string | null;
   options?: QuestionOptionItem[];
   created_at?: string;
   updated_at?: string;
@@ -36,11 +40,15 @@ export interface QuestionBankItem {
     name: string;
     code?: string;
   };
+  owner_id?: string;
   created_by?: string;
-  title: string;
-  code: string;
-  grade_level?: number | string;
+  name?: string;
+  title?: string;
+  code?: string;
+  grade_level?: number | string | any;
+  grade_level_id?: string;
   total_questions?: number;
+  questions_count?: number;
   questions?: QuestionItem[];
   created_at?: string;
   updated_at?: string;

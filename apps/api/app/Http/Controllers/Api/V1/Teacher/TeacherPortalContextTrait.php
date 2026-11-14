@@ -161,18 +161,49 @@ trait TeacherPortalContextTrait
         }
 
         // Auto-provision schedule only for an actively verified teaching assignment
-        $timeSlot = TimeSlot::first();
-        if ($semester && $timeSlot) {
-            return Schedule::firstOrCreate(
-                [
-                    'teacher_id' => $teacher->id,
-                    'semester_id' => $semester->id,
-                    'class_id' => $classId,
-                    'subject_id' => $subjectId,
-                    'time_slot_id' => $timeSlot->id,
-                    'day_of_week' => now()->dayOfWeekIso,
-                ]
-            );
+        if ($semester) {
+            $busyTeacherSlots = Schedule::where('teacher_id', $teacher->id)
+                ->where('semester_id', $semester->id)
+                ->get(['day_of_week', 'time_slot_id']);
+
+            $busyMap = [];
+            foreach ($busyTeacherSlots as $bts) {
+                $busyMap[$bts->day_of_week][$bts->time_slot_id] = true;
+            }
+
+            $allTimeSlots = TimeSlot::orderBy('start_time', 'asc')->get();
+            if ($allTimeSlots->isEmpty()) {
+                $allTimeSlots = TimeSlot::all();
+            }
+
+            $currentDay = (int) now()->dayOfWeekIso;
+            $daysToTry = array_values(array_unique([$currentDay, 1, 2, 3, 4, 5, 6, 7]));
+
+            $chosenSlot = null;
+            $chosenDay = null;
+
+            foreach ($daysToTry as $day) {
+                foreach ($allTimeSlots as $slot) {
+                    if (empty($busyMap[$day][$slot->id])) {
+                        $chosenSlot = $slot;
+                        $chosenDay = $day;
+                        break 2;
+                    }
+                }
+            }
+
+            if ($chosenSlot && $chosenDay) {
+                return Schedule::firstOrCreate(
+                    [
+                        'teacher_id' => $teacher->id,
+                        'semester_id' => $semester->id,
+                        'class_id' => $classId,
+                        'subject_id' => $subjectId,
+                        'time_slot_id' => $chosenSlot->id,
+                        'day_of_week' => $chosenDay,
+                    ]
+                );
+            }
         }
 
         return null;

@@ -152,7 +152,12 @@ class QuestionBankService
         }
 
         if (! empty($filters['question_type'])) {
-            $query->where('question_type', $filters['question_type']);
+            $type = $filters['question_type'];
+            if ($type === 'pg' || $type === 'pilihan_ganda') {
+                $query->whereIn('question_type', ['pg', 'pilihan_ganda']);
+            } else {
+                $query->where('question_type', $type);
+            }
         }
 
         if (! empty($filters['cognitive_level'])) {

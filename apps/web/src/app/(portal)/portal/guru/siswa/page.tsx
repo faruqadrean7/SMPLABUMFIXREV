@@ -20,7 +20,7 @@ import {
   X
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { lmsApi } from '@/lib/api-client';
 import { useTeacherClasses } from '@/lib/use-teacher-data';
 
@@ -83,6 +83,8 @@ export default function DirektoriSiswaPage() {
     enabled: Boolean(activeClassId),
   });
 
+  const queryClient = useQueryClient();
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [genderFilter, setGenderFilter] = useState<'ALL' | 'L' | 'P'>('ALL');
   const [isPointModalOpen, setIsPointModalOpen] = useState<boolean>(false);
@@ -92,6 +94,7 @@ export default function DirektoriSiswaPage() {
   const [pointType, setPointType] = useState<'prestasi' | 'pelanggaran'>('prestasi');
   const [pointRule, setPointRule] = useState<string>('Juara 1 Lomba OSN Tingkat Kota (+25)');
   const [pointNotes, setPointNotes] = useState<string>('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   // Form state for BK referral
   const [isReferralModalOpen, setIsReferralModalOpen] = useState<boolean>(false);
@@ -99,9 +102,7 @@ export default function DirektoriSiswaPage() {
   const [referralReason, setReferralReason] = useState<string>('Penurunan Kehadiran & Sering Terlambat');
   const [referralPriority, setReferralPriority] = useState<'biasa' | 'segera'>('segera');
   const [referralNotes, setReferralNotes] = useState<string>('');
-
-  // FIX-GURU-10 / AGENTS.md §6.2: tanpa data pribadi fiktif; daftar diisi dari entri nyata.
-  const [referrals, setReferrals] = useState<BkReferralRecord[]>([]);
+  const [referralFieldErrors, setReferralFieldErrors] = useState<Record<string, string[]>>({});
 
   // Live mapped students
   const students: StudentDetailedProfile[] = roster.map((std, idx) => ({
@@ -118,16 +119,91 @@ export default function DirektoriSiswaPage() {
     avatar_url: std.avatar_url,
   }));
 
-  // FIX-GURU-09 / AGENTS.md §6.2: tanpa data pribadi fiktif; daftar diisi dari entri nyata.
-  const [pointRecords, setPointRecords] = useState<PointRecord[]>([]);
+  // Otomatis tentukan siswa terpilih saat roster dimuat
+  React.useEffect(() => {
+    if (!selectedStudentId && students.length > 0) {
+      setSelectedStudentId(students[0].id);
+    }
+  }, [students, selectedStudentId]);
 
-  const [isSavingPoint, setIsSavingPoint] = useState(false);
+  // FIX-GURU-09: Live student points dari backend (persisten)
+  const {
+    data: rawPointsData,
+    isLoading: isLoadingPoints,
+    isError: isErrorPoints,
+    refetch: refetchPoints,
+  } = useQuery({
+    queryKey: ['teacher-student-points', activeClassId],
+    queryFn: () => lmsApi.getStudentPoints({ class_id: activeClassId }),
+    enabled: Boolean(activeClassId),
+  });
+
+  const pointRecords: PointRecord[] = React.useMemo(() => {
+    const list = Array.isArray(rawPointsData?.data)
+      ? rawPointsData.data
+      : Array.isArray(rawPointsData)
+        ? rawPointsData
+        : [];
+
+    return list.map((p: any) => {
+      const isPrestasi = p.point_type?.kind === 'prestasi' || p.pointType?.kind === 'prestasi' || p.type === 'prestasi';
+      const pointsVal = p.point_type?.points ?? p.pointType?.points ?? p.points ?? (isPrestasi ? 15 : 5);
+      const studentName = p.student?.full_name || p.student?.name || students.find(s => s.id === p.student_id)?.name || 'Siswa';
+      return {
+        id: p.id,
+        studentId: p.student_id,
+        studentName,
+        type: isPrestasi ? 'prestasi' : 'pelanggaran',
+        category: p.point_type?.name || p.pointType?.name || p.category || (isPrestasi ? 'Prestasi Siswa' : 'Tata Tertib'),
+        points: isPrestasi ? Math.abs(pointsVal) : -Math.abs(pointsVal),
+        description: p.notes || p.description || '-',
+        date: p.point_date ? String(p.point_date).slice(0, 10) : (p.created_at ? String(p.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
+        recordedBy: p.recorder?.name || p.recorded_by || 'Guru',
+      };
+    });
+  }, [rawPointsData, students]);
+
+  // FIX-GURU-09: useMutation untuk mencatat poin siswa ke backend dengan proteksi double-submit
+  const recordPointMutation = useMutation({
+    mutationFn: (payload: {
+      student_id: string;
+      type: 'prestasi' | 'pelanggaran';
+      category: string;
+      points: number;
+      notes: string;
+      date: string;
+    }) => lmsApi.recordStudentPoint(payload),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['teacher-student-points'] });
+      const student = students.find(s => s.id === vars.student_id);
+      const studentName = student?.name || 'siswa';
+      const isPrestasi = vars.type === 'prestasi';
+      toast.success(`Poin ${isPrestasi ? 'penghargaan' : 'pelanggaran'} berhasil dicatat untuk ${studentName}!`);
+      setIsPointModalOpen(false);
+      setPointNotes('');
+      setFieldErrors({});
+    },
+    onError: (err: any) => {
+      const resp = err?.response?.data;
+      if (resp?.errors && typeof resp.errors === 'object') {
+        setFieldErrors(resp.errors);
+        const firstErr = Object.values(resp.errors).flat()[0];
+        toast.error(String(firstErr || 'Data poin tidak valid.'));
+      } else {
+        const msg = resp?.error?.message || resp?.message || err?.message || 'Terjadi kesalahan sistem.';
+        toast.error('Gagal mencatat poin: ' + msg);
+      }
+    },
+  });
+
   const [isSavingReferral, setIsSavingReferral] = useState(false);
 
   // FIX-GURU-09: catat poin siswa ke backend (POST /me/teacher/student-points).
   const handleAddPoint = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSavingPoint) return;
+    if (recordPointMutation.isPending) return;
+    setFieldErrors({});
+
     const student = students.find(s => s.id === selectedStudentId);
     if (!student) {
       toast.error('Pilih siswa terlebih dahulu.');
@@ -139,83 +215,110 @@ export default function DirektoriSiswaPage() {
     const category = isPrestasi ? 'Prestasi KBM & Proyek' : 'Tata Tertib Kelas';
     const description = pointNotes || pointRule;
 
-    setIsSavingPoint(true);
-    try {
-      await lmsApi.recordStudentPoint({
-        student_id: student.id,
-        type: pointType,
-        category,
-        points: pointsAmount,
-        notes: description,
-        date: new Date().toISOString().slice(0, 10),
-      });
-
-      const newRecord: PointRecord = {
-        id: `pt-${Date.now()}`,
-        studentId: student.id,
-        studentName: student.name,
-        type: pointType,
-        category,
-        points: isPrestasi ? pointsAmount : -pointsAmount,
-        description,
-        date: new Date().toISOString().slice(0, 10),
-        recordedBy: 'Anda',
-      };
-      setPointRecords([newRecord, ...pointRecords]);
-      toast.success(`Poin ${isPrestasi ? 'penghargaan' : 'pelanggaran'} berhasil dicatat untuk ${student.name}!`);
-      setIsPointModalOpen(false);
-      setPointNotes('');
-    } catch (err: any) {
-      toast.error(
-        'Gagal mencatat poin: ' +
-          (err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Terjadi kesalahan sistem.')
-      );
-    } finally {
-      setIsSavingPoint(false);
-    }
+    recordPointMutation.mutate({
+      student_id: student.id,
+      type: pointType,
+      category,
+      points: pointsAmount,
+      notes: description,
+      date: new Date().toISOString().slice(0, 10),
+    });
   };
+
+  // FIX-GURU-10: Live counseling referrals dari backend (persisten)
+  const {
+    data: rawReferralsData,
+    isLoading: isLoadingReferrals,
+    isError: isErrorReferrals,
+    refetch: refetchReferrals,
+  } = useQuery({
+    queryKey: ['teacher-counseling-referrals', activeClassId],
+    queryFn: () => lmsApi.getCounselingReferrals({ class_id: activeClassId }),
+    enabled: Boolean(activeClassId),
+  });
+
+  const referrals: BkReferralRecord[] = React.useMemo(() => {
+    const list = Array.isArray(rawReferralsData?.data)
+      ? rawReferralsData.data
+      : Array.isArray(rawReferralsData)
+        ? rawReferralsData
+        : [];
+
+    return list.map((r: any) => {
+      const isSegera = r.reason?.includes('[Prioritas: segera]') || r.reason?.includes('[Prioritas: tinggi]');
+      const cleanReason = r.reason ? r.reason.replace(/^\[Prioritas:\s*[^\]]+\]\s*/i, '') : '-';
+      const statusMapped = r.status === 'pending'
+        ? 'menunggu'
+        : r.status === 'scheduled'
+          ? 'dijadwalkan'
+          : r.status === 'completed'
+            ? 'selesai'
+            : r.status;
+
+      return {
+        id: r.id,
+        studentId: r.student_id,
+        studentName: r.student?.full_name || r.student?.name || students.find(s => s.id === r.student_id)?.name || 'Siswa',
+        nis: r.student?.nis || '-',
+        reason: cleanReason,
+        priority: isSegera ? 'segera' : 'biasa',
+        date: r.created_at ? String(r.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+        status: statusMapped,
+        counselorNotes: r.status === 'pending' ? 'Menunggu penelaahan oleh Guru BK' : `Status: ${r.status}`,
+      };
+    });
+  }, [rawReferralsData, students]);
+
+  // FIX-GURU-10: useMutation untuk membuat rujukan BK dengan proteksi double-submit & auto-invalidation
+  const createReferralMutation = useMutation({
+    mutationFn: (payload: {
+      student_id: string;
+      reason: string;
+      priority?: string;
+    }) => lmsApi.createCounselingReferral(payload),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['teacher-counseling-referrals'] });
+      const student = students.find(s => s.id === vars.student_id) || referralStudent;
+      const studentName = student?.name || 'siswa';
+      toast.success(`Rujukan bimbingan konseling untuk ${studentName} berhasil diteruskan ke Guru BK!`);
+      setIsReferralModalOpen(false);
+      setReferralNotes('');
+      setReferralFieldErrors({});
+    },
+    onError: (err: any) => {
+      const resp = err?.response?.data;
+      if (resp?.errors && typeof resp.errors === 'object') {
+        setReferralFieldErrors(resp.errors);
+        const firstErr = Object.values(resp.errors).flat()[0];
+        toast.error(String(firstErr || 'Data rujukan tidak valid.'));
+      } else {
+        const msg = resp?.error?.message || resp?.message || err?.message || 'Terjadi kesalahan sistem.';
+        toast.error('Gagal membuat rujukan BK: ' + msg);
+      }
+    },
+  });
 
   // FIX-GURU-10: buat rujukan BK ke backend (POST /me/teacher/counseling-referrals).
   const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSavingReferral) return;
+    if (createReferralMutation.isPending) return;
     if (!referralStudent) return;
-    if (referralReason.trim().length < 5) {
+    setReferralFieldErrors({});
+
+    const fullReason = referralNotes.trim()
+      ? `${referralReason.trim()} — ${referralNotes.trim()}`
+      : referralReason.trim();
+
+    if (fullReason.length < 5) {
       toast.error('Alasan rujukan minimal 5 karakter.');
       return;
     }
 
-    setIsSavingReferral(true);
-    try {
-      await lmsApi.createCounselingReferral({
-        student_id: referralStudent.id,
-        reason: referralReason.trim(),
-        priority: referralPriority,
-      });
-
-      const newRef: BkReferralRecord = {
-        id: `ref-${Date.now()}`,
-        studentId: referralStudent.id,
-        studentName: referralStudent.name,
-        nis: referralStudent.nis,
-        reason: referralReason,
-        priority: referralPriority,
-        date: new Date().toISOString().slice(0, 10),
-        status: 'menunggu',
-        counselorNotes: referralNotes || 'Menunggu penelaahan oleh Guru BK',
-      };
-      setReferrals([newRef, ...referrals]);
-      toast.success(`Rujukan bimbingan konseling untuk ${referralStudent.name} berhasil diteruskan ke Guru BK!`);
-      setIsReferralModalOpen(false);
-      setReferralNotes('');
-    } catch (err: any) {
-      toast.error(
-        'Gagal membuat rujukan BK: ' +
-          (err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Terjadi kesalahan sistem.')
-      );
-    } finally {
-      setIsSavingReferral(false);
-    }
+    createReferralMutation.mutate({
+      student_id: referralStudent.id,
+      reason: fullReason,
+      priority: referralPriority,
+    });
   };
 
   const filteredStudents = students.filter(s => {
@@ -328,7 +431,8 @@ export default function DirektoriSiswaPage() {
             <button
               type="button"
               onClick={() => {
-                setReferralStudent(students[0]);
+                setReferralFieldErrors({});
+                setReferralStudent(students[0] || null);
                 setIsReferralModalOpen(true);
               }}
               className="px-3.5 py-1.5 rounded-lg text-xs font-black bg-purple-900 hover:bg-purple-950 text-white flex items-center gap-1.5 shadow-xs cursor-pointer"
@@ -502,6 +606,7 @@ export default function DirektoriSiswaPage() {
                         <button
                           type="button"
                           onClick={() => {
+                            setReferralFieldErrors({});
                             setReferralStudent(std);
                             setIsReferralModalOpen(true);
                           }}
@@ -537,7 +642,13 @@ export default function DirektoriSiswaPage() {
 
               <button
                 type="button"
-                onClick={() => setIsPointModalOpen(true)}
+                onClick={() => {
+                  setFieldErrors({});
+                  if (!selectedStudentId && students.length > 0) {
+                    setSelectedStudentId(students[0].id);
+                  }
+                  setIsPointModalOpen(true);
+                }}
                 className="px-4 py-2 rounded-lg text-xs font-black bg-blue-900 hover:bg-blue-950 text-white flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -545,61 +656,109 @@ export default function DirektoriSiswaPage() {
               </button>
             </div>
 
-            {/* List Records with border-l-4 */}
-            <div className="space-y-3">
-              {pointRecords.map((rec) => (
-                <div
-                  key={rec.id}
-                  className={`p-4 rounded-xl border border-slate-200/90 bg-white shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 border-l-4 ${
-                    rec.type === 'prestasi' ? 'border-l-blue-900' : 'border-l-rose-700'
-                  }`}
+            {/* Loading State */}
+            {isLoadingPoints && (
+              <div className="text-center py-12 text-xs font-bold text-slate-500">
+                Memuat riwayat poin siswa...
+              </div>
+            )}
+
+            {/* Error State */}
+            {isErrorPoints && !isLoadingPoints && (
+              <div className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs flex items-center justify-between">
+                <span>Gagal memuat catatan poin siswa.</span>
+                <button
+                  type="button"
+                  onClick={() => refetchPoints()}
+                  className="font-bold underline hover:text-rose-900 cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
-                    {students.find(s => s.id === rec.studentId)?.avatar_url ? (
-                      <div className="relative shrink-0">
-                        <img
-                          src={students.find(s => s.id === rec.studentId)?.avatar_url}
-                          alt={rec.studentName}
-                          className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs"
-                        />
-                        <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white shadow-xs ${
+                  Coba Lagi
+                </button>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!isLoadingPoints && !isErrorPoints && pointRecords.length === 0 && (
+              <div className="text-center py-12 px-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/50">
+                <Award className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                <h4 className="text-xs font-bold text-slate-700">Belum Ada Catatan Poin</h4>
+                <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                  Belum ada rekam jejak poin prestasi atau pelanggaran untuk kelas ini. Klik tombol di bawah untuk mencatat poin baru.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFieldErrors({});
+                    if (!selectedStudentId && students.length > 0) {
+                      setSelectedStudentId(students[0].id);
+                    }
+                    setIsPointModalOpen(true);
+                  }}
+                  className="mt-3 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-900 text-white hover:bg-blue-950 inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Catat Poin Siswa</span>
+                </button>
+              </div>
+            )}
+
+            {/* List Records with border-l-4 */}
+            {!isLoadingPoints && !isErrorPoints && pointRecords.length > 0 && (
+              <div className="space-y-3">
+                {pointRecords.map((rec) => (
+                  <div
+                    key={rec.id}
+                    className={`p-4 rounded-xl border border-slate-200/90 bg-white shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 border-l-4 ${
+                      rec.type === 'prestasi' ? 'border-l-blue-900' : 'border-l-rose-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {students.find(s => s.id === rec.studentId)?.avatar_url ? (
+                        <div className="relative shrink-0">
+                          <img
+                            src={students.find(s => s.id === rec.studentId)?.avatar_url}
+                            alt={rec.studentName}
+                            className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs"
+                          />
+                          <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white shadow-xs ${
+                            rec.type === 'prestasi' ? 'bg-blue-900' : 'bg-rose-700'
+                          }`}>
+                            {rec.type === 'prestasi' ? '🏆' : '⚠️'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className={`w-10 h-10 rounded-lg text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs ${
                           rec.type === 'prestasi' ? 'bg-blue-900' : 'bg-rose-700'
                         }`}>
                           {rec.type === 'prestasi' ? '🏆' : '⚠️'}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className={`w-10 h-10 rounded-lg text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs ${
-                        rec.type === 'prestasi' ? 'bg-blue-900' : 'bg-rose-700'
-                      }`}>
-                        {rec.type === 'prestasi' ? '🏆' : '⚠️'}
-                      </div>
-                    )}
+                        </div>
+                      )}
 
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-extrabold text-sm text-slate-900">{rec.studentName}</h3>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                          rec.type === 'prestasi' ? 'bg-blue-900 text-white' : 'bg-rose-700 text-white'
-                        }`}>
-                          {rec.points > 0 ? `+${rec.points} Poin` : `${rec.points} Poin`}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-extrabold text-sm text-slate-900">{rec.studentName}</h3>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                            rec.type === 'prestasi' ? 'bg-blue-900 text-white' : 'bg-rose-700 text-white'
+                          }`}>
+                            {rec.points > 0 ? `+${rec.points} Poin` : `${rec.points} Poin`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-700 font-medium mt-0.5">
+                          {rec.description}
+                        </p>
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Dicatat oleh: {rec.recordedBy} pada {rec.date}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-700 font-medium mt-0.5">
-                        {rec.description}
-                      </p>
-                      <span className="text-[11px] text-slate-400 font-medium">
-                        Dicatat oleh: {rec.recordedBy} pada {rec.date}
-                      </span>
                     </div>
-                  </div>
 
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded bg-slate-100 border border-slate-300 text-slate-700 shrink-0">
-                    {rec.category}
-                  </span>
-                </div>
-              ))}
-            </div>
+                    <span className="text-[11px] font-bold px-2.5 py-1 rounded bg-slate-100 border border-slate-300 text-slate-700 shrink-0">
+                      {rec.category}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -614,8 +773,11 @@ export default function DirektoriSiswaPage() {
               </h3>
               <button
                 type="button"
-                onClick={() => setIsPointModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-sm font-bold"
+                onClick={() => {
+                  setFieldErrors({});
+                  setIsPointModalOpen(false);
+                }}
+                className="text-slate-400 hover:text-slate-700 text-sm font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -627,7 +789,9 @@ export default function DirektoriSiswaPage() {
                 <select
                   value={selectedStudentId}
                   onChange={(e) => setSelectedStudentId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:border-blue-900 focus:outline-none"
+                  className={`w-full px-3 py-2 text-xs font-bold bg-white border rounded-lg focus:outline-none ${
+                    fieldErrors.student_id ? 'border-rose-500 focus:border-rose-600' : 'border-slate-300 focus:border-blue-900'
+                  }`}
                 >
                   {students.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -635,6 +799,11 @@ export default function DirektoriSiswaPage() {
                     </option>
                   ))}
                 </select>
+                {fieldErrors.student_id && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1">
+                    {fieldErrors.student_id[0]}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -669,24 +838,34 @@ export default function DirektoriSiswaPage() {
                   placeholder="Keterangan lengkap kejadian / prestasi yang diraih..."
                   value={pointNotes}
                   onChange={(e) => setPointNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:border-blue-900 focus:outline-none font-medium"
+                  className={`w-full px-3 py-2 text-xs bg-white border rounded-lg focus:outline-none font-medium ${
+                    fieldErrors.notes ? 'border-rose-500 focus:border-rose-600' : 'border-slate-300 focus:border-blue-900'
+                  }`}
                 />
+                {fieldErrors.notes && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1">
+                    {fieldErrors.notes[0]}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsPointModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-bold border border-slate-300 text-slate-700 hover:bg-slate-100"
+                  onClick={() => {
+                    setFieldErrors({});
+                    setIsPointModalOpen(false);
+                  }}
+                  className="px-4 py-2 rounded-lg text-xs font-bold border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={isSavingPoint}
-                  className="px-4 py-2 rounded-lg text-xs font-black bg-blue-900 hover:bg-blue-950 text-white shadow-xs disabled:opacity-50"
+                  disabled={recordPointMutation.isPending}
+                  className="px-4 py-2 rounded-lg text-xs font-black bg-blue-900 hover:bg-blue-950 text-white shadow-xs disabled:opacity-50 cursor-pointer"
                 >
-                  {isSavingPoint ? 'Menyimpan...' : 'Simpan Poin Siswa'}
+                  {recordPointMutation.isPending ? 'Menyimpan...' : 'Simpan Poin Siswa'}
                 </button>
               </div>
             </form>
@@ -707,87 +886,147 @@ export default function DirektoriSiswaPage() {
                   <span className="text-xs text-slate-500 font-semibold">• BE-BK-01 &amp; ADM-BK-01 (P0)</span>
                 </div>
                 <h3 className="font-extrabold text-sm text-slate-900">
-                  Riwayat Rujukan Bimbingan Konseling Siswa Kelas IX-A
+                  Riwayat Rujukan Bimbingan Konseling Siswa
                 </h3>
                 <p className="text-xs text-slate-500">
                   Data pembinaan khusus siswa binaan. Demi privasi siswa, isi sesi konseling terenkripsi dan guru memantau perkembangan status rujukan.
                 </p>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setReferralFieldErrors({});
+                  setReferralStudent(students[0] || null);
+                  setIsReferralModalOpen(true);
+                }}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-black bg-purple-900 hover:bg-purple-950 text-white flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Buat Rujukan BK</span>
+              </button>
             </div>
 
-            <div className="border border-slate-200/90 rounded-xl overflow-x-auto bg-white shadow-xs max-h-160 overflow-y-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="sticky top-0 bg-slate-100 z-10 border-b border-slate-200">
-                  <tr className="text-slate-800 font-extrabold uppercase text-[10px] tracking-wider">
-                    <th className="py-2.5 px-3 w-12 text-center">No</th>
-                    <th className="py-2.5 px-3 w-28">NIS</th>
-                    <th className="py-2.5 px-3 min-w-44">Nama Siswa</th>
-                    <th className="py-2.5 px-3 w-32">Tanggal Rujuk</th>
-                    <th className="py-2.5 px-3 min-w-56">Alasan Permasalahan</th>
-                    <th className="py-2.5 px-2 w-24 text-center">Urgensi</th>
-                    <th className="py-2.5 px-3 w-36 text-center">Status Bimbingan</th>
-                    <th className="py-2.5 px-3 min-w-64">Catatan Tindak Lanjut Guru BK</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200/80">
-                  {referrals.map((ref, idx) => (
-                    <tr key={ref.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-3 text-center font-bold text-slate-500">{idx + 1}</td>
-                      <td className="py-2.5 px-3 font-mono font-semibold text-slate-700">{ref.nis}</td>
-                      <td className="py-2.5 px-3 font-bold text-slate-900">
-                        <div className="flex items-center gap-2.5">
-                          {students.find(s => s.id === ref.studentId)?.avatar_url ? (
-                            <img
-                              src={students.find(s => s.id === ref.studentId)?.avatar_url}
-                              alt={ref.studentName}
-                              className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
-                            />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-900 font-bold text-[10px] flex items-center justify-center shrink-0">
-                              {ref.studentName.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <span className="truncate">{ref.studentName}</span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600">{ref.date}</td>
-                      <td className="py-2.5 px-3 font-medium text-slate-800">{ref.reason}</td>
-                      <td className="py-2.5 px-2 text-center">
-                        {ref.priority === 'segera' ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-700 text-white shadow-xs">
-                            SEGERA
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-slate-700 text-white shadow-xs">
-                            BIASA
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        {ref.status === 'menunggu' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-600 text-white shadow-xs">
-                            MENUNGGU
-                          </span>
-                        )}
-                        {ref.status === 'dijadwalkan' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-900 text-white shadow-xs">
-                            DIJADWALKAN
-                          </span>
-                        )}
-                        {ref.status === 'selesai' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-800 text-white shadow-xs">
-                            SELESAI
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-600 text-[11px] italic">
-                        {ref.counselorNotes || 'Belum ada catatan tindak lanjut dari konselor.'}
-                      </td>
+            {/* Loading State */}
+            {isLoadingReferrals && (
+              <div className="text-center py-12 text-xs font-bold text-slate-500">
+                Memuat riwayat rujukan BK...
+              </div>
+            )}
+
+            {/* Error State */}
+            {isErrorReferrals && !isLoadingReferrals && (
+              <div className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs flex items-center justify-between">
+                <span>Gagal memuat daftar rujukan bimbingan konseling.</span>
+                <button
+                  type="button"
+                  onClick={() => refetchReferrals()}
+                  className="font-bold underline hover:text-rose-900 cursor-pointer"
+                >
+                  Coba Lagi
+                </button>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!isLoadingReferrals && !isErrorReferrals && referrals.length === 0 && (
+              <div className="text-center py-12 px-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/50">
+                <HeartHandshake className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                <h4 className="text-xs font-bold text-slate-700">Belum Ada Rujukan BK</h4>
+                <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                  Belum ada permohonan pendampingan konseling untuk siswa di kelas ini. Anda dapat merujuk siswa yang memerlukan pendampingan khusus melalui tombol di bawah.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReferralFieldErrors({});
+                    setReferralStudent(students[0] || null);
+                    setIsReferralModalOpen(true);
+                  }}
+                  className="mt-3 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-purple-900 text-white hover:bg-purple-950 inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Buat Rujukan BK</span>
+                </button>
+              </div>
+            )}
+
+            {/* Table Records */}
+            {!isLoadingReferrals && !isErrorReferrals && referrals.length > 0 && (
+              <div className="border border-slate-200/90 rounded-xl overflow-x-auto bg-white shadow-xs max-h-160 overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="sticky top-0 bg-slate-100 z-10 border-b border-slate-200">
+                    <tr className="text-slate-800 font-extrabold uppercase text-[10px] tracking-wider">
+                      <th className="py-2.5 px-3 w-12 text-center">No</th>
+                      <th className="py-2.5 px-3 w-28">NIS</th>
+                      <th className="py-2.5 px-3 min-w-44">Nama Siswa</th>
+                      <th className="py-2.5 px-3 w-32">Tanggal Rujuk</th>
+                      <th className="py-2.5 px-3 min-w-56">Alasan Permasalahan</th>
+                      <th className="py-2.5 px-2 w-24 text-center">Urgensi</th>
+                      <th className="py-2.5 px-3 w-36 text-center">Status Bimbingan</th>
+                      <th className="py-2.5 px-3 min-w-64">Catatan Tindak Lanjut Guru BK</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200/80">
+                    {referrals.map((ref, idx) => (
+                      <tr key={ref.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2.5 px-3 text-center font-bold text-slate-500">{idx + 1}</td>
+                        <td className="py-2.5 px-3 font-mono font-semibold text-slate-700">{ref.nis}</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">
+                          <div className="flex items-center gap-2.5">
+                            {students.find(s => s.id === ref.studentId)?.avatar_url ? (
+                              <img
+                                src={students.find(s => s.id === ref.studentId)?.avatar_url}
+                                alt={ref.studentName}
+                                className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-900 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                {ref.studentName.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="truncate">{ref.studentName}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">{ref.date}</td>
+                        <td className="py-2.5 px-3 font-medium text-slate-800">{ref.reason}</td>
+                        <td className="py-2.5 px-2 text-center">
+                          {ref.priority === 'segera' ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-700 text-white shadow-xs">
+                              SEGERA
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-slate-700 text-white shadow-xs">
+                              BIASA
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {ref.status === 'menunggu' && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-600 text-white shadow-xs">
+                              MENUNGGU
+                            </span>
+                          )}
+                          {ref.status === 'dijadwalkan' && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-900 text-white shadow-xs">
+                              DIJADWALKAN
+                            </span>
+                          )}
+                          {ref.status === 'selesai' && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-800 text-white shadow-xs">
+                              SELESAI
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 text-[11px] italic">
+                          {ref.counselorNotes || 'Belum ada catatan tindak lanjut dari konselor.'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -803,7 +1042,10 @@ export default function DirektoriSiswaPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsReferralModalOpen(false)}
+                onClick={() => {
+                  setReferralFieldErrors({});
+                  setIsReferralModalOpen(false);
+                }}
                 className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -814,7 +1056,7 @@ export default function DirektoriSiswaPage() {
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Peserta Didik yang Dirujuk:</span>
                 <p className="font-black text-sm text-slate-900 mt-0.5">{referralStudent.name}</p>
-                <p className="text-[11px] font-mono text-slate-600">NIS: {referralStudent.nis} • Kelas IX-A</p>
+                <p className="text-[11px] font-mono text-slate-600">NIS: {referralStudent.nis}</p>
               </div>
 
               <div>
@@ -848,28 +1090,37 @@ export default function DirektoriSiswaPage() {
                 <label className="font-bold text-slate-800 block mb-1">Catatan Awal / Observasi Guru:</label>
                 <textarea
                   rows={3}
-                  required
                   placeholder="Ceritakan temuan observasi atau kendala siswa di kelas..."
                   value={referralNotes}
                   onChange={(e) => setReferralNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-blue-900"
+                  className={`w-full px-3 py-2 bg-white border rounded-lg text-xs font-medium focus:outline-none ${
+                    referralFieldErrors.reason ? 'border-rose-500 focus:border-rose-600' : 'border-slate-300 focus:border-blue-900'
+                  }`}
                 />
+                {referralFieldErrors.reason && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1">
+                    {referralFieldErrors.reason[0]}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsReferralModalOpen(false)}
+                  onClick={() => {
+                    setReferralFieldErrors({});
+                    setIsReferralModalOpen(false);
+                  }}
                   className="px-3.5 py-2 text-xs font-bold border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={isSavingReferral}
+                  disabled={createReferralMutation.isPending}
                   className="px-4 py-2 text-xs font-black bg-purple-900 hover:bg-purple-950 text-white rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  {isSavingReferral ? 'Mengirim...' : 'Kirim Rujukan ke Guru BK'}
+                  {createReferralMutation.isPending ? 'Mengirim...' : 'Kirim Rujukan ke Guru BK'}
                 </button>
               </div>
             </form>

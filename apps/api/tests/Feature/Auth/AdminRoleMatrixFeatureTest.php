@@ -145,15 +145,11 @@ class AdminRoleMatrixFeatureTest extends TestCase
             ]);
 
             if ($isAdminRole) {
-                // Admin role TANPA 2FA aktif WAJIB memicu mfa_enrollment_required, BUKAN token shell langsung
+                // Admin role login langsung diterima tanpa 2FA
                 $this->assertEquals(200, $resAdmin->status());
-                $this->assertTrue(
-                    (bool) $resAdmin->json('data.mfa_enrollment_required'),
-                    "Peran admin '{$role->code}' tanpa 2FA wajib memicu mfa_enrollment_required."
-                );
-                $this->assertNull(
-                    $resAdmin->json('data.token'),
-                    "Peran admin '{$role->code}' tidak boleh mendapatkan token shell tanpa 2FA."
+                $this->assertNotNull(
+                    $resAdmin->json('data.tokens.accessToken'),
+                    "Peran admin '{$role->code}' harus mendapatkan token tanpa 2FA."
                 );
             } else {
                 // Non-admin role DITOLAK (401) di jalur admin

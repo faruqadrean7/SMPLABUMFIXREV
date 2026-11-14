@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './api-client';
 import { ApiResponse } from '@/types/auth';
+import { StudentPointsData } from '@/types/student';
 
 export interface ChildSummary {
   id: string;
@@ -406,5 +407,18 @@ export function useCreateGuardianCounselingRequest() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guardian-counseling-requests'] });
     },
+  });
+}
+
+export function useChildPoints(childId: string | undefined | null) {
+  return useQuery({
+    queryKey: ['child-points', childId],
+    queryFn: async () => {
+      if (!childId) return null;
+      const res = await apiClient.get<ApiResponse<StudentPointsData>>(`/me/children/${childId}/points`);
+      return res.data.data;
+    },
+    enabled: !!childId,
+    staleTime: 1000 * 60 * 2,
   });
 }

@@ -190,13 +190,13 @@ export const lmsApi = {
       })),
     };
 
-    if (isUuid(payload.schedule_id)) {
+    if (payload.schedule_id) {
       journalPayload.schedule_id = payload.schedule_id;
     }
-    if (isUuid(payload.class_id)) {
+    if (payload.class_id) {
       journalPayload.class_id = payload.class_id;
     }
-    if (isUuid(payload.subject_id)) {
+    if (payload.subject_id) {
       journalPayload.subject_id = payload.subject_id;
     }
 
@@ -223,7 +223,7 @@ export const lmsApi = {
       topic: createdJournal?.topic || payload.topic,
       method: createdJournal?.method || payload.method,
       notes: createdJournal?.notes || payload.notes,
-      attendance_summary: {
+      attendance_summary: createdJournal?.attendance_summary || {
         total,
         hadir: hadirCount,
         sakit: sakitCount,
@@ -329,6 +329,17 @@ export const lmsApi = {
     return data?.url ?? null;
   },
 
+  async getStudentPoints(params?: {
+    student_id?: string;
+    class_id?: string;
+    type?: string;
+    page?: number;
+    per_page?: number;
+  }) {
+    const res = await apiClient.get('/me/teacher/student-points', { params });
+    return res.data;
+  },
+
   async recordStudentPoint(payload: {
     student_id: string;
     point_type_id?: string;
@@ -343,6 +354,17 @@ export const lmsApi = {
     return res.data;
   },
 
+  async getCounselingReferrals(params?: {
+    student_id?: string;
+    class_id?: string;
+    status?: string;
+    page?: number;
+    per_page?: number;
+  }) {
+    const res = await apiClient.get('/me/teacher/counseling-referrals', { params });
+    return res.data;
+  },
+
   async createCounselingReferral(payload: {
     student_id: string;
     reason: string;
@@ -353,6 +375,12 @@ export const lmsApi = {
   },
 
   async getFacilities(params?: { per_page?: number; q?: string }) {
+    try {
+      const res = await apiClient.get('/me/teacher/facilities', { params });
+      if (res.data) return res.data;
+    } catch {
+      // Fallback
+    }
     const res = await apiClient.get('/facilities', { params: { per_page: 100, ...params } });
     return res.data;
   },
@@ -389,6 +417,11 @@ export const lmsApi = {
     return res.data;
   },
 
+  async getTickets() {
+    const res = await apiClient.get('/me/teacher/tickets');
+    return res.data;
+  },
+
   async createTicket(payload: {
     title?: string;
     category?: string;
@@ -408,7 +441,7 @@ export const lmsApi = {
       room_id: payload.room_id,
       asset_id: payload.asset_id,
     };
-    const res = await apiClient.post('/me/teacher/tickets', body);
+    const res = await apiClient.post('/me/teacher/tickets', body, { timeout: 30000 });
     return res.data;
   },
 
@@ -438,7 +471,7 @@ export const lmsApi = {
     weight?: number;
     points?: number;
     difficulty?: any;
-  }) {
+  }, idempotencyKey?: string) {
     const body = {
       subject_id: payload.subject_id,
       bank_id: payload.bank_id,
@@ -446,10 +479,12 @@ export const lmsApi = {
       question_text: payload.question_text || payload.prompt,
       body: payload.body || (payload.prompt ? { text: payload.prompt } : undefined),
       options: payload.options,
+      answer_key: payload.answer_key,
       weight: payload.weight || payload.points || 1.0,
       difficulty: payload.difficulty,
     };
-    const res = await apiClient.post('/me/teacher/questions', body);
+    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined;
+    const res = await apiClient.post('/me/teacher/questions', body, { headers });
     return res.data;
   },
 

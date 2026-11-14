@@ -15,8 +15,9 @@ import {
   MessageCircle,
   Users
 } from 'lucide-react';
-import { StudentCounselingItem } from '@/lib/mock-student-data';
+import { StudentCounselingItem } from '@/types/student';
 import { useCounselingRequests, useCreateCounselingRequest } from '@/lib/use-student-data';
+import { toast } from 'sonner';
 import { CounselingListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -59,37 +60,23 @@ export default function StudentKonselingPage() {
     try {
       await createCounselingMutation.mutateAsync({
         topic,
+        reason: notes || topic,
         category,
         counselor_name: counselor,
+        preferred_date: preferredDate || undefined,
+        preferred_time: preferredTime || undefined,
         preferred_schedule: `${preferredDate || 'Tanggal fleksibel'} - ${preferredTime}`,
         notes: notes || 'Permohonan janji temu baru diajukan siswa.',
       });
       setIsSuccess(true);
       setTopic('');
       setNotes('');
+      toast.success('Permohonan janji temu konseling berhasil diajukan.');
       setTimeout(() => {
         setIsSuccess(false);
       }, 3000);
-    } catch {
-      // Local optimistic fallback
-      const newRequest: StudentCounselingItem = {
-        id: `csl-${Date.now()}`,
-        topic,
-        category,
-        request_date: 'Hari Ini',
-        preferred_schedule: `${preferredDate || 'Tanggal fleksibel'} - ${preferredTime}`,
-        counselor_name: counselor,
-        status: 'menunggu',
-        notes: notes || 'Permohonan janji temu baru diajukan siswa.',
-      };
-
-      setLocalList(prev => [newRequest, ...prev]);
-      setIsSuccess(true);
-      setTopic('');
-      setNotes('');
-      setTimeout(() => {
-        setIsSuccess(false);
-      }, 3000);
+    } catch (err: any) {
+      toast.error('Gagal mengajukan konseling: ' + (err?.response?.data?.message || err?.message || 'Terjadi kesalahan sistem'));
     }
   };
 

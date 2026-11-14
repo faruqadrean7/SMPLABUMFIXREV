@@ -13,9 +13,13 @@ use App\Models\CounselingRequest;
 use App\Models\Exam;
 use App\Models\ExamParticipant;
 use App\Models\ExamSession;
+use App\Models\Extracurricular;
+use App\Models\ExtracurricularMember;
 use App\Models\Grade;
+use App\Models\PointType;
 use App\Models\Schedule;
 use App\Models\Student;
+use App\Models\StudentPoint;
 use App\Models\StudentProgramProfile;
 use App\Services\AuditLogService;
 use App\Services\LmsService;
@@ -505,6 +509,24 @@ class MeStudentController extends Controller
             $request->merge(['preferred_time' => $request->input('preferredTime')]);
         }
 
+        // Support notes or topic as fallback for reason
+        if (empty($request->input('reason'))) {
+            if ($request->filled('notes')) {
+                $request->merge(['reason' => $request->input('notes')]);
+            } elseif ($request->filled('topic')) {
+                $request->merge(['reason' => $request->input('topic')]);
+            }
+        }
+
+        // If preferred_date is non-date text (e.g. "Tanggal fleksibel"), sanitize to avoid validation rejection
+        $prefDateInput = $request->input('preferred_date');
+        if ($prefDateInput && ! strtotime($prefDateInput)) {
+            $request->merge(['preferred_date' => null]);
+            if (! $request->input('preferred_time')) {
+                $request->merge(['preferred_time' => (string) $prefDateInput]);
+            }
+        }
+
         $validated = $request->validate([
             'topic' => 'nullable|string|max:200',
             'reason' => 'required|string|max:1000',
@@ -580,5 +602,187 @@ class MeStudentController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * GET /api/v1/me/points
+     * Rekapitulasi poin karakter, kedisiplinan, dan prestasi siswa aktif.
+     */
+    public function points(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $studentPoints = StudentPoint::with(['pointType', 'recorder'])
+            ->where('student_id', $student->id)
+            ->orderBy('point_date', 'desc')
+            ->get();
+
+        $achievements = Achievement::where('student_id', $student->id)
+            ->orderBy('achieved_at', 'desc')
+            ->get();
+
+        $items = collect();
+
+        foreach ($achievements as $ach) {
+            $dateStr = $ach->achieved_at ? $ach->achieved_at->format('d M Y') : $ach->created_at->format('d M Y');
+            $items->push([
+                'id' => 'ach-' . $ach->id,
+                'student_id' => $student->id,
+                'kind' => 'prestasi',
+                'title' => $ach->title,
+                'category' => $ach->rank_level ?: 'Prestasi & Kompetisi',
+                'point_date' => $dateStr,
+                'points' => (int) ($ach->points_awarded ?: 25),
+                'note' => $ach->notes ?: 'Diverifikasi oleh tim kesiswaan SMP Labschool UM.',
+                'recorder_name' => 'Tim Kesiswaan',
+            ]);
+        }
+
+        foreach ($studentPoints as $sp) {
+            $isViolation = ($sp->pointType?->kind === 'pelanggaran');
+            $dateStr = $sp->point_date ? $sp->point_date->format('d M Y') : $sp->created_at->format('d M Y');
+            $items->push([
+                'id' => 'pt-' . $sp->id,
+                'student_id' => $student->id,
+                'kind' => $isViolation ? 'pelanggaran' : 'prestasi',
+                'title' => $sp->pointType?->name ?: ($isViolation ? 'Pelanggaran Kedisiplinan' : 'Apresiasi Karakter'),
+                'category' => ucfirst($sp->pointType?->severity ?: 'Disiplin'),
+                'point_date' => $dateStr,
+                'points' => (int) ($sp->pointType?->points ?: 0),
+                'note' => $sp->notes ?: 'Tercatat dalam buku pembiasaan siswa.',
+                'recorder_name' => $sp->recorder?->name ?: 'Guru Piket / Kesiswaan',
+            ]);
+        }
+
+        $totalPrestasi = $items->where('kind', 'prestasi')->sum('points');
+        $totalPelanggaran = $items->where('kind', 'pelanggaran')->sum('points');
+        $balancePoints = $totalPrestasi - $totalPelanggaran;
+
+        $statusDisiplin = match (true) {
+            $totalPelanggaran >= 75 => 'SP3 - Konferensi Kasus',
+            $totalPelanggaran >= 50 => 'SP2 - Peringatan 2',
+            $totalPelanggaran >= 25 => 'SP1 - Peringatan 1',
+            default => 'AMAN',
+        };
+
+        return $this->successResponse([
+            'totalPrestasi' => $totalPrestasi,
+            'totalPelanggaran' => $totalPelanggaran,
+            'balancePoints' => $balancePoints,
+            'statusDisiplin' => $statusDisiplin,
+            'achievementsCount' => $achievements->count(),
+            'items' => $items->values()->all(),
+        ]);
+    }
+
+    /**
+     * GET /api/v1/me/extracurriculars
+     * Daftar kegiatan ekstrakurikuler yang diikuti serta katalog ekstrakurikuler sekolah.
+     */
+    public function extracurriculars(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $memberships = ExtracurricularMember::with(['extracurricular.coach'])
+            ->where('student_id', $student->id)
+            ->get();
+
+        $joinedIds = $memberships->pluck('extracurricular_id')->all();
+
+        $myExtracurriculars = $memberships->map(function (ExtracurricularMember $m) {
+            $ekskul = $m->extracurricular;
+            $sched = trim(($ekskul?->schedule_day ?? '') . ($ekskul?->schedule_time ? ', ' . $ekskul->schedule_time : ''));
+
+            return [
+                'id' => $m->extracurricular_id,
+                'memberId' => $m->id,
+                'name' => $ekskul?->name ?? 'Ekstrakurikuler',
+                'coach' => $ekskul?->coach?->full_name ?? 'Pembina Ekstrakurikuler',
+                'schedule' => $sched ?: 'Jadwal diumumkan pembina',
+                'room' => 'Ruang Kegiatan / Lapangan',
+                'role' => ucfirst($m->role ?: 'Anggota Reguler'),
+                'attendance_rate' => '100%',
+                'badgeColor' => 'bg-blue-50 text-blue-900 border-blue-200',
+                'finalGrade' => $m->final_grade,
+            ];
+        })->values()->all();
+
+        $availableQuery = Extracurricular::with('coach')
+            ->where('is_active', true);
+        if (! empty($joinedIds)) {
+            $availableQuery->whereNotIn('id', $joinedIds);
+        }
+        $available = $availableQuery->get();
+
+        $availableExtracurriculars = $available->map(function (Extracurricular $e) {
+            $memberCount = $e->members()->count();
+            $remainingQuota = max(0, ($e->quota ?? 30) - $memberCount);
+            $sched = trim(($e->schedule_day ?? '') . ($e->schedule_time ? ', ' . $e->schedule_time : ''));
+
+            return [
+                'id' => $e->id,
+                'name' => $e->name,
+                'coach' => $e->coach?->full_name ?? 'Pembina Ekstrakurikuler',
+                'schedule' => $sched ?: 'Sesuai Pengumuman',
+                'quota' => 'Sisa '.$remainingQuota.' Kuota',
+                'category' => $e->category ?: 'Pilihan',
+                'description' => $e->description ?: '',
+            ];
+        })->values()->all();
+
+        return $this->successResponse([
+            'myExtracurriculars' => $myExtracurriculars,
+            'availableExtracurriculars' => $availableExtracurriculars,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/me/extracurriculars/register
+     * Siswa mendaftar ke ekstrakurikuler pilihan.
+     */
+    public function registerExtracurricular(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $validated = $request->validate([
+            'extracurricular_id' => 'required|uuid|exists:extracurriculars,id',
+        ]);
+
+        $ekskul = Extracurricular::findOrFail($validated['extracurricular_id']);
+
+        $existing = ExtracurricularMember::where('extracurricular_id', $ekskul->id)
+            ->where('student_id', $student->id)
+            ->first();
+
+        if ($existing) {
+            return $this->errorResponse('Anda sudah terdaftar pada ekstrakurikuler ini.', 'ALREADY_REGISTERED', 422);
+        }
+
+        $currentCount = $ekskul->members()->count();
+        if ($currentCount >= ($ekskul->quota ?? 30)) {
+            return $this->errorResponse('Mohon maaf, kuota peserta untuk ekstrakurikuler ini telah penuh.', 'QUOTA_FULL', 422);
+        }
+
+        $member = ExtracurricularMember::create([
+            'extracurricular_id' => $ekskul->id,
+            'student_id' => $student->id,
+            'role' => 'anggota',
+            'status' => 'aktif',
+            'joined_at' => now()->toDateString(),
+        ]);
+
+        return $this->successResponse([
+            'message' => 'Berhasil mendaftar ekstrakurikuler '.$ekskul->name,
+            'member' => $member,
+        ], 201);
     }
 }

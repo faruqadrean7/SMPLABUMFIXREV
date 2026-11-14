@@ -1,4 +1,4 @@
-import type { AttendanceCalendarDay } from './mock-guardian-data';
+import type { AttendanceCalendarDay } from '@/types/guardian';
 
 /**
  * FE-ORTU-PRESENSI-01: Pemetaan presensi anak untuk portal ortu.

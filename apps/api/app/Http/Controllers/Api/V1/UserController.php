@@ -33,6 +33,8 @@ class UserController extends Controller
             $users = $this->userService->listUsers($request);
 
             return $this->paginatedResponse($users);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -52,6 +54,8 @@ class UserController extends Controller
             return $this->successResponse($user);
         } catch (ModelNotFoundException $e) {
             return $this->notFoundResponse('Pengguna tidak ditemukan');
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -70,7 +74,7 @@ class UserController extends Controller
 
             return $this->successResponse($result, 201);
         } catch (HttpException $e) {
-            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -91,7 +95,7 @@ class UserController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->notFoundResponse('Pengguna tidak ditemukan');
         } catch (HttpException $e) {
-            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -112,7 +116,7 @@ class UserController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->notFoundResponse('Pengguna tidak ditemukan');
         } catch (HttpException $e) {
-            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -133,7 +137,7 @@ class UserController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->notFoundResponse('Pengguna tidak ditemukan');
         } catch (HttpException $e) {
-            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 

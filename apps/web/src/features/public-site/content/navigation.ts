@@ -9,12 +9,14 @@ export const PUBLIC_NAV_ITEMS: NavItem[] = [
   { label: 'Beranda', href: '/' },
   { label: 'Profil', href: '/profil' },
   { label: 'Akademik', href: '/akademik' },
+  { label: 'Pendidik', href: '/pendidik' },
   { label: 'Berita', href: '/berita' },
   { label: 'Agenda', href: '/agenda' },
   { label: 'Galeri', href: '/galeri' },
   { label: 'Unduhan', href: '/unduhan' },
   { label: 'Buletin', href: '/buletin' },
   { label: 'Kontak', href: '/kontak' },
+  { label: 'Lapor & Pengaduan', href: '/lapor' },
 ];
 
 /**
@@ -49,11 +51,13 @@ export const SCHOOL_CONTACT_INFO: ContactInfo = {
 export const FOOTER_QUICK_LINKS: QuickLinkItem[] = [
   { label: 'Profil & Sejarah', href: '/profil' },
   { label: 'Kurikulum & Program', href: '/akademik' },
+  { label: 'Direktori Pendidik & Staf', href: '/pendidik' },
   { label: 'Berita & Pengumuman', href: '/berita' },
   { label: 'Agenda Kegiatan', href: '/agenda' },
   { label: 'Galeri Aktivitas', href: '/galeri' },
   { label: 'Pusat Unduhan', href: '/unduhan' },
   { label: 'Buletin & Majalah', href: '/buletin' },
+  { label: 'Layanan Pengaduan & Lapor Bullying', href: '/lapor' },
   { label: 'Pendaftaran Siswa Baru (PPDB)', href: '/ppdb' },
 ];
 

@@ -1,4 +1,4 @@
-import type { ChildSubjectGrade } from './mock-guardian-data';
+import type { ChildSubjectGrade } from '@/types/guardian';
 
 /**
  * FE-ORTU-NILAI-01: Pemetaan nilai anak untuk portal ortu.

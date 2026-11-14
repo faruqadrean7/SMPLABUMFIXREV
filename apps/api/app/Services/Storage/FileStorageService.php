@@ -5,7 +5,11 @@ namespace App\Services\Storage;
 use App\Models\AuditLog;
 use App\Models\File;
 use App\Models\Guardian;
+use App\Models\LeaveRequest;
+use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\Teacher;
+use App\Models\TeachingAssignment;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -253,6 +257,27 @@ class FileStorageService
         $disposition = $request->query('disposition', 'inline');
         $filename = basename($file->object_key);
 
+        // BE-GUEST-04: Catat audit_logs setiap kali berkas lampiran pengaduan diunduh/dibuka
+        if ($file->owner_type === 'complaint') {
+            try {
+                AuditLog::create([
+                    'school_id' => $file->school_id,
+                    'actor_id' => $request->user()?->id,
+                    'action' => 'complaint.attachment.downloaded',
+                    'entity' => 'File',
+                    'entity_id' => $file->id,
+                    'new_value' => [
+                        'complaint_id' => $file->owner_id,
+                        'mime_type' => $file->mime_type,
+                    ],
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
         return Storage::disk($disk)->response($file->object_key, $filename, [
             'Content-Type' => $file->mime_type,
             'Content-Disposition' => ($disposition === 'attachment' ? 'attachment' : 'inline').'; filename="'.$filename.'"',
@@ -264,6 +289,14 @@ class FileStorageService
      */
     protected function authorizeFileAccess(File $file, User $user): void
     {
+        // BE-GUEST-04: Berkas lampiran pengaduan bersifat SANGAT SENSITIF
+        if ($file->owner_type === 'complaint' || $file->owner_type === 'complaint_pending') {
+            if ($user->hasRole(['super_admin', 'principal', 'counselor']) || $user->hasPermission('complaint.read') || $user->hasPermission('complaint.manage')) {
+                return;
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses lampiran pengaduan ini.');
+        }
+
         // 1. Super Admin / Admin TU / Principal / File Manager
         if ($user->hasRole(['super_admin', 'admin', 'principal']) || $user->hasPermission('file.manage')) {
             return;
@@ -274,12 +307,67 @@ class FileStorageService
             return;
         }
 
-        // 3. Staf akademik & pengajar (guru, walas, bk, sarpras, ppdb) bila berkas siswa / sistem
+        // 3. FIX-GURU-07: Berkas lampiran perizinan / dokumen siswa (Anti-IDOR untuk guru, walas, ortu, siswa)
+        $studentId = null;
+        if ($file->owner_type === 'Student' || $file->bucket === 'leave-attachments') {
+            $studentId = $file->owner_id;
+        }
+        if (! $studentId) {
+            $leaveRequest = LeaveRequest::where('attachment_file_id', $file->id)->first();
+            if ($leaveRequest) {
+                $studentId = $leaveRequest->student_id;
+            }
+        }
+
+        if ($studentId) {
+            $student = Student::find($studentId);
+            if ($student) {
+                // a. Siswa pemilik berkas
+                if ($user->hasRole('student') && (string) $student->user_id === (string) $user->id) {
+                    return;
+                }
+
+                // b. Orang tua dari siswa bersangkutan
+                if ($user->hasRole('guardian')) {
+                    $guardian = Guardian::where('user_id', $user->id)->first();
+                    if ($guardian && $guardian->students()->where('students.id', $student->id)->exists()) {
+                        return;
+                    }
+                    throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang mengakses berkas siswa ini.');
+                }
+
+                // c. Guru & Wali Kelas: Hanya dapat mengakses bila mengajar atau menjadi wali kelas siswa bersangkutan (Anti-IDOR)
+                if ($user->hasRole(['teacher', 'homeroom'])) {
+                    $teacher = Teacher::where('user_id', $user->id)->first();
+                    if ($teacher) {
+                        $studentClassIds = $student->classes()->pluck('classes.id');
+                        $isHomeroom = SchoolClass::whereIn('id', $studentClassIds)
+                            ->where('homeroom_teacher_id', $teacher->id)
+                            ->exists();
+                        $teaches = TeachingAssignment::where('teacher_id', $teacher->id)
+                            ->whereIn('class_id', $studentClassIds)
+                            ->exists();
+
+                        if ($isHomeroom || $teaches) {
+                            return;
+                        }
+                    }
+                    throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses lampiran siswa di luar kelas wewenang Anda.');
+                }
+
+                // d. Guru BK (counselor) memiliki akses konseling seluruh siswa
+                if ($user->hasRole('counselor')) {
+                    return;
+                }
+            }
+        }
+
+        // 4. Staf akademik & pengajar (sarpras, ppdb, pustakawan) untuk berkas operasional sekolah non-siswa
         if ($user->hasRole(['teacher', 'homeroom', 'counselor', 'facility_staff', 'ppdb_committee', 'librarian'])) {
             return;
         }
 
-        // 4. Orang tua / Wali Murid: periksa apakah berkas milik anaknya
+        // 5. Orang tua / Wali Murid: periksa apakah berkas milik anaknya
         if ($user->hasRole('guardian')) {
             $guardian = Guardian::where('user_id', $user->id)->first();
             if ($guardian) {

@@ -792,6 +792,21 @@ export default function ProfilePage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Tautan ke Direktori Pendidik & Staf Lengkap */}
+                <div className="mt-4 pt-3 border-t border-gray-200/80 w-full flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-[#0A3D62]" aria-hidden="true" />
+                    <span className="text-xs text-gray-600 font-medium">Dewan Guru &amp; Tenaga Kependidikan</span>
+                  </div>
+                  <Link
+                    href="/pendidik"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#0A3D62] hover:text-[#C89332] transition-colors group"
+                  >
+                    <span>Lihat Semua Direktori</span>
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

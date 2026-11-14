@@ -33,6 +33,8 @@ class GuardianController extends Controller
             $guardians = $this->guardianService->listGuardians($request);
 
             return $this->paginatedResponse($guardians);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -51,13 +53,7 @@ class GuardianController extends Controller
 
             return $this->successResponse($guardian, 201);
         } catch (HttpException $e) {
-            $code = match ($e->getStatusCode()) {
-                400 => 'BUSINESS_RULE_VIOLATION',
-                409 => 'CONFLICT',
-                default => 'INTERNAL_ERROR',
-            };
-
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -78,13 +74,7 @@ class GuardianController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Data orang tua/wali tidak ditemukan', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            $code = match ($e->getStatusCode()) {
-                403 => 'FORBIDDEN',
-                404 => 'NOT_FOUND',
-                default => 'INTERNAL_ERROR',
-            };
-
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -105,13 +95,7 @@ class GuardianController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Data orang tua/wali tidak ditemukan', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            $code = match ($e->getStatusCode()) {
-                400 => 'BUSINESS_RULE_VIOLATION',
-                409 => 'CONFLICT',
-                default => 'INTERNAL_ERROR',
-            };
-
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -131,6 +115,8 @@ class GuardianController extends Controller
             return $this->successResponse(['message' => 'Data orang tua/wali berhasil dihapus']);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Data orang tua/wali tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -275,6 +261,8 @@ class GuardianController extends Controller
             ], 200);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Data orang tua/wali tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 

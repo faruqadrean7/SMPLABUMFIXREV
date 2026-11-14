@@ -15,7 +15,7 @@ import {
   ChildProgressReportItem,
   useChildInvoices,
 } from './use-guardian-data';
-import { 
+import type { 
   GuardianChildProfile, 
   GuardianProfile,
   ChildSubjectGrade,
@@ -23,7 +23,7 @@ import {
   ChildPointItem,
   SchoolFeeItem,
   ChildScheduleItem,
-} from './mock-guardian-data';
+} from '@/types/guardian';
 import { buildAttendanceRecap, buildAttendanceCalendar, formatGateTapTime } from './guardian-attendance';
 import { buildChildFees, resolveAdminFeeStatus, resolveFeeSummary } from './guardian-fees';
 import { buildChildSubjectGrades } from './guardian-grades';
@@ -53,32 +53,32 @@ const DEFAULT_CHILD: GuardianChildProfile = {
   name: 'Memuat data siswa...',
   nis: '-',
   nisn: '-',
-  class_name: 'Kelas 7-A',
-  grade_level: 'Tingkat VII SMP',
-  curriculum_phase: 'Kurikulum Merdeka Fase D',
-  homeroom_teacher: 'Nur Hayati, S.Pd.',
-  homeroom_nip: 'NIP. 19840214 200902 2 003',
-  homeroom_phone: '0812-3456-7890',
+  class_name: '-',
+  grade_level: '-',
+  curriculum_phase: '-',
+  homeroom_teacher: 'Belum ditetapkan',
+  homeroom_nip: '-',
+  homeroom_phone: '-',
   initials: 'SW',
   gender: 'L',
   gate_attendance_today: {
     status: 'hadir',
-    status_label: 'Tepat Waktu',
-    tap_time: '06:48 WIB',
-    location: 'Gerbang Utama RFID Siswa (Gate 1)',
-    note: 'Presensi KBM Sekolah',
+    status_label: '-',
+    tap_time: '-',
+    location: '',
+    note: '',
   },
   attendance_recap: {
-    hadir: 25,
-    sakit: 1,
-    izin: 1,
+    hadir: 0,
+    sakit: 0,
+    izin: 0,
     alpa: 0,
     terlambat: 0,
-    rate: 96.0,
+    rate: 0,
   },
-  grade_average: 87.4,
-  points_balance: 45,
-  points_prestasi: 45,
+  grade_average: 0,
+  points_balance: 0,
+  points_prestasi: 0,
   points_pelanggaran: 0,
   admin_fee_status: 'Lunas / Bebas Tanggungan',
   fee_summary: {
@@ -180,7 +180,8 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     const attendanceRecap = buildAttendanceRecap(attendanceData?.summary as Record<string, unknown> | undefined);
     const tapTime = formatGateTapTime(latestAtt?.check_in_time || latestAtt?.checkInTime) ?? '-';
 
-    let avgScore = 87.4;
+    // FE-ORTU-FABRIKASI-01: Tanpa fallback nilai fiktif. Jika data nilai kosong, default 0.
+    let avgScore = 0;
     if (Array.isArray(gradesData) && gradesData.length > 0) {
       const sum = gradesData.reduce((acc, curr: any) => acc + (Number(curr.finalScore ?? curr.score) || 0), 0);
       avgScore = Math.round((sum / gradesData.length) * 10) / 10;
@@ -193,14 +194,14 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     return {
       id: matchedSummary.id,
       name,
-      nis: matchedSummary.nis,
-      nisn: matchedSummary.nisn,
+      nis: matchedSummary.nis || '-',
+      nisn: matchedSummary.nisn || '-',
       class_name: className.startsWith('Kelas') ? className : `Kelas ${className}`,
       grade_level: `Tingkat ${gradeNum} SMP`,
       curriculum_phase: 'Kurikulum Merdeka Fase D',
-      homeroom_teacher: childDetail?.homeroom_teacher?.name || 'Nur Hayati, S.Pd.',
-      homeroom_nip: childDetail?.homeroom_teacher?.nip ? `NIP. ${childDetail.homeroom_teacher.nip}` : 'NIP. 19840214 200902 2 003',
-      homeroom_phone: childDetail?.homeroom_teacher?.phone || '0812-3456-7890',
+      homeroom_teacher: childDetail?.homeroom_teacher?.name || 'Belum ditetapkan',
+      homeroom_nip: childDetail?.homeroom_teacher?.nip ? `NIP. ${childDetail.homeroom_teacher.nip}` : '-',
+      homeroom_phone: childDetail?.homeroom_teacher?.phone || '-',
       avatar_url: matchedSummary.avatar_url || matchedSummary.avatarUrl || undefined,
       initials,
       gender: (matchedSummary.gender === 'female' || matchedSummary.gender === 'P') ? 'P' : 'L',
@@ -214,19 +215,19 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
       },
       attendance_recap: attendanceRecap,
       grade_average: avgScore,
-      points_balance: 45,
-      points_prestasi: 45,
+      points_balance: 0,
+      points_prestasi: 0,
       points_pelanggaran: 0,
       admin_fee_status: resolveAdminFeeStatus(activeFees),
       fee_summary: resolveFeeSummary(activeFees),
     };
   }, [childrenData, activeChildId, childDetail, attendanceData, gradesData, reportCardData, activeFees]);
 
-  // Construct guardian profile
+  // Construct guardian profile (FE-ORTU-FABRIKASI-01: data riil akun, tanpa profil karangan)
   const guardian = useMemo<GuardianProfile>(() => {
-    const gName = (user?.profile as { name?: string })?.name || user?.username || 'Adrean Pratama, S.T.';
-    const gPhone = user?.phone || '081234567890';
-    const gEmail = user?.email || 'ortu.siswa.001@smp-labum.sch.id';
+    const gName = (user?.profile as { name?: string })?.name || user?.name || user?.username || 'Wali Murid';
+    const gPhone = user?.phone || (user?.profile as any)?.phone || '-';
+    const gEmail = user?.email || '-';
 
     const mappedChildren: GuardianChildProfile[] = (childrenData || []).map((c) => {
       const isCur = c.id === activeChildId;
@@ -243,14 +244,14 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
       return {
         id: c.id,
         name: c.name,
-        nis: c.nis,
-        nisn: c.nisn,
+        nis: c.nis || '-',
+        nisn: c.nisn || '-',
         class_name: cClassName.startsWith('Kelas') ? cClassName : `Kelas ${cClassName}`,
         grade_level: `Tingkat ${cGradeNum} SMP`,
         curriculum_phase: 'Kurikulum Merdeka Fase D',
-        homeroom_teacher: isCur && childDetail?.homeroom_teacher?.name ? childDetail.homeroom_teacher.name : 'Wali Kelas',
-        homeroom_nip: 'NIP. 19840214 200902 2 003',
-        homeroom_phone: '0812-3456-7890',
+        homeroom_teacher: isCur && childDetail?.homeroom_teacher?.name ? childDetail.homeroom_teacher.name : 'Belum ditetapkan',
+        homeroom_nip: isCur && childDetail?.homeroom_teacher?.nip ? `NIP. ${childDetail.homeroom_teacher.nip}` : '-',
+        homeroom_phone: isCur && childDetail?.homeroom_teacher?.phone ? childDetail.homeroom_teacher.phone : '-',
         avatar_url: c.avatar_url || c.avatarUrl || undefined,
         initials,
         gender: (c.gender === 'female' || c.gender === 'P') ? 'P' : 'L',
@@ -265,9 +266,9 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
         },
         // Rekap nyata hanya untuk anak aktif (endpoint presensi per-anak); non-aktif 0, bukan karangan.
         attendance_recap: buildAttendanceRecap(isCur ? (attendanceData?.summary as Record<string, unknown> | undefined) : undefined),
-        grade_average: isCur && (gradesData as any)?.average_score ? (gradesData as any).average_score : 87.4,
-        points_balance: 45,
-        points_prestasi: 45,
+        grade_average: isCur && (gradesData as any)?.average_score ? (gradesData as any).average_score : 0,
+        points_balance: 0,
+        points_prestasi: 0,
         points_pelanggaran: 0,
         admin_fee_status: isCur ? resolveAdminFeeStatus(activeFees) : 'Lunas / Bebas Tanggungan',
         fee_summary: isCur
@@ -285,13 +286,13 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     });
 
     return {
-      id: (user?.profile as { id?: string })?.id || 'grd-001',
+      id: (user?.profile as { id?: string })?.id || user?.id || 'grd-001',
       name: gName,
       avatar_url: undefined,
       phone: gPhone,
       email: gEmail,
-      address: 'Jl. Ijen No. 45, Klojen, Kota Malang',
-      occupation: 'Arsitek & Wiraswasta',
+      address: (user?.profile as any)?.address || '-',
+      occupation: (user?.profile as any)?.occupation || '-',
       children: mappedChildren.length > 0 ? mappedChildren : [DEFAULT_CHILD],
     };
   }, [user, childrenData, activeChildId, childDetail, attendanceData, gradesData, activeFees]);
@@ -309,106 +310,19 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     [attendanceData],
   );
 
-  // Active Points from live character notes
+  // Active Points from live backend
+  // FE-ORTU-FABRIKASI-01: Backend belum menyediakan endpoint poin untuk akun ortu.
+  // Kembalikan [] secara jujur agar antarmuka menampilkan EmptyState jujur (tanpa poin/tanggal rekayasa).
   const activePoints = useMemo<ChildPointItem[]>(() => {
-    const items: ChildPointItem[] = [];
-    if (characterNotesData?.homeroomNote) {
-      items.push({
-        id: 'pt-01',
-        student_id: activeChildId,
-        point_date: '15 Oktober 2026',
-        kind: 'prestasi',
-        title: 'Apresiasi Karakter Kemandirian & Gotong Royong',
-        category: 'Karakter & Profil Pelajar Pancasila',
-        points: 25,
-        recorder_name: childDetail?.homeroom_teacher?.name || 'Nur Hayati, S.Pd.',
-        note: characterNotesData.homeroomNote,
-      });
-    }
-    items.push({
-      id: 'pt-02',
-      student_id: activeChildId,
-      point_date: '02 Oktober 2026',
-      kind: 'prestasi',
-      title: 'Ketertiban Kehadiran & Partisipasi KBM',
-      category: 'Kedisiplinan & Budaya Sekolah',
-      points: 20,
-      recorder_name: 'Wali Kelas',
-      note: 'Tertib hadir tepat waktu dan mematuhi seluruh tata tertib sekolah.',
-    });
-    return items;
-  }, [activeChildId, characterNotesData, childDetail]);
+    return [];
+  }, []);
 
   // Active Schedule
+  // FE-ORTU-FABRIKASI-01: Endpoint jadwal untuk ortu belum ada di backend.
+  // Kembalikan [] secara jujur (tanpa jadwal hardcoded atau guru fiktif).
   const activeSchedule = useMemo<ChildScheduleItem[]>(() => {
-    const isClass9 = activeChild?.class_name?.includes('9');
-    if (isClass9) {
-      return [
-        {
-          id: 'sch-9-1',
-          timeRange: '07:00 - 08:30 WIB',
-          subject: 'Matematika Tingkat Lanjut',
-          teacher: 'Ahmad Yani, M.Pd.',
-          room: 'Ruang 9-A',
-          status: 'completed',
-          statusLabel: 'Selesai KBM',
-          topic: 'Persamaan Kuadrat & Fungsi Polinomial',
-        },
-        {
-          id: 'sch-9-2',
-          timeRange: '08:45 - 10:15 WIB',
-          subject: 'Bahasa Inggris Lanjutan',
-          teacher: 'Fitri Handayani, S.Pd.',
-          room: 'Ruang 9-A',
-          status: 'current',
-          statusLabel: 'Sedang Berlangsung',
-          topic: 'Analytical Exposition & Argumentative Essay',
-        },
-        {
-          id: 'sch-9-3',
-          timeRange: '10:30 - 12:00 WIB',
-          subject: 'Ilmu Pengetahuan Alam',
-          teacher: 'Dr. Hendra Wijaya',
-          room: 'Lab Biologi 2',
-          status: 'upcoming',
-          statusLabel: 'Berikutnya',
-          topic: 'Bioteknologi Konvensional & Modern',
-        },
-      ];
-    }
-    return [
-      {
-        id: 'sch-7-1',
-        timeRange: '07:00 - 08:30 WIB',
-        subject: 'Informatika',
-        teacher: 'Budi Santoso, S.Kom., M.T.',
-        room: 'Lab Komputer 1',
-        status: 'completed',
-        statusLabel: 'Selesai KBM',
-        topic: 'Algoritma Percabangan & Logika Web',
-      },
-      {
-        id: 'sch-7-2',
-        timeRange: '08:45 - 10:15 WIB',
-        subject: 'Matematika',
-        teacher: 'Siti Aminah, M.Pd.',
-        room: 'Ruang Kelas 7-A',
-        status: 'current',
-        statusLabel: 'Sedang Berlangsung',
-        topic: 'Operasi Bilangan Bulat & Aljabar Dasar',
-      },
-      {
-        id: 'sch-7-3',
-        timeRange: '10:30 - 12:00 WIB',
-        subject: 'Ilmu Pengetahuan Alam',
-        teacher: 'Rina Kusuma, S.Si.',
-        room: 'Lab IPA 1',
-        status: 'upcoming',
-        statusLabel: 'Berikutnya',
-        topic: 'Klasifikasi Makhluk Hidup & Metode Ilmiah',
-      },
-    ];
-  }, [activeChild?.class_name]);
+    return [];
+  }, []);
 
   const isLoading = isChildrenLoading || isAttLoading || isGradesLoading || isInvoicesLoading;
   const isError = isChildrenError || isInvoicesError;

@@ -166,6 +166,8 @@ export default function TeacherExamsPage() {
 
     // FIX-GURU-06: validasi & rakit opsi jawaban + kunci.
     let payloadOptions: Array<{ label: string; body: string; is_correct: boolean }> | undefined;
+    let answerKey: string | undefined;
+
     if (needsOptions) {
       const filled = options.filter((o) => o.body.trim());
       if (filled.length < 2) {
@@ -182,24 +184,32 @@ export default function TeacherExamsPage() {
         return;
       }
       payloadOptions = filled.map((o) => ({ label: o.label, body: o.body.trim(), is_correct: o.is_correct }));
+      const correctOption = filled.find((o) => o.is_correct);
+      if (correctOption) {
+        answerKey = correctOption.label;
+      }
     } else if (questionType === 'isian') {
       if (!shortAnswer.trim()) {
         setErrorMsg('Kunci jawaban isian singkat wajib diisi.');
         return;
       }
+      answerKey = shortAnswer.trim();
       payloadOptions = [{ label: 'KUNCI', body: shortAnswer.trim(), is_correct: true }];
     }
 
     setErrorMsg(null);
     setIsSubmittingQuestion(true);
+    // FIX-GURU-05: Sertakan Idempotency-Key untuk mencegah duplikasi
+    const idempotencyKey = `idemp-q-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     try {
       await guruApi.createQuestion(selectedBankId, {
         question_type: questionType,
-        body: { text: questionText },
+        body: { text: questionText, ...(answerKey ? { answer_key: answerKey } : {}) },
         cognitive_level: cognitiveLevel,
         difficulty: Number(difficulty),
         options: payloadOptions,
-      });
+        answer_key: answerKey,
+      }, idempotencyKey);
       setIsQuestionModalOpen(false);
       setQuestionText('');
       setOptions(defaultOptionsFor(questionType));
@@ -508,6 +518,7 @@ export default function TeacherExamsPage() {
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Tipe Soal</label>
                   <select
+                    aria-label="Tipe Soal"
                     value={questionType}
                     onChange={(e) => handleTypeChange(e.target.value)}
                     className="w-full h-9 rounded-md border border-slate-200 px-2 text-xs"

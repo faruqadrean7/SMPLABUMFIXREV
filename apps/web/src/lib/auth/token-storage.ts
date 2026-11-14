@@ -188,6 +188,7 @@ export const tokenStorage = {
     }
     if (hasLocalStorage()) {
       try {
+        window.localStorage.removeItem(ACCESS_TOKEN_KEY);
         window.localStorage.removeItem(REFRESH_TOKEN_KEY);
         window.localStorage.removeItem('auth_token');
         window.localStorage.removeItem('user_role');

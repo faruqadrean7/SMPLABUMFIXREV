@@ -16,6 +16,7 @@ use App\Models\TeachingAssignment;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -231,13 +232,93 @@ class TeacherExamController extends Controller
             'weight' => 'nullable|numeric|min:0',
             'explanation' => 'nullable|string',
             'options' => 'nullable|array',
+            'answer_key' => 'nullable',
         ]);
 
-        $question = DB::transaction(function () use ($bank, $validated) {
+        $options = $validated['options'] ?? [];
+        $answerKey = $validated['answer_key'] ?? null;
+
+        // FIX-GURU-06: Validasi kelayakan opsi dan kunci jawaban untuk tipe PG dan BS
+        if ($validated['question_type'] === 'pg') {
+            if (! is_array($options) || count($options) < 2) {
+                return $this->errorResponse('Soal pilihan ganda wajib memiliki minimal 2 opsi jawaban.', 'VALIDATION_ERROR', 422);
+            }
+
+            if ($answerKey !== null && is_string($answerKey)) {
+                foreach ($options as &$opt) {
+                    if (isset($opt['label']) && strtoupper(trim($opt['label'])) === strtoupper(trim($answerKey))) {
+                        $opt['is_correct'] = true;
+                    }
+                }
+                unset($opt);
+            }
+
+            $correctCount = collect($options)->filter(fn ($o) => ! empty($o['is_correct']))->count();
+            if ($correctCount === 0) {
+                return $this->errorResponse('Soal pilihan ganda wajib memiliki kunci jawaban benar.', 'VALIDATION_ERROR', 422);
+            }
+            if ($correctCount > 1) {
+                return $this->errorResponse('Soal pilihan ganda hanya boleh memiliki tepat satu jawaban benar.', 'VALIDATION_ERROR', 422);
+            }
+        } elseif ($validated['question_type'] === 'bs') {
+            if (! is_array($options) || count($options) < 2) {
+                return $this->errorResponse('Soal benar/salah wajib memiliki 2 opsi jawaban.', 'VALIDATION_ERROR', 422);
+            }
+            $correctCount = collect($options)->filter(fn ($o) => ! empty($o['is_correct']))->count();
+            if ($correctCount !== 1) {
+                return $this->errorResponse('Soal benar/salah wajib memiliki tepat satu jawaban benar.', 'VALIDATION_ERROR', 422);
+            }
+        }
+
+        // FIX-GURU-05: Dukungan Idempotency-Key untuk mencegah duplikasi butir soal
+        $idempotencyKey = $request->header('X-Idempotency-Key')
+            ?? $request->header('Idempotency-Key');
+
+        $payloadHash = hash('sha256', json_encode([
+            'bank_id' => $bank->id,
+            'question_type' => $validated['question_type'],
+            'body' => $validated['body'],
+            'options' => $options,
+            'cognitive_level' => $validated['cognitive_level'] ?? null,
+            'difficulty' => $validated['difficulty'] ?? null,
+        ]));
+
+        if ($idempotencyKey) {
+            $cacheKey = "idemp:teacher_q:{$request->user()->id}:{$idempotencyKey}";
+            $cached = Cache::get($cacheKey);
+            if ($cached) {
+                $cachedData = is_array($cached) ? $cached : ['question_id' => $cached, 'payload_hash' => $payloadHash];
+                if (isset($cachedData['payload_hash']) && $cachedData['payload_hash'] !== $payloadHash) {
+                    return $this->errorResponse(
+                        'Idempotency-Key telah digunakan untuk request dengan parameter yang berbeda.',
+                        'IDEMPOTENCY_CONFLICT',
+                        422
+                    );
+                }
+                $cachedQuestion = Question::with(['bank', 'options'])->find($cachedData['question_id']);
+                if ($cachedQuestion) {
+                    return response()->json([
+                        'status' => 'success',
+                        'data' => $cachedQuestion,
+                        'meta' => ['idempotent_replayed' => true],
+                    ], 200);
+                }
+            }
+        }
+
+        $question = DB::transaction(function () use ($bank, $validated, $options, $answerKey) {
+            $body = $validated['body'];
+            $correctOption = collect($options)->first(fn ($o) => ! empty($o['is_correct']));
+            if ($correctOption && isset($correctOption['label'])) {
+                $body['answer_key'] = $correctOption['label'];
+            } elseif ($answerKey) {
+                $body['answer_key'] = $answerKey;
+            }
+
             $q = Question::create([
                 'bank_id' => $bank->id,
                 'question_type' => $validated['question_type'],
-                'body' => $validated['body'],
+                'body' => $body,
                 'cognitive_level' => $validated['cognitive_level'] ?? 'C2',
                 'difficulty' => $validated['difficulty'] ?? 2,
                 'weight' => $validated['weight'] ?? 1.0,
@@ -246,13 +327,17 @@ class TeacherExamController extends Controller
                 'status' => 'draft',
             ]);
 
-            if (! empty($validated['options']) && is_array($validated['options'])) {
-                foreach ($validated['options'] as $opt) {
+            if (! empty($options) && is_array($options)) {
+                foreach ($options as $opt) {
+                    $optBody = $opt['body'] ?? ($opt['text'] ?? null);
+                    if (is_string($optBody)) {
+                        $optBody = ['text' => $optBody];
+                    }
                     QuestionOption::create([
                         'question_id' => $q->id,
                         'label' => $opt['label'] ?? null,
-                        'body' => $opt['body'] ?? null,
-                        'is_correct' => $opt['is_correct'] ?? false,
+                        'body' => $optBody,
+                        'is_correct' => (bool) ($opt['is_correct'] ?? false),
                         'match_key' => $opt['match_key'] ?? null,
                     ]);
                 }
@@ -260,6 +345,10 @@ class TeacherExamController extends Controller
 
             return $q->load('options');
         });
+
+        if ($idempotencyKey) {
+            Cache::put($cacheKey, ['question_id' => $question->id, 'payload_hash' => $payloadHash], 86400);
+        }
 
         return $this->successResponse($question, 201);
     }
@@ -581,6 +670,7 @@ class TeacherExamController extends Controller
             'points' => 'nullable|numeric|min:0',
             'explanation' => 'nullable|string',
             'options' => 'nullable|array',
+            'answer_key' => 'nullable',
         ]);
 
         $bank = null;
@@ -642,7 +732,85 @@ class TeacherExamController extends Controller
 
         $weight = $validated['weight'] ?? ($validated['points'] ?? 1.0);
 
-        $question = DB::transaction(function () use ($bank, $questionType, $body, $validated, $difficulty, $weight) {
+        $options = $validated['options'] ?? [];
+        $answerKey = $validated['answer_key'] ?? null;
+
+        // FIX-GURU-06: Validasi kelayakan opsi dan kunci jawaban untuk tipe PG dan BS
+        if ($questionType === 'pg') {
+            if (! is_array($options) || count($options) < 2) {
+                return $this->errorResponse('Soal pilihan ganda wajib memiliki minimal 2 opsi jawaban.', 'VALIDATION_ERROR', 422);
+            }
+
+            if ($answerKey !== null && is_string($answerKey)) {
+                foreach ($options as &$opt) {
+                    if (isset($opt['label']) && strtoupper(trim($opt['label'])) === strtoupper(trim($answerKey))) {
+                        $opt['is_correct'] = true;
+                    }
+                }
+                unset($opt);
+            }
+
+            $correctCount = collect($options)->filter(fn ($o) => ! empty($o['is_correct']))->count();
+            if ($correctCount === 0) {
+                return $this->errorResponse('Soal pilihan ganda wajib memiliki kunci jawaban benar.', 'VALIDATION_ERROR', 422);
+            }
+            if ($correctCount > 1) {
+                return $this->errorResponse('Soal pilihan ganda hanya boleh memiliki tepat satu jawaban benar.', 'VALIDATION_ERROR', 422);
+            }
+        } elseif ($questionType === 'bs') {
+            if (! is_array($options) || count($options) < 2) {
+                return $this->errorResponse('Soal benar/salah wajib memiliki 2 opsi jawaban.', 'VALIDATION_ERROR', 422);
+            }
+            $correctCount = collect($options)->filter(fn ($o) => ! empty($o['is_correct']))->count();
+            if ($correctCount !== 1) {
+                return $this->errorResponse('Soal benar/salah wajib memiliki tepat satu jawaban benar.', 'VALIDATION_ERROR', 422);
+            }
+        }
+
+        // FIX-GURU-05: Dukungan Idempotency-Key
+        $idempotencyKey = $request->header('X-Idempotency-Key')
+            ?? $request->header('Idempotency-Key');
+
+        $payloadHash = hash('sha256', json_encode([
+            'bank_id' => $bank->id,
+            'question_type' => $questionType,
+            'body' => $body,
+            'options' => $options,
+            'cognitive_level' => $validated['cognitive_level'] ?? null,
+            'difficulty' => $difficulty,
+        ]));
+
+        if ($idempotencyKey) {
+            $cacheKey = "idemp:teacher_q:{$request->user()->id}:{$idempotencyKey}";
+            $cached = Cache::get($cacheKey);
+            if ($cached) {
+                $cachedData = is_array($cached) ? $cached : ['question_id' => $cached, 'payload_hash' => $payloadHash];
+                if (isset($cachedData['payload_hash']) && $cachedData['payload_hash'] !== $payloadHash) {
+                    return $this->errorResponse(
+                        'Idempotency-Key telah digunakan untuk request dengan parameter yang berbeda.',
+                        'IDEMPOTENCY_CONFLICT',
+                        422
+                    );
+                }
+                $cachedQuestion = Question::with(['bank', 'options'])->find($cachedData['question_id']);
+                if ($cachedQuestion) {
+                    return response()->json([
+                        'status' => 'success',
+                        'data' => $cachedQuestion,
+                        'meta' => ['idempotent_replayed' => true],
+                    ], 200);
+                }
+            }
+        }
+
+        $question = DB::transaction(function () use ($bank, $questionType, $body, $validated, $difficulty, $weight, $options, $answerKey) {
+            $correctOption = collect($options)->first(fn ($o) => ! empty($o['is_correct']));
+            if ($correctOption && isset($correctOption['label'])) {
+                $body['answer_key'] = $correctOption['label'];
+            } elseif ($answerKey) {
+                $body['answer_key'] = $answerKey;
+            }
+
             $q = Question::create([
                 'bank_id' => $bank->id,
                 'question_type' => $questionType,
@@ -655,8 +823,8 @@ class TeacherExamController extends Controller
                 'status' => 'draft',
             ]);
 
-            if (! empty($validated['options']) && is_array($validated['options'])) {
-                foreach ($validated['options'] as $opt) {
+            if (! empty($options) && is_array($options)) {
+                foreach ($options as $opt) {
                     $optBody = $opt['body'] ?? ($opt['text'] ?? null);
                     if (is_string($optBody)) {
                         $optBody = ['text' => $optBody];
@@ -665,7 +833,7 @@ class TeacherExamController extends Controller
                         'question_id' => $q->id,
                         'label' => $opt['label'] ?? null,
                         'body' => $optBody,
-                        'is_correct' => $opt['is_correct'] ?? false,
+                        'is_correct' => (bool) ($opt['is_correct'] ?? false),
                         'match_key' => $opt['match_key'] ?? null,
                     ]);
                 }
@@ -673,6 +841,10 @@ class TeacherExamController extends Controller
 
             return $q->load('options');
         });
+
+        if ($idempotencyKey) {
+            Cache::put($cacheKey, ['question_id' => $question->id, 'payload_hash' => $payloadHash], 86400);
+        }
 
         return $this->successResponse($question, 201);
     }

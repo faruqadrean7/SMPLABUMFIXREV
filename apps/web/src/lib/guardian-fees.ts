@@ -1,5 +1,5 @@
 import type { ChildInvoice } from './use-guardian-data';
-import type { SchoolFeeItem, SchoolFeeStatus } from './mock-guardian-data';
+import type { SchoolFeeItem, SchoolFeeStatus } from '@/types/guardian';
 
 /**
  * FE-ORTU-BIAYA-01: Pemetaan tagihan & biaya sekolah untuk portal wali murid.

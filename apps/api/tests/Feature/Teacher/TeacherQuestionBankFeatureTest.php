@@ -397,4 +397,178 @@ class TeacherQuestionBankFeatureTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    /**
+     * FIX-GURU-06: Form PG mewajibkan minimal 2 opsi jawaban (AC1 & AC4).
+     */
+    public function test_fix_guru_06_pg_requires_at_least_two_options(): void
+    {
+        $bank = QuestionBank::create([
+            'school_id' => $this->userMtk->school_id,
+            'subject_id' => $this->subjectMtk->id,
+            'owner_id' => $this->userMtk->id,
+            'name' => 'Bank Soal Uji Validasi Opsi',
+        ]);
+
+        // 1. Tanpa options
+        $resNoOpt = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/question-banks/{$bank->id}/questions", [
+                'question_type' => 'pg',
+                'body' => ['text' => 'Berapa 1 + 1?'],
+                'options' => [],
+            ]);
+        $resNoOpt->assertStatus(422)
+            ->assertJsonPath('error.message', 'Soal pilihan ganda wajib memiliki minimal 2 opsi jawaban.');
+
+        // 2. Hanya 1 opsi
+        $resOneOpt = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/question-banks/{$bank->id}/questions", [
+                'question_type' => 'pg',
+                'body' => ['text' => 'Berapa 1 + 1?'],
+                'options' => [
+                    ['label' => 'A', 'body' => '2', 'is_correct' => true],
+                ],
+            ]);
+        $resOneOpt->assertStatus(422)
+            ->assertJsonPath('error.message', 'Soal pilihan ganda wajib memiliki minimal 2 opsi jawaban.');
+    }
+
+    /**
+     * FIX-GURU-06: Form PG mewajibkan tepat satu jawaban benar (AC1 & AC4).
+     */
+    public function test_fix_guru_06_pg_requires_exactly_one_correct_answer(): void
+    {
+        $bank = QuestionBank::create([
+            'school_id' => $this->userMtk->school_id,
+            'subject_id' => $this->subjectMtk->id,
+            'owner_id' => $this->userMtk->id,
+            'name' => 'Bank Soal Uji Kunci Jawaban',
+        ]);
+
+        // 1. Tanpa kunci jawaban (semua is_correct false)
+        $resNoKey = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/question-banks/{$bank->id}/questions", [
+                'question_type' => 'pg',
+                'body' => ['text' => 'Berapa 2 x 3?'],
+                'options' => [
+                    ['label' => 'A', 'body' => '5', 'is_correct' => false],
+                    ['label' => 'B', 'body' => '6', 'is_correct' => false],
+                ],
+            ]);
+        $resNoKey->assertStatus(422)
+            ->assertJsonPath('error.message', 'Soal pilihan ganda wajib memiliki kunci jawaban benar.');
+
+        // 2. Kunci jawaban ganda untuk PG (2 opsi is_correct true)
+        $resMultiKey = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/question-banks/{$bank->id}/questions", [
+                'question_type' => 'pg',
+                'body' => ['text' => 'Berapa 2 x 3?'],
+                'options' => [
+                    ['label' => 'A', 'body' => '6', 'is_correct' => true],
+                    ['label' => 'B', 'body' => 'enam', 'is_correct' => true],
+                ],
+            ]);
+        $resMultiKey->assertStatus(422)
+            ->assertJsonPath('error.message', 'Soal pilihan ganda hanya boleh memiliki tepat satu jawaban benar.');
+    }
+
+    /**
+     * FIX-GURU-06: Soal PG tersimpan lengkap beserta opsi dan kunci jawaban (AC2).
+     */
+    public function test_fix_guru_06_pg_stores_options_and_answer_key_correctly(): void
+    {
+        $bank = QuestionBank::create([
+            'school_id' => $this->userMtk->school_id,
+            'subject_id' => $this->subjectMtk->id,
+            'owner_id' => $this->userMtk->id,
+            'name' => 'Bank Soal MTK Lengkap',
+        ]);
+
+        $payload = [
+            'question_type' => 'pg',
+            'body' => ['text' => 'Berapakah akar kuadrat dari 81?'],
+            'options' => [
+                ['label' => 'A', 'body' => '7', 'is_correct' => false],
+                ['label' => 'B', 'body' => '8', 'is_correct' => false],
+                ['label' => 'C', 'body' => '9', 'is_correct' => true],
+                ['label' => 'D', 'body' => '10', 'is_correct' => false],
+            ],
+            'answer_key' => 'C',
+        ];
+
+        $res = $this->actingAs($this->userMtk)
+            ->postJson("/api/v1/me/teacher/question-banks/{$bank->id}/questions", $payload);
+
+        $res->assertStatus(201)
+            ->assertJsonPath('data.question_type', 'pg')
+            ->assertJsonPath('data.body.answer_key', 'C')
+            ->assertJsonCount(4, 'data.options');
+
+        $questionId = $res->json('data.id');
+
+        // Pastikan terbaca saat showQuestion
+        $showRes = $this->actingAs($this->userMtk)
+            ->getJson("/api/v1/me/teacher/questions/{$questionId}");
+
+        $showRes->assertOk()
+            ->assertJsonPath('data.body.answer_key', 'C')
+            ->assertJsonPath('data.options.2.label', 'C')
+            ->assertJsonPath('data.options.2.is_correct', true);
+    }
+
+    /**
+     * FIX-GURU-05: Idempotency-Key mencegah duplikasi soal saat klik berulang (AC1 & AC3).
+     */
+    public function test_fix_guru_05_idempotency_prevents_duplicate_question(): void
+    {
+        $bank = QuestionBank::create([
+            'school_id' => $this->userMtk->school_id,
+            'subject_id' => $this->subjectMtk->id,
+            'owner_id' => $this->userMtk->id,
+            'name' => 'Bank Soal Idemp',
+        ]);
+
+        $payload = [
+            'question_type' => 'pg',
+            'body' => ['text' => 'Soal tes idempotency'],
+            'options' => [
+                ['label' => 'A', 'body' => 'Benar', 'is_correct' => true],
+                ['label' => 'B', 'body' => 'Salah', 'is_correct' => false],
+            ],
+            'answer_key' => 'A',
+        ];
+
+        $idempKey = 'idemp-guru-q-12345';
+
+        // 1. Request pertama -> 201 Created
+        $res1 = $this->actingAs($this->userMtk)
+            ->withHeader('Idempotency-Key', $idempKey)
+            ->postJson("/api/v1/me/teacher/question-banks/{$bank->id}/questions", $payload);
+
+        $res1->assertStatus(201);
+        $qId = $res1->json('data.id');
+
+        // 2. Request kedua dengan Idempotency-Key yang sama -> 200 Replayed tanpa duplikasi
+        $res2 = $this->actingAs($this->userMtk)
+            ->withHeader('Idempotency-Key', $idempKey)
+            ->postJson("/api/v1/me/teacher/question-banks/{$bank->id}/questions", $payload);
+
+        $res2->assertStatus(200)
+            ->assertJsonPath('meta.idempotent_replayed', true)
+            ->assertJsonPath('data.id', $qId);
+
+        // Pastikan jumlah soal di DB tetap tepat 1
+        $this->assertEquals(1, $bank->questions()->count());
+
+        // 3. Request ketiga dengan Idempotency-Key yang sama tapi payload berbeda -> ditolak 422
+        $payloadMismatch = $payload;
+        $payloadMismatch['body']['text'] = 'Teks yang diubah sengaja';
+
+        $resConflict = $this->actingAs($this->userMtk)
+            ->withHeader('Idempotency-Key', $idempKey)
+            ->postJson("/api/v1/me/teacher/question-banks/{$bank->id}/questions", $payloadMismatch);
+
+        $resConflict->assertStatus(422)
+            ->assertJsonPath('error.code', 'IDEMPOTENCY_CONFLICT');
+    }
 }

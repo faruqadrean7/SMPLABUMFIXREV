@@ -80,6 +80,9 @@ describe('Public Shell & Accessibility Tests (Langkah 1)', () => {
         const link = within(nav).getByRole('link', { name });
         expect(link).toHaveAttribute('href', href);
       });
+
+      const laporLink = within(nav).getByRole('link', { name: /lapor & pengaduan/i });
+      expect(laporLink).toHaveAttribute('href', '/lapor');
     });
 
     it('merender tombol aksi cepat PPDB Online menuju /ppdb dengan target _blank', () => {

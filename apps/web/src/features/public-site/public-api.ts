@@ -10,6 +10,10 @@ import {
   GetPublicDownloadsParams,
   PublicBulletinItem,
   GetPublicBulletinsParams,
+  PublicTeacherItem,
+  GetPublicTeachersParams,
+  PublicStaffItem,
+  GetPublicStaffParams,
 } from './types';
 
 export interface GetPublicPostsParams {
@@ -214,5 +218,50 @@ export const publicApi = {
   getPublicBulletin: async (id: string): Promise<PublicBulletinItem> => {
     const res = await apiClient.get<ApiResponse<PublicBulletinItem>>(`/public/bulletins/${id}`);
     return res.data.data;
+  },
+
+  /**
+   * BE-CMS-05: Mengambil daftar dewan guru publik (FE-CMS-PUBLIC-04b)
+   */
+  getPublicTeachers: async (params?: GetPublicTeachersParams): Promise<PaginatedResponse<PublicTeacherItem>> => {
+    const res = await apiClient.get<PaginatedResponse<PublicTeacherItem>>('/public/teachers', {
+      params: {
+        page: params?.page ?? 1,
+        per_page: params?.per_page ?? 12,
+        search: params?.search || undefined,
+        position: params?.position || undefined,
+        subject: params?.subject || undefined,
+        subject_id: params?.subject_id || undefined,
+        school_id: params?.school_id || undefined,
+        all: params?.all ? 'true' : undefined,
+      },
+    });
+    return res.data;
+  },
+
+  /**
+   * BE-CMS-05: Mengambil detail profil guru publik berdasarkan ID (FE-CMS-PUBLIC-04b)
+   */
+  getPublicTeacher: async (id: string): Promise<PublicTeacherItem> => {
+    const res = await apiClient.get<ApiResponse<PublicTeacherItem>>(`/public/teachers/${id}`);
+    return res.data.data;
+  },
+
+  /**
+   * BE-CMS-05: Mengambil daftar staf / tenaga kependidikan publik (FE-CMS-PUBLIC-04b)
+   */
+  getPublicStaff: async (params?: GetPublicStaffParams): Promise<PaginatedResponse<PublicStaffItem>> => {
+    const res = await apiClient.get<PaginatedResponse<PublicStaffItem>>('/public/staff', {
+      params: {
+        page: params?.page ?? 1,
+        per_page: params?.per_page ?? 12,
+        search: params?.search || undefined,
+        position: params?.position || undefined,
+        unit: params?.unit || undefined,
+        school_id: params?.school_id || undefined,
+        all: params?.all ? 'true' : undefined,
+      },
+    });
+    return res.data;
   },
 };

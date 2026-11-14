@@ -26,6 +26,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { financeApi, formatRupiah } from '@/features/finance/finance-api';
 import { Invoice, OfficialReceipt, InvoiceStatus, PaymentProviderSetting } from '@/types/finance';
+import { toast } from '@/components/ui/toast';
 
 export default function StudentInvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -72,7 +73,7 @@ export default function StudentInvoicesPage() {
       const receipt = await financeApi.getPortalPaymentReceipt(paymentId);
       setReceiptData(receipt);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Gagal memuat kuitansi.');
+      toast.error(err instanceof Error ? err.message : 'Gagal memuat kuitansi.', 'Gagal Memuat Kuitansi');
     } finally {
       setIsLoadingReceipt(false);
     }

@@ -263,8 +263,20 @@ export function useCreateFacilityBooking() {
   });
 }
 
+export function useSarprasTickets() {
+  return useQuery({
+    queryKey: ['guru', 'tickets'],
+    queryFn: () => guruApi.getSarprasTickets(),
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
 export function useCreateSarprasTicket() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: SarprasTicketPayload) => guruApi.createSarprasTicket(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guru', 'tickets'] });
+    },
   });
 }

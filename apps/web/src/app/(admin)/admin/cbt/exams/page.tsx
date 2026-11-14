@@ -22,6 +22,7 @@ import {
   Clock,
   Layers,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +60,12 @@ export default function ExamsAdminPage() {
   const [selectedComponentId, setSelectedComponentId] = useState<string>('');
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
   const [isPublishingGradebook, setIsPublishingGradebook] = useState<boolean>(false);
+  const [isCreatingExam, setIsCreatingExam] = useState<boolean>(false);
+  const [isEnrolling, setIsEnrolling] = useState<boolean>(false);
+  const [isRunningAutoGrade, setIsRunningAutoGrade] = useState<boolean>(false);
+  const [isCreatingRemedial, setIsCreatingRemedial] = useState<boolean>(false);
+  const [togglingExamId, setTogglingExamId] = useState<string | null>(null);
+  const [regeneratingRoomId, setRegeneratingRoomId] = useState<string | null>(null);
 
   // Create Form State
   const [examForm, setExamForm] = useState({
@@ -124,6 +131,7 @@ export default function ExamsAdminPage() {
       return;
     }
 
+    setIsCreatingExam(true);
     try {
       await cbtApi.createExam({
         title: examForm.title,
@@ -141,17 +149,22 @@ export default function ExamsAdminPage() {
       fetchExams();
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal membuat jadwal ujian.' });
+    } finally {
+      setIsCreatingExam(false);
     }
   };
 
   const handleToggleStatus = async (exam: ExamItem) => {
     const nextStatus = exam.status === 'active' || exam.status === 'berlangsung' ? 'selesai' : 'active';
+    setTogglingExamId(exam.id);
     try {
       await cbtApi.updateExamStatus(exam.id, nextStatus);
       setFeedbackMsg({ type: 'success', text: `Status ujian diubah menjadi ${nextStatus}.` });
       fetchExams();
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal memperbarui status ujian.' });
+    } finally {
+      setTogglingExamId(null);
     }
   };
 
@@ -161,6 +174,7 @@ export default function ExamsAdminPage() {
   };
 
   const handleRegenerateToken = async (roomId: string) => {
+    setRegeneratingRoomId(roomId);
     try {
       const res = await cbtApi.regenerateExamRoomToken(roomId);
       setFeedbackMsg({ type: 'success', text: `Token berhasil diperbarui: ${res.data.token}` });
@@ -171,6 +185,8 @@ export default function ExamsAdminPage() {
       fetchExams();
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal memperbarui token.' });
+    } finally {
+      setRegeneratingRoomId(null);
     }
   };
 
@@ -184,6 +200,7 @@ export default function ExamsAdminPage() {
     e.preventDefault();
     if (!activeExam || !selectedClassId) return;
 
+    setIsEnrolling(true);
     try {
       await cbtApi.enrollExamParticipants(activeExam.id, {
         class_ids: [selectedClassId],
@@ -193,6 +210,8 @@ export default function ExamsAdminPage() {
       fetchExams();
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal mendaftarkan peserta.' });
+    } finally {
+      setIsEnrolling(false);
     }
   };
 
@@ -224,6 +243,7 @@ export default function ExamsAdminPage() {
 
   const handleRunAutoGrade = async () => {
     if (!activeExam) return;
+    setIsRunningAutoGrade(true);
     try {
       await cbtApi.runAutoGrade(activeExam.id);
       setFeedbackMsg({ type: 'success', text: 'Koreksi otomatis soal objektif berhasil dijalankan!' });
@@ -231,11 +251,14 @@ export default function ExamsAdminPage() {
       setExamResults(res.data || []);
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menjalankan koreksi otomatis.' });
+    } finally {
+      setIsRunningAutoGrade(false);
     }
   };
 
   const handleCreateRemedial = async () => {
     if (!activeExam) return;
+    setIsCreatingRemedial(true);
     try {
       const res = await cbtApi.createRemedialExam(activeExam.id, {
         start_at: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
@@ -247,6 +270,8 @@ export default function ExamsAdminPage() {
       fetchExams();
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal membuat ujian remedial.' });
+    } finally {
+      setIsCreatingRemedial(false);
     }
   };
 
@@ -451,13 +476,20 @@ export default function ExamsAdminPage() {
                             <Button
                               size="sm"
                               variant="ghost"
+                              disabled={togglingExamId === exam.id}
                               onClick={() => handleToggleStatus(exam)}
                               title={isLive ? 'Tutup / Selesaikan Ujian' : 'Aktifkan Ujian'}
                               className={`h-7 px-2 text-xs ${
                                 isLive ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'
                               }`}
                             >
-                              {isLive ? <Square className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
+                              {togglingExamId === exam.id ? (
+                                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                              ) : isLive ? (
+                                <Square className="h-3.5 w-3.5 mr-1" />
+                              ) : (
+                                <Play className="h-3.5 w-3.5 mr-1" />
+                              )}
                               {isLive ? 'Tutup' : 'Buka'}
                             </Button>
 
@@ -628,11 +660,18 @@ export default function ExamsAdminPage() {
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateModalOpen(false)} className="text-xs">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateModalOpen(false)} disabled={isCreatingExam} className="text-xs">
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-500 text-white text-xs">
-                  Simpan Jadwal
+                <Button type="submit" size="sm" disabled={isCreatingExam} className="bg-blue-600 hover:bg-blue-500 text-white text-xs gap-1.5">
+                  {isCreatingExam ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    'Simpan Jadwal'
+                  )}
                 </Button>
               </div>
             </form>
@@ -673,10 +712,12 @@ export default function ExamsAdminPage() {
                       <Button
                         size="sm"
                         variant="outline"
+                        disabled={regeneratingRoomId === room.id}
                         onClick={() => handleRegenerateToken(room.id)}
-                        className="h-7 text-xs"
+                        className="h-7 text-xs gap-1"
                         title="Acak dan perbarui token ruang"
                       >
+                        {regeneratingRoomId === room.id && <Loader2 className="h-3 w-3 animate-spin" />}
                         Acak
                       </Button>
                     </div>
@@ -734,11 +775,18 @@ export default function ExamsAdminPage() {
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsEnrollModalOpen(false)} className="text-xs">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEnrollModalOpen(false)} disabled={isEnrolling} className="text-xs">
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-500 text-white text-xs">
-                  Daftarkan Siswa
+                <Button type="submit" size="sm" disabled={isEnrolling} className="bg-blue-600 hover:bg-blue-500 text-white text-xs gap-1.5">
+                  {isEnrolling ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Mendaftarkan...
+                    </>
+                  ) : (
+                    'Daftarkan Siswa'
+                  )}
                 </Button>
               </div>
             </form>
@@ -773,20 +821,40 @@ export default function ExamsAdminPage() {
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
+                  disabled={isRunningAutoGrade}
                   onClick={handleRunAutoGrade}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Koreksi Otomatis (Auto-Grade)
+                  {isRunningAutoGrade ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Mengoreksi...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Koreksi Otomatis (Auto-Grade)
+                    </>
+                  )}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={isCreatingRemedial}
                   onClick={handleCreateRemedial}
                   className="text-xs gap-1.5 text-amber-700 border-amber-300"
                 >
-                  <Layers className="h-3.5 w-3.5 text-amber-600" />
-                  Buat Ujian Remedial KKTP
+                  {isCreatingRemedial ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Membuat...
+                    </>
+                  ) : (
+                    <>
+                      <Layers className="h-3.5 w-3.5 text-amber-600" />
+                      Buat Ujian Remedial KKTP
+                    </>
+                  )}
                 </Button>
               </div>
 

@@ -76,3 +76,31 @@ Dokumen ini merupakan laporan audit mendalam dan hasil perbaikan pada tombol aks
 | `<ConfirmDialog />` | Klik di luar dialog / tombol Esc | ✅ Menutup dialog dengan aman tanpa memicu callback `onConfirm`. |
 | `<ConfirmDialog />` | State `isLoading=true` | ✅ Tombol Batal & Konfirmasi dinonaktifkan, spinner berputar, mencegah klik ganda. |
 | Build Next.js Web | `ADMIN_LOGIN_PATH=/admin-gate-build npm run build` | ✅ 103/103 halaman statis & dinamis ter-compile tanpa error tipe maupun syntax. |
+
+---
+
+## 4. Audit Lanjutan & Pengerasan Double-Submit Fase 3 (FE-UX-02)
+
+Pada audit lanjutan `FE-UX-02`, dilakukan pemeriksaan menyeluruh terhadap tombol-tombol mutasi asinkron (modal submission, batch actions, status toggles) untuk mencegah pengiriman ganda (*double-click / double-submit*) dan tombol tanpa handler (*dead buttons*):
+
+### 1. `apps/web/src/app/(admin)/admin/cbt/exams/page.tsx`
+- **Modal Tambah Jadwal Ujian**: Ditambahkan state `isCreatingExam` pada tombol `"Simpan Jadwal"`. Tombol menjadi `disabled={isCreatingExam}` dan merender `<Loader2 className="w-4 h-4 animate-spin" />` saat mutasi berlangsung.
+- **Modal Daftarkan Siswa**: Ditambahkan state `isEnrolling` pada tombol `"Daftarkan Siswa"`. Tombol menjadi `disabled={isEnrolling}` dan merender loading spinner.
+- **Modal Koreksi Otomatis (Auto-Grade)**: Ditambahkan state `isRunningAutoGrade` pada tombol `"Koreksi Otomatis (Auto-Grade)"`. Tombol menjadi `disabled={isRunningAutoGrade}` dengan spinner.
+- **Modal Buat Ujian Remedial**: Ditambahkan state `isCreatingRemedial` pada tombol `"Buat Ujian Remedial KKTP"`. Tombol menjadi `disabled={isCreatingRemedial}` dengan spinner.
+- **Aksi Baris Status Ujian**: Tombol Buka/Tutup sesi ujian dikunci per ID dengan `togglingExamId === exam.id` (`disabled={togglingExamId === exam.id}`) untuk mencegah request berulang.
+- **Aksi Acak Token Ruang**: Tombol acak token dikunci per ID ruang dengan `regeneratingRoomId === room.id` (`disabled={regeneratingRoomId === room.id}`).
+
+### 2. `apps/web/src/app/(admin)/admin/cbt/questions/page.tsx`
+- **Modal Tambah Paket Bank Soal**: Ditambahkan state `isCreatingBank` pada tombol `"Simpan Paket"`. Tombol dinonaktifkan saat request berjalan (`disabled={isCreatingBank}`) dengan animasi `<Loader2 className="w-4 h-4 animate-spin" />`.
+- **Form Butir Soal (Tambah / Edit)**: Ditambahkan state `isSavingQuestion` pada tombol `"Simpan Butir Soal"`. Tombol dinonaktifkan saat menyimpan (`disabled={isSavingQuestion}`) dengan spinner animasi.
+
+### 3. `apps/web/src/app/(portal)/portal/guru/nilai/page.tsx`
+- **Pengajuan ACC E-Progress Report**: Sinkronisasi tipe enum status persetujuan dengan state riil (`'draft' | 'menunggu_acc' | 'disetujui'`). Tombol dinonaktifkan (`disabled={approvalStatus === 'menunggu_acc' || approvalStatus === 'disetujui'}`) untuk mencegah re-submit pengajuan yang sedang diproses atau telah disetujui.
+
+### 4. Uji Otomasi Regression
+- Pengujian otomatis pada `apps/web/src/test/fe-ux-button-findings.test.tsx`:
+  - `FE-UX-02-AC1`: Memvalidasi keberadaan proteksi `disabled` pada seluruh tombol mutasi kritis di 8 target halaman.
+  - `FE-UX-02-AC2`: Memvalidasi eliminasi tombol mati (*dead button*) tanpa handler `onClick` / `type="submit"` / trigger modal.
+  - **Hasil**: 2/2 skenario lulus 100% tanpa regresi.
+

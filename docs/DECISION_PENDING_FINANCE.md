@@ -10,7 +10,7 @@
 
 ## 1. Latar Belakang & Pernyataan Eskalasi
 
-Berdasarkan audit tata kelola sistem (`GOV-01`), ditemukan bahwa fungsionalitas **Modul Keuangan Sekolah (Finance & SPP)** telah dibangun pada kode backend Laravel (`apps/api`) dan frontend Next.js (`apps/web`), padahal dokumen arsitektur [`13_MASTER_MODULES.md`](file:///Users/macbookprom12020/Desktop/SISTLABUM/13_MASTER_MODULES.md) dan [`docs/finance-module-assessment.md`](file:///Users/macbookprom12020/Desktop/SISTLABUM/docs/finance-module-assessment.md) secara eksplisit menetapkan status modul ini sebagai **"Menunggu Keputusan Sekolah"**.
+Berdasarkan audit tata kelola sistem (`GOV-01`), ditemukan bahwa fungsionalitas **Modul Keuangan Sekolah (Finance & SPP)** telah dibangun pada kode backend Laravel (`apps/api`) dan frontend Next.js (`apps/web`), padahal dokumen arsitektur [`13_MASTER_MODULES.md`](file:///Users/macbookprom12020/SISTLABUM/13_MASTER_MODULES.md) dan [`docs/finance-module-assessment.md`](file:///Users/macbookprom12020/SISTLABUM/docs/finance-module-assessment.md) secara eksplisit menetapkan status modul ini sebagai **"Menunggu Keputusan Sekolah"**.
 
 Sesuai ketentuan **`AGENTS.md §8`**, keputusan mengenai:
 1. Skema keuangan sekolah, rekening penampung, dan payment gateway,
@@ -33,11 +33,11 @@ Berikut adalah inventaris seluruh artefak teknis modul Keuangan yang saat ini be
   - `invoice_items`: Rincian item biaya dalam satu faktur tagihan.
   - `payments`: Pencatatan transaksi pembayaran, status verifikasi (`pending`, `verified`, `rejected`, `void`), dan unggahan bukti transfer.
 - **Model Backend**:
-  - [`App\Models\FeeType`](file:///Users/macbookprom12020/Desktop/SISTLABUM/apps/api/app/Models/FeeType.php)
-  - [`App\Models\Invoice`](file:///Users/macbookprom12020/Desktop/SISTLABUM/apps/api/app/Models/Invoice.php)
-  - [`App\Models\InvoiceItem`](file:///Users/macbookprom12020/Desktop/SISTLABUM/apps/api/app/Models/InvoiceItem.php)
-  - [`App\Models\Payment`](file:///Users/macbookprom12020/Desktop/SISTLABUM/apps/api/app/Models/Payment.php)
-  - [`App\Models\PaymentProviderSetting`](file:///Users/macbookprom12020/Desktop/SISTLABUM/apps/api/app/Models/PaymentProviderSetting.php)
+  - [`App\Models\FeeType`](file:///Users/macbookprom12020/SISTLABUM/apps/api/app/Models/FeeType.php)
+  - [`App\Models\Invoice`](file:///Users/macbookprom12020/SISTLABUM/apps/api/app/Models/Invoice.php)
+  - [`App\Models\InvoiceItem`](file:///Users/macbookprom12020/SISTLABUM/apps/api/app/Models/InvoiceItem.php)
+  - [`App\Models\Payment`](file:///Users/macbookprom12020/SISTLABUM/apps/api/app/Models/Payment.php)
+  - [`App\Models\PaymentProviderSetting`](file:///Users/macbookprom12020/SISTLABUM/apps/api/app/Models/PaymentProviderSetting.php)
 
 ### 2.2 Endpoint REST API Backend (`apps/api/routes/api/finance.php`)
 - **Master Tarif**: `GET|POST|PUT|DELETE /api/v1/finance/fee-types` (Permission: `finance.fee.manage`)

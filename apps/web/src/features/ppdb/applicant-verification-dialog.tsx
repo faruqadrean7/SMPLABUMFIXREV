@@ -33,6 +33,14 @@ import {
   Loader2,
 } from 'lucide-react';
 
+const DOC_TYPE_LABELS: Record<string, string> = {
+  KK: 'Kartu Keluarga (KK)',
+  AKTA: 'Akta Kelahiran',
+  FOTO: 'Pas Foto Terbaru (3x4)',
+  RAPOR: 'Scan Nilai Rapor / SKL',
+  PRESTASI: 'Sertifikat Prestasi',
+};
+
 export interface ApplicantVerificationDialogProps {
   isOpen: boolean;
   applicantId: string | null;
@@ -64,6 +72,8 @@ export function ApplicantVerificationDialog({
     url: string;
     mime: string;
     name: string;
+    label?: string;
+    size?: number;
   } | null>(null);
   const [previewingDocId, setPreviewingDocId] = useState<string | null>(null);
 
@@ -96,7 +106,13 @@ export function ApplicantVerificationDialog({
     };
   }, []);
 
-  const handlePreviewDoc = async (docId: string, filename?: string, mime?: string) => {
+  const handlePreviewDoc = async (
+    docId: string,
+    filename?: string,
+    mime?: string,
+    label?: string,
+    size?: number
+  ) => {
     if (!applicantId) return;
     try {
       setPreviewingDocId(docId);
@@ -107,6 +123,8 @@ export function ApplicantVerificationDialog({
         url: objectUrl,
         mime: mime || blob.type || 'application/octet-stream',
         name: filename || `dokumen_${docId}`,
+        label,
+        size,
       });
     } catch {
       setFeedbackMessage({
@@ -503,7 +521,9 @@ export function ApplicantVerificationDialog({
                                     handlePreviewDoc(
                                       doc.id,
                                       doc.file?.original_name || doc.file?.filename,
-                                      doc.file?.mime_type
+                                      doc.file?.mime_type,
+                                      DOC_TYPE_LABELS[doc.document_type] || doc.document_type,
+                                      doc.file?.size
                                     )
                                   }
                                   disabled={previewingDocId === doc.id}
@@ -706,36 +726,46 @@ export function ApplicantVerificationDialog({
           className="relative flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50/90 px-4 py-3">
             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-gray-800">
               <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
-              <span className="truncate">{preview.name}</span>
+              {preview.label && (
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-xs font-semibold">
+                  {preview.label}
+                </Badge>
+              )}
+              <span className="truncate text-xs text-gray-600 font-mono">{preview.name}</span>
+              {typeof preview.size === 'number' && (
+                <span className="text-[11px] text-gray-400 font-normal">
+                  ({(preview.size / 1024).toFixed(1)} KB)
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <a
                 href={preview.url}
                 download={preview.name}
-                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-emerald-600"
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-emerald-600 shadow-2xs"
               >
                 <Download className="h-3.5 w-3.5" /> Unduh
               </a>
               <button
                 type="button"
                 onClick={closePreview}
-                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-auto bg-gray-100">
+          <div className="flex-1 overflow-auto bg-slate-900/5">
             {preview.mime.startsWith('image/') ? (
-              <div className="flex min-h-full items-center justify-center p-4">
+              <div className="flex min-h-full items-center justify-center p-6">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={preview.url}
                   alt={preview.name}
-                  className="max-h-full max-w-full object-contain"
+                  className="max-h-[82vh] max-w-full rounded-lg shadow-md object-contain border border-slate-200 bg-white"
                 />
               </div>
             ) : preview.mime === 'application/pdf' ? (

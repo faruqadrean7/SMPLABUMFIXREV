@@ -265,13 +265,25 @@ class TeacherLmsController extends Controller
 
         $data = $submissions->map(fn (AssignmentSubmission $sub) => [
             'id' => $sub->id,
+            'assignment_id' => $sub->assignment_id,
+            'student_id' => $sub->student_id,
             'studentId' => $sub->student_id,
             'studentName' => $sub->student?->full_name ?? 'Siswa',
+            'student' => [
+                'id' => $sub->student?->id ?? $sub->student_id,
+                'name' => $sub->student?->full_name ?? 'Siswa',
+                'nis' => $sub->student?->nis ?? '',
+                'nisn' => $sub->student?->nisn ?? '',
+                'avatar_url' => $sub->student?->photo_file_id ? url("/api/v1/files/{$sub->student->photo_file_id}/download") : null,
+                'class_id' => $assignment->class_id,
+            ],
             'nisn' => $sub->student?->nisn ?? '',
             'submittedAt' => $sub->submitted_at?->toISOString() ?? now()->toISOString(),
+            'submitted_at' => $sub->submitted_at?->toISOString() ?? now()->toISOString(),
             'score' => $sub->score ? (float) $sub->score : null,
             'feedback' => $sub->feedback,
             'status' => $sub->score !== null ? 'graded' : 'pending',
+            'is_late' => false,
         ]);
 
         return $this->successResponse($data);
@@ -292,8 +304,11 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Pengumpulan tugas tidak ditemukan atau bukan tugas yang Anda ampu.', 'FORBIDDEN', 403);
         }
 
+        // FIX-GURU-03: Validasi batas skor dinamis mengacu pada max_score tugas
+        $maxScore = (float) ($submission->assignment?->max_score ?? 100);
+
         $validated = $request->validate([
-            'score' => 'required|numeric|min:0|max:100',
+            'score' => "required|numeric|min:0|max:{$maxScore}",
             'feedback' => 'nullable|string',
         ]);
 

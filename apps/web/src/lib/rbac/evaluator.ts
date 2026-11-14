@@ -21,7 +21,7 @@ export const ADMIN_SHELL_ROLES: RoleCode[] = [
   'kurikulum',
 ];
 
-export const MANDATORY_2FA_ROLES: RoleCode[] = ADMIN_SHELL_ROLES;
+export const MANDATORY_2FA_ROLES: RoleCode[] = [];
 
 export const ROLE_ALIASES: Record<string, RoleCode> = {
   admin: 'admin_tu',

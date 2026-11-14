@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getDestinationPath } from '@/lib/rbac/evaluator';
 import { ApiClientError } from '@/lib/api/errors';
-import { User, Lock, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { User, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 const loginSchema = z.object({
   identifier: z.string().min(1, 'Identitas (username, email, NIS, atau NIP) wajib diisi'),
@@ -32,11 +32,6 @@ export function LoginForm() {
   React.useEffect(() => {
     setIsHydrated(true);
   }, []);
-
-  // 2FA / MFA State (GAP-SEC-02)
-  const [mfaToken, setMfaToken] = useState<string | null>(null);
-  const [totpCode, setTotpCode] = useState('');
-  const [isVerifyingMfa, setIsVerifyingMfa] = useState(false);
 
   const redirectParam = searchParams.get('redirect');
   const sessionExpired = searchParams.get('session_expired');
@@ -71,10 +66,13 @@ export function LoginForm() {
         const targetPath = redirectParam && redirectParam.startsWith('/')
           ? redirectParam
           : getDestinationPath(result.destination);
+        router.push(targetPath);
         if (typeof window !== 'undefined') {
-          window.location.href = targetPath;
-        } else {
-          router.push(targetPath);
+          try {
+            window.location.href = targetPath;
+          } catch {
+            // Abaikan error navigasi di lingkungan jsdom
+          }
         }
       }
     } catch (err: unknown) {
@@ -87,109 +85,6 @@ export function LoginForm() {
       }
     }
   };
-
-  const handleMfaSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mfaToken || !totpCode.trim()) return;
-
-    setServerError(null);
-    setIsVerifyingMfa(true);
-    try {
-      const isRecovery = totpCode.includes('-');
-      const result = await login({
-        mfa_token: mfaToken,
-        totp_code: isRecovery ? undefined : totpCode.trim(),
-        recovery_code: isRecovery ? totpCode.trim() : undefined,
-        platform: 'web',
-        isAdminLogin: true,
-      });
-
-      if (result.destination) {
-        const targetPath = redirectParam && redirectParam.startsWith('/')
-          ? redirectParam
-          : getDestinationPath(result.destination);
-        if (typeof window !== 'undefined') {
-          window.location.href = targetPath;
-        } else {
-          router.push(targetPath);
-        }
-      }
-    } catch (err: unknown) {
-      if (err instanceof ApiClientError) {
-        setServerError(err.message);
-      } else if (err instanceof Error) {
-        setServerError(err.message);
-      } else {
-        setServerError('Kode autentikasi dua faktor tidak valid.');
-      }
-    } finally {
-      setIsVerifyingMfa(false);
-    }
-  };
-
-  if (mfaToken) {
-    return (
-      <div className="w-full space-y-5 animate-in fade-in zoom-in-95 duration-200">
-        <div className="text-center space-y-2">
-          <div className="mx-auto w-12 h-12 bg-blue-50 text-brand-blue rounded-full flex items-center justify-center border border-blue-200">
-            <ShieldCheck className="h-6 w-6" />
-          </div>
-          <h2 className="text-lg font-bold text-slate-900">Verifikasi Dua Faktor (2FA)</h2>
-          <p className="text-xs text-slate-600 max-w-sm mx-auto">
-            Akun Anda dilindungi dengan autentikasi dua faktor. Masukkan kode 6 digit dari aplikasi authenticator Anda atau gunakan kode pemulihan darurat.
-          </p>
-        </div>
-
-        {serverError && (
-          <div
-            className="p-3.5 rounded-md bg-red-50 border border-red-200 text-status-danger text-xs flex items-start gap-2.5"
-            role="alert"
-          >
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <div className="flex-1 font-medium">{serverError}</div>
-          </div>
-        )}
-
-        <form onSubmit={handleMfaSubmit} method="POST" className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-              Kode Autentikasi / Pemulihan
-            </label>
-            <Input
-              type="text"
-              placeholder="Contoh: 123456 atau ABCD-EFGH"
-              value={totpCode}
-              onChange={(e) => setTotpCode(e.target.value)}
-              className="font-mono text-center tracking-widest text-base font-bold"
-              required
-              autoFocus
-            />
-          </div>
-
-          <Button
-            type="submit"
-            className="w-full bg-brand-blue hover:bg-brand-blue/90"
-            disabled={!isHydrated || isVerifyingMfa || !totpCode.trim()}
-          >
-            {isVerifyingMfa ? 'Memverifikasi...' : 'Verifikasi & Masuk'}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              setMfaToken(null);
-              setTotpCode('');
-              setServerError(null);
-            }}
-          >
-            Kembali ke Login
-          </Button>
-        </form>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full space-y-5">

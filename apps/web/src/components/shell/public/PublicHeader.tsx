@@ -168,7 +168,7 @@ export function PublicHeader() {
           </Link>
 
           {/* Navigasi Desktop Bersih Sesuai Mockup (Tanpa Garis Bawah, Hanya Teks Bold / Warna) */}
-          <nav className="hidden lg:flex items-center gap-7" aria-label="Navigasi Utama">
+          <nav className="hidden lg:flex items-center gap-4 xl:gap-6 2xl:gap-7" aria-label="Navigasi Utama">
             {PUBLIC_NAV_ITEMS.map((item) => {
               const isActive =
                 item.href === '/'
@@ -179,7 +179,7 @@ export function PublicHeader() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`py-1 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#C89332] rounded ${isActive
+                  className={`py-1 text-sm whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-[#C89332] rounded ${isActive
                     ? 'text-[#0A3D62] font-bold'
                     : 'text-gray-600 hover:text-[#0A3D62] font-medium'
                     }`}

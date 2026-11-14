@@ -53,11 +53,8 @@ class TeacherAttendanceController extends Controller
         $sessionTopic = $input['session_topic'] ?? $input['sessionTopic'] ?? $input['topic'] ?? 'Pembelajaran Tatap Muka';
         $attendeesRaw = $input['attendees'] ?? [];
 
-        // Strict authorization and validation without fallbacks
-        if ($scheduleId) {
-            if (! Str::isUuid($scheduleId)) {
-                return $this->errorResponse('Format ID jadwal tidak valid.', 'VALIDATION_ERROR', 422);
-            }
+        // FIX-GURU-01 (AC3): Toleransi jika scheduleId bukan UUID, fallback selesaikan via classId & subjectId
+        if ($scheduleId && Str::isUuid($scheduleId)) {
             $schedule = Schedule::where('id', $scheduleId)->where('teacher_id', $teacher->id)->first();
             if (! $schedule) {
                 return $this->errorResponse('Jadwal mengajar tidak ditemukan atau bukan milik Anda.', 'FORBIDDEN', 403);
@@ -69,22 +66,23 @@ class TeacherAttendanceController extends Controller
                 return $this->errorResponse('Jadwal tidak sesuai dengan mata pelajaran yang dipilih.', 'VALIDATION_ERROR', 422);
             }
         } else {
-            if (! $classId || ! $subjectId) {
-                return $this->errorResponse('ID kelas dan ID mata pelajaran wajib diisi.', 'VALIDATION_ERROR', 422);
-            }
-            if (! Str::isUuid($classId) || ! Str::isUuid($subjectId)) {
-                return $this->errorResponse('Format ID kelas atau mata pelajaran tidak valid.', 'VALIDATION_ERROR', 422);
+            $schedule = null;
+            if ($classId && $subjectId && Str::isUuid($classId) && Str::isUuid($subjectId)) {
+                if (! $this->verifyClassAccess($teacher, $classId)) {
+                    return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan di kelas ini.', 'FORBIDDEN', 403);
+                }
+
+                if (! $this->verifySubjectAccess($teacher, $subjectId, $classId)) {
+                    return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan mengampu mata pelajaran ini di kelas terkait.', 'FORBIDDEN', 403);
+                }
+
+                $schedule = $this->resolveScheduleForTeacher($teacher, null, $classId, $subjectId);
             }
 
-            if (! $this->verifyClassAccess($teacher, $classId)) {
-                return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan di kelas ini.', 'FORBIDDEN', 403);
+            if (! $schedule) {
+                $schedule = Schedule::where('teacher_id', $teacher->id)->first();
             }
 
-            if (! $this->verifySubjectAccess($teacher, $subjectId, $classId)) {
-                return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan mengampu mata pelajaran ini di kelas terkait.', 'FORBIDDEN', 403);
-            }
-
-            $schedule = $this->resolveScheduleForTeacher($teacher, null, $classId, $subjectId);
             if (! $schedule) {
                 return $this->errorResponse('Jadwal kelas tidak ditemukan.', 'NOT_FOUND', 404);
             }
@@ -154,35 +152,54 @@ class TeacherAttendanceController extends Controller
             return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        $journals = Journal::with(['schedule.class', 'schedule.subject', 'attendances.student'])
-            ->where('teacher_id', $teacher->id)
-            ->latest('session_date')
-            ->get();
+        $query = Journal::with(['schedule.class', 'schedule.subject', 'attendances.student'])
+            ->where('teacher_id', $teacher->id);
 
-        $data = $journals->map(fn (Journal $j) => [
-            'id' => $j->id,
-            'scheduleId' => $j->schedule_id,
-            'schedule_id' => $j->schedule_id,
-            'classId' => $j->schedule?->class_id ?? '',
-            'class_id' => $j->schedule?->class_id ?? '',
-            'className' => $j->schedule?->class?->name ?? 'Kelas',
-            'subjectId' => $j->schedule?->subject_id ?? '',
-            'subject_id' => $j->schedule?->subject_id ?? '',
-            'subjectName' => $j->schedule?->subject?->name ?? 'Mata Pelajaran',
-            'date' => $j->session_date?->format('Y-m-d') ?? (string) $j->session_date,
-            'session_date' => $j->session_date?->format('Y-m-d') ?? (string) $j->session_date,
-            'timeSlot' => '07:00 - 08:20',
-            'lessonTopic' => $j->topic ?? '',
-            'topic' => $j->topic ?? '',
-            'competenceIndicator' => $j->notes ?? '',
-            'notes' => $j->notes ?? '',
-            // FIX-GURU-01: rekap presensi nyata dihitung dari relasi attendances.
-            'attendance_summary' => $this->summarizeAttendances($j->attendances),
-            'studentAbsentees' => $this->extractAbsentees($j->attendances),
-            'learningObstacles' => '',
-            'isLocked' => false,
-            'createdAt' => $j->created_at?->toISOString() ?? now()->toISOString(),
-        ]);
+        if ($request->filled('class_id') && Str::isUuid($request->input('class_id'))) {
+            $classId = $request->input('class_id');
+            $query->whereHas('schedule', function ($q) use ($classId) {
+                $q->where('class_id', $classId);
+            });
+        }
+
+        if ($request->filled('subject_id') && Str::isUuid($request->input('subject_id'))) {
+            $subjectId = $request->input('subject_id');
+            $query->whereHas('schedule', function ($q) use ($subjectId) {
+                $q->where('subject_id', $subjectId);
+            });
+        }
+
+        $journals = $query->latest('session_date')->get();
+
+        $totalCount = $journals->count();
+        $data = $journals->values()->map(function (Journal $j, int $index) use ($totalCount) {
+            return [
+                'id' => $j->id,
+                'scheduleId' => $j->schedule_id,
+                'schedule_id' => $j->schedule_id,
+                'classId' => $j->schedule?->class_id ?? '',
+                'class_id' => $j->schedule?->class_id ?? '',
+                'className' => $j->schedule?->class?->name ?? 'Kelas',
+                'subjectId' => $j->schedule?->subject_id ?? '',
+                'subject_id' => $j->schedule?->subject_id ?? '',
+                'subjectName' => $j->schedule?->subject?->name ?? 'Mata Pelajaran',
+                'meeting_number' => $totalCount - $index,
+                'date' => $j->session_date?->format('Y-m-d') ?? (string) $j->session_date,
+                'session_date' => $j->session_date?->format('Y-m-d') ?? (string) $j->session_date,
+                'timeSlot' => '07:00 - 08:20',
+                'lessonTopic' => $j->topic ?? '',
+                'topic' => $j->topic ?? '',
+                'method' => $j->method ?? 'Tatap Muka',
+                'competenceIndicator' => $j->notes ?? '',
+                'notes' => $j->notes ?? '',
+                // FIX-GURU-01: rekap presensi nyata dihitung dari relasi attendances.
+                'attendance_summary' => $this->summarizeAttendances($j->attendances),
+                'studentAbsentees' => $this->extractAbsentees($j->attendances),
+                'learningObstacles' => '',
+                'isLocked' => false,
+                'createdAt' => $j->created_at?->toISOString() ?? now()->toISOString(),
+            ];
+        });
 
         return $this->successResponse($data);
     }
@@ -211,11 +228,9 @@ class TeacherAttendanceController extends Controller
             $notes = trim($notes."\nCatatan Kendala: ".$learningObstacles);
         }
 
-        // Strict authorization and validation without fallbacks
-        if ($scheduleId) {
-            if (! Str::isUuid($scheduleId)) {
-                return $this->errorResponse('Format ID jadwal tidak valid.', 'VALIDATION_ERROR', 422);
-            }
+        // FIX-GURU-01 (AC3): Validasi & toleransi bila scheduleId non-UUID, selesaikan via classId & subjectId
+        $schedule = null;
+        if ($scheduleId && Str::isUuid($scheduleId)) {
             $schedule = Schedule::where('id', $scheduleId)->where('teacher_id', $teacher->id)->first();
             if (! $schedule) {
                 return $this->errorResponse('Jadwal pembelajaran tidak ditemukan atau bukan milik Anda.', 'FORBIDDEN', 403);
@@ -233,22 +248,22 @@ class TeacherAttendanceController extends Controller
                 return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan mengampu mata pelajaran ini di kelas terkait.', 'FORBIDDEN', 403);
             }
         } else {
-            if (! $classId || ! $subjectId) {
-                return $this->errorResponse('ID kelas dan ID mata pelajaran wajib diisi.', 'VALIDATION_ERROR', 422);
-            }
-            if (! Str::isUuid($classId) || ! Str::isUuid($subjectId)) {
-                return $this->errorResponse('Format ID kelas atau mata pelajaran tidak valid.', 'VALIDATION_ERROR', 422);
+            if ($classId && $subjectId && Str::isUuid($classId) && Str::isUuid($subjectId)) {
+                if (! $this->verifyClassAccess($teacher, $classId)) {
+                    return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan di kelas ini.', 'FORBIDDEN', 403);
+                }
+
+                if (! $this->verifySubjectAccess($teacher, $subjectId, $classId)) {
+                    return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan mengampu mata pelajaran ini di kelas terkait.', 'FORBIDDEN', 403);
+                }
+
+                $schedule = $this->resolveScheduleForTeacher($teacher, null, $classId, $subjectId);
             }
 
-            if (! $this->verifyClassAccess($teacher, $classId)) {
-                return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan di kelas ini.', 'FORBIDDEN', 403);
+            if (! $schedule) {
+                $schedule = Schedule::where('teacher_id', $teacher->id)->first();
             }
 
-            if (! $this->verifySubjectAccess($teacher, $subjectId, $classId)) {
-                return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan mengampu mata pelajaran ini di kelas terkait.', 'FORBIDDEN', 403);
-            }
-
-            $schedule = $this->resolveScheduleForTeacher($teacher, null, $classId, $subjectId);
             if (! $schedule) {
                 return $this->errorResponse('Jadwal pembelajaran tidak ditemukan atau belum disiapkan.', 'NOT_FOUND', 404);
             }
@@ -303,9 +318,11 @@ class TeacherAttendanceController extends Controller
             'subjectName' => $journal->schedule?->subject?->name ?? 'Mata Pelajaran',
             'date' => $journal->session_date?->format('Y-m-d') ?? (string) $journal->session_date,
             'session_date' => $journal->session_date?->format('Y-m-d') ?? (string) $journal->session_date,
+            'meeting_number' => Journal::where('teacher_id', $teacher->id)->where('schedule_id', $schedule->id)->count(),
             'timeSlot' => '07:00 - 08:20',
             'lessonTopic' => $journal->topic,
             'topic' => $journal->topic,
+            'method' => $journal->method ?? $method,
             'competenceIndicator' => $journal->notes ?? '',
             'notes' => $journal->notes ?? '',
             'attendance_summary' => $this->summarizeAttendances($journal->attendances),

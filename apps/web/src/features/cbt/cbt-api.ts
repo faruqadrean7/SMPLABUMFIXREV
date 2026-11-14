@@ -363,4 +363,29 @@ export const cbtApi = {
     const res = await apiClient.get<ApiResponse<any>>(`/exams/${id}/review`);
     return res.data;
   },
+
+  // =========================================================================
+  // 6. Impor Naskah Soal DOCX (BE-CBT-13)
+  // =========================================================================
+  uploadQuestionDocx: async (bankId: string, file: File): Promise<ApiResponse<any>> => {
+    const formData = new FormData();
+    formData.append('bank_id', bankId);
+    formData.append('file', file);
+    const res = await apiClient.post<ApiResponse<any>>('/question-imports', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data;
+  },
+
+  getQuestionImportJob: async (id: string): Promise<ApiResponse<any>> => {
+    const res = await apiClient.get<ApiResponse<any>>(`/question-imports/${id}`);
+    return res.data;
+  },
+
+  commitQuestionImport: async (id: string): Promise<ApiResponse<any>> => {
+    const res = await apiClient.post<ApiResponse<any>>(`/question-imports/${id}/commit`);
+    return res.data;
+  },
 };

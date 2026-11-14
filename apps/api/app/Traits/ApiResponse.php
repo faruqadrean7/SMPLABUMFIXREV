@@ -49,7 +49,7 @@ trait ApiResponse
      * Standard Error Response:
      * { "error": { "code": "VALIDATION_FAILED", "message": "...", "details": [...], "requestId": "..." } }
      */
-    protected function errorResponse(string $message, string $code = 'INTERNAL_ERROR', int $status = 500, array $details = []): JsonResponse
+    protected function errorResponse(string $message, string $code = 'INTERNAL_ERROR', int $status = 500, array $details = [], array $headers = []): JsonResponse
     {
         $requestId = request()->header('X-Request-Id', (string) Str::uuid());
 
@@ -60,9 +60,9 @@ trait ApiResponse
             'requestId' => $requestId,
         ];
 
-        return response()->json(['error' => $error], $status, [
+        return response()->json(['error' => $error], $status, array_merge([
             'X-Request-Id' => $requestId,
-        ]);
+        ], $headers));
     }
 
     /**
@@ -86,11 +86,19 @@ trait ApiResponse
             401 => 'UNAUTHENTICATED',
             403 => 'FORBIDDEN',
             404 => 'NOT_FOUND',
+            405 => 'METHOD_NOT_ALLOWED',
             409 => 'CONFLICT',
             422 => 'UNPROCESSABLE_ENTITY',
+            429 => 'RATE_LIMITED',
             default => $status >= 500 ? 'INTERNAL_ERROR' : 'HTTP_ERROR',
         };
 
-        return $this->errorResponse($e->getMessage() ?: 'Terjadi kesalahan permintaan.', $code, $status);
+        return $this->errorResponse(
+            $e->getMessage() ?: 'Terjadi kesalahan permintaan.',
+            $code,
+            $status,
+            [],
+            $e->getHeaders()
+        );
     }
 }

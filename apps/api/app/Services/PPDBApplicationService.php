@@ -317,6 +317,17 @@ class PPDBApplicationService
                     if (isset($data['birth_date'])) {
                         $applicant->birth_date = $data['birth_date'];
                     }
+                    if (isset($data['nik'])) {
+                        $applicant->nik_enc = $data['nik'];
+                    }
+                    if (isset($data['track_id']) && $data['track_id'] !== $applicant->track_id) {
+                        $track = PPDBTrack::where('id', $data['track_id'])
+                            ->where('wave_id', $applicant->wave_id)
+                            ->first();
+                        if ($track) {
+                            $applicant->track_id = $track->id;
+                        }
+                    }
                     $stepData['personal'] = array_merge($stepData['personal'] ?? [], $data);
                     break;
 

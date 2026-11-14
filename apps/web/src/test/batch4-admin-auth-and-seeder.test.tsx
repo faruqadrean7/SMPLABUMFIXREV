@@ -106,12 +106,11 @@ describe('BATCH 4B (GAP-SEC-02): Hardening Login Admin, Hidden Gateway & 404 Gua
       });
     });
 
-    it('handles MFA challenge and submits TOTP verification code', async () => {
+    it('submits admin credentials and navigates directly to admin shell without 2FA challenge', async () => {
       mockLogin.mockResolvedValueOnce({
-        user: null,
-        destination: null,
-        mfa_required: true,
-        mfa_token: 'mfa-temp-token-999',
+        user: { id: 'adm-super', username: 'super_admin', roles: ['super_admin'] },
+        destination: 'admin',
+        mfa_required: false,
       });
 
       render(<AdminLoginForm />);
@@ -124,28 +123,6 @@ describe('BATCH 4B (GAP-SEC-02): Hardening Login Admin, Hidden Gateway & 404 Gua
       fireEvent.click(screen.getByRole('button', { name: /Masuk Back-Office/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('Verifikasi Dua Faktor')).toBeInTheDocument();
-      });
-
-      mockLogin.mockResolvedValueOnce({
-        user: { id: 'adm-super', username: 'super_admin', roles: ['super_admin'] },
-        destination: 'admin',
-        mfa_required: false,
-      });
-
-      const totpInput = screen.getByPlaceholderText(/123456 atau XXXX-XXXX/i);
-      fireEvent.change(totpInput, { target: { value: '123456' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Verifikasi' }));
-
-      await waitFor(() => {
-        expect(mockLogin).toHaveBeenCalledWith({
-          mfa_token: 'mfa-temp-token-999',
-          totp_code: '123456',
-          recovery_code: undefined,
-          remember_device: true,
-          platform: 'web',
-          isAdminLogin: true,
-        });
         expect(mockPush).toHaveBeenCalledWith('/admin');
       });
     });

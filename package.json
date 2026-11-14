@@ -11,7 +11,9 @@
     "schedule": "cd apps/api && php artisan schedule:work",
     "api:setup": "cd apps/api && composer install && (test -f .env || cp .env.example .env) && php artisan key:generate && php artisan migrate --seed",
     "web:setup": "cd apps/web && npm install && (test -f .env.local || cp .env.example .env.local)",
-    "setup": "npm run api:setup && npm run web:setup"
+    "setup": "npm run api:setup && npm run web:setup",
+    "test:e2e": "cd apps/web && npx playwright test",
+    "test:e2e:report": "cd apps/web && npx playwright show-report"
   },
   "workspaces": [
     "apps/web"

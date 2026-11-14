@@ -140,7 +140,7 @@ Sediakan `.env.example` yang lengkap, tanpa rahasia.
 | Branch | `main` (rilis), `develop`, `feat/<ID>-<slug>`, `fix/<slug>` |
 | PR | Wajib review, CI hijau, mencantumkan ID fitur |
 | Versi API | `/api/v1`, perubahan breaking → `/v2` |
-| Migrasi DB | Hanya maju lewat Prisma migrate; jangan edit migrasi yang sudah dirilis |
+| Migrasi DB | Hanya maju lewat Laravel Database Migrations (apps/api) & Prisma (apps/web); jangan edit migrasi yang sudah dirilis |
 | Waktu | Simpan UTC, tampilkan WIB/zona sekolah |
 | ID | UUID v7 (atau ULID) untuk PK entitas utama |
 | Uang | Integer (satuan terkecil), bukan float |
@@ -157,5 +157,6 @@ Setiap keputusan teknis penting dicatat di `docs/adr/NNNN-judul.md` dengan forma
 | 0005 | PDF dibuat di worker (queue) | Diterima |
 
 ## Changelog
+- 1.2 (2026-11-04): Sinkronisasi tata kelola (Fase 5 GOV-01), penegasan migrasi basis data berbasis Laravel Database Migrations (`apps/api`), dan penyelarasan standar stack backend.
 - 1.1 (2026-10-27): Sinkronisasi stack backend resmi ke Laravel 11 (PHP 8.2) + PostgreSQL 16 + Redis 7 sesuai implementasi aktual repositori `apps/api` (Fase 5 GOV-01).
 - 1.0: Draf awal.

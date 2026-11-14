@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { cn } from '@/lib/utils';
 import {
   School,
@@ -128,6 +129,7 @@ export default function ApplicantDashboardPage() {
 
   // Re-registration & Receipt States (GAP-PPDB-02 & BE-PPDB-08/09)
   const [isReRegisterModalOpen, setIsReRegisterModalOpen] = useState(false);
+  const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false);
   const [reRegisterNotes, setReRegisterNotes] = useState('');
   const [agreedToRules, setAgreedToRules] = useState(false);
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
@@ -354,7 +356,15 @@ export default function ApplicantDashboardPage() {
 
   // Handler Unggah Berkas dengan Validasi Ukuran (2MB) & Ekstensi (GAP-PPDB)
   const handleFileUpload = (docType: string, docLabel: string, file?: File) => {
-    if (!file || !activeApplication) return;
+    if (!file) return;
+
+    if (!activeApplication) {
+      setFeedbackMessage({
+        type: 'error',
+        text: 'Draf pendaftaran belum dibuat. Harap lengkapi Identitas Calon Siswa (Langkah 1) dan klik "Simpan Draf" terlebih dahulu sebelum mengunggah berkas.',
+      });
+      return;
+    }
 
     const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
     const ALLOWED_EXTS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
@@ -385,6 +395,7 @@ export default function ApplicantDashboardPage() {
       .uploadDocument(activeApplication.id, fd)
       .then(() => {
         setFeedbackMessage({ type: 'success', text: `Berkas ${docLabel} berhasil diunggah.` });
+        queryClient.invalidateQueries({ queryKey: ['ppdb-applicant-me'] });
         refetchProfile();
       })
       .catch((err: any) => {
@@ -670,7 +681,16 @@ export default function ApplicantDashboardPage() {
               return (
                 <button
                   key={step.num}
-                  onClick={() => setActiveStep(step.num)}
+                  onClick={() => {
+                    if (step.num > 1 && !activeApplication) {
+                      setFeedbackMessage({
+                        type: 'error',
+                        text: 'Silakan lengkapi Identitas Calon Siswa (Langkah 1) dan klik "Simpan Draf" terlebih dahulu sebelum berpindah langkah.',
+                      });
+                      return;
+                    }
+                    setActiveStep(step.num);
+                  }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                     isActive
                       ? 'bg-brand-blue text-white shadow-sm'
@@ -989,6 +1009,29 @@ export default function ApplicantDashboardPage() {
                 <span className="text-xs text-slate-500">Format PDF/JPG/PNG (Maks 2MB)</span>
               </div>
 
+              {!activeApplication && (
+                <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-xs">Draf Pendaftaran Belum Dibuat</p>
+                      <p className="text-[11px] text-amber-800 mt-0.5">
+                        Dokumen persyaratan hanya dapat disimpan setelah formulir pendaftaran memiliki nomor registrasi draf.
+                        Silakan lengkapi <strong>Langkah 1 (Data Diri Siswa)</strong> dan klik <strong>"Simpan Draf"</strong> terlebih dahulu.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setActiveStep(1)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shrink-0"
+                  >
+                    Buka Langkah 1
+                  </Button>
+                </div>
+              )}
+
               {/* Daftar Berkas */}
               <div className="space-y-3">
                 {[
@@ -1035,16 +1078,45 @@ export default function ApplicantDashboardPage() {
 
                       <div className="flex items-center gap-2">
                         {uploaded ? (
-                          <span className="text-emerald-700 font-medium flex items-center gap-1 text-[11px]">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                            Dokumen Siap
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-700 font-medium flex items-center gap-1 text-[11px]">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              Dokumen Siap
+                            </span>
+                            {!isLocked && (
+                              <label
+                                className={cn(
+                                  'cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-600 font-medium hover:bg-slate-50 transition-colors text-[11px] shadow-2xs',
+                                  uploadingDocType === doc.type && 'opacity-60 pointer-events-none'
+                                )}
+                              >
+                                {uploadingDocType === doc.type ? (
+                                  <Loader2 className="h-3 w-3 animate-spin text-brand-blue" />
+                                ) : (
+                                  <Upload className="h-3 w-3 text-slate-400" />
+                                )}
+                                <span>{uploadingDocType === doc.type ? 'Mengunggah...' : 'Ganti Berkas'}</span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                  disabled={uploadingDocType === doc.type || isLocked}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    handleFileUpload(doc.type, doc.label, file);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
+                            )}
+                          </div>
                         ) : (
                           <label
                             className={cn(
                               'cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50 transition-colors shadow-2xs',
-                              uploadingDocType === doc.type && 'opacity-60 pointer-events-none'
+                              (!activeApplication || uploadingDocType === doc.type) && 'opacity-60 pointer-events-none'
                             )}
+                            title={!activeApplication ? 'Lengkapi Langkah 1 terlebih dahulu' : undefined}
                           >
                             {uploadingDocType === doc.type ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-blue" />
@@ -1056,7 +1128,7 @@ export default function ApplicantDashboardPage() {
                               type="file"
                               className="hidden"
                               accept=".pdf,.jpg,.jpeg,.png,.webp"
-                              disabled={uploadingDocType === doc.type || isLocked}
+                              disabled={uploadingDocType === doc.type || isLocked || !activeApplication}
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 handleFileUpload(doc.type, doc.label, file);
@@ -1119,11 +1191,7 @@ export default function ApplicantDashboardPage() {
                 <Button
                   size="sm"
                   disabled={submitApplicationMutation.isPending}
-                  onClick={() => {
-                    if (confirm('Kirim formulir pendaftaran ini secara resmi? Setelah disubmit data akan dikunci untuk verifikasi berkas oleh panitia.')) {
-                      submitApplicationMutation.mutate();
-                    }
-                  }}
+                  onClick={() => setIsSubmitConfirmOpen(true)}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
                 >
                   {submitApplicationMutation.isPending ? (
@@ -1228,6 +1296,22 @@ export default function ApplicantDashboardPage() {
             </div>
           </div>
         )}
+
+        {/* Modal Konfirmasi Submit Final Pendaftaran */}
+        <ConfirmDialog
+          isOpen={isSubmitConfirmOpen}
+          onClose={() => setIsSubmitConfirmOpen(false)}
+          onConfirm={async () => {
+            setIsSubmitConfirmOpen(false);
+            submitApplicationMutation.mutate();
+          }}
+          title="Submit Final Formulir Pendaftaran"
+          description="Kirim formulir pendaftaran ini secara resmi? Setelah disubmit, seluruh data formulir akan dikunci untuk verifikasi berkas oleh panitia dan tidak dapat diubah kembali secara mandiri."
+          confirmLabel="Ya, Submit Final"
+          cancelLabel="Periksa Kembali"
+          variant="primary"
+          isLoading={submitApplicationMutation.isPending}
+        />
       </main>
     </div>
   );

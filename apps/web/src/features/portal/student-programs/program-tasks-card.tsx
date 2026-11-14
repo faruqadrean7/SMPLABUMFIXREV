@@ -344,6 +344,7 @@ export function ProgramTasksCard({
                   <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
                   <span>
                     {(submitMutation.error as any)?.response?.data?.message ||
+                      (submitMutation.error as any)?.message ||
                       'Gagal mengumpulkan tugas. Silakan periksa kembali isian Anda.'}
                   </span>
                 </div>

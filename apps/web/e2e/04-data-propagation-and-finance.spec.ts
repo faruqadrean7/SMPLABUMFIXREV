@@ -36,10 +36,10 @@ test.describe('E2E B.4: Propagasi Data (Admin/Bendahara -> Portal Ortu & Siswa)'
     await page.waitForURL('**/portal/ortu', { timeout: 15000 });
 
     // 4. Masuk ke halaman profil anak
-    const childLink = page.locator('a[href*="/portal/ortu/anak/"]').first();
+    const childLink = page.locator('a[href*="/ortu/anak/"], a[href*="/portal/ortu/anak/"]').first();
     await expect(childLink).toBeVisible();
     await childLink.click();
-    await page.waitForURL('**/portal/ortu/anak/*', { timeout: 15000 });
+    await page.waitForURL('**/*ortu/anak/*', { timeout: 15000 });
 
     // 5. Buka tab Keuangan & Tagihan
     const financeTab = page.locator('button:has-text("Keuangan")').first();

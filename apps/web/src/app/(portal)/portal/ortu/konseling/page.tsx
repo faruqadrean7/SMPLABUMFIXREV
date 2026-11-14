@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGuardian } from '@/lib/guardian-context';
-import { GuardianCounselingItem } from '@/lib/mock-guardian-data';
+import { GuardianCounselingItem } from '@/types/guardian';
 import { useGuardianCounselingRequests, useCreateGuardianCounselingRequest } from '@/lib/use-guardian-data';
 
 export default function GuardianKonselingPage() {
@@ -147,20 +147,26 @@ export default function GuardianKonselingPage() {
                 {activeChild.homeroom_teacher}
               </h3>
               <p className="text-xs text-slate-500 font-medium">
-                Kontak: {activeChild.homeroom_phone} • Ruang Guru Gedung Utama
+                Kontak: {activeChild.homeroom_phone && activeChild.homeroom_phone !== '-' ? activeChild.homeroom_phone : 'Belum tersedia'} • Ruang Guru Gedung Utama
               </p>
             </div>
           </div>
 
-          <a
-            href={`https://wa.me/${activeChild.homeroom_phone.replace(/[^0-9]/g, '')}`}
-            target="_blank"
-            rel="noreferrer"
-            className="px-3 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold shrink-0 transition-colors flex items-center gap-1.5 shadow-2xs ml-3"
-          >
-            <Phone className="w-3.5 h-3.5" />
-            <span>WhatsApp</span>
-          </a>
+          {activeChild.homeroom_phone && activeChild.homeroom_phone !== '-' && activeChild.homeroom_phone.replace(/[^0-9]/g, '').length >= 8 ? (
+            <a
+              href={`https://wa.me/${activeChild.homeroom_phone.replace(/[^0-9]/g, '')}`}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold shrink-0 transition-colors flex items-center gap-1.5 shadow-2xs ml-3"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+            </a>
+          ) : (
+            <span className="px-3 py-2 rounded-xl bg-slate-100 text-slate-400 text-xs font-medium shrink-0 ml-3">
+              Kontak belum tersedia
+            </span>
+          )}
         </div>
 
         {/* Card 2: Guidance Counselor (BK) */}

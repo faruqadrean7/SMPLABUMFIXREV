@@ -49,6 +49,10 @@ class AdminTwoFactorAuthFeatureTest extends TestCase
 
         Cache::flush();
 
+        // Deterministik: 2FA wajib untuk semua test di kelas ini, apa pun nilai
+        // ADMIN_2FA_BYPASS di .env lokal. Test bypass meng-opt-in sendiri.
+        config(['auth.admin_two_factor.bypass_in_non_production' => false]);
+
         $this->twoFactorService = app(TwoFactorAuthService::class);
 
         $this->superAdminRole = Role::firstOrCreate(
@@ -140,6 +144,64 @@ class AdminTwoFactorAuthFeatureTest extends TestCase
             'must_change_password' => false,
         ]);
         $this->guardianUser->roles()->attach($this->guardianRole->id);
+    }
+
+    /**
+     * BE-AUTH-2FABYPASS: dengan ADMIN_2FA_BYPASS=true di env non-produksi, login
+     * admin menerbitkan token langsung tanpa enrollment/tantangan TOTP.
+     */
+    public function test_be_auth_2fabypass_dev_flag_issues_tokens_without_2fa(): void
+    {
+        config(['auth.admin_two_factor.bypass_in_non_production' => true]);
+
+        $res = $this->postJson('/api/v1/auth/admin/login', [
+            'identifier' => 'admin_demo',
+            'password' => 'AdminPass123!',
+        ]);
+
+        $res->assertStatus(200);
+        $this->assertNull($res->json('mfa_required'));
+        $this->assertNull($res->json('mfa_enrollment_required'));
+        $this->assertNotEmpty($res->json('data.tokens.accessToken'));
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $this->adminUser->id,
+            'action' => 'auth.admin_login_2fa_bypassed',
+        ]);
+    }
+
+    /**
+     * BE-AUTH-2FABYPASS: fail-safe — flag diabaikan saat APP_ENV=production,
+     * sehingga 2FA tetap wajib meski ADMIN_2FA_BYPASS=true.
+     */
+    public function test_be_auth_2fabypass_is_ignored_in_production(): void
+    {
+        config(['auth.admin_two_factor.bypass_in_non_production' => true]);
+        $this->app['env'] = 'production';
+
+        $res = $this->postJson('/api/v1/auth/admin/login', [
+            'identifier' => 'admin_demo',
+            'password' => 'AdminPass123!',
+        ]);
+
+        $res->assertStatus(200);
+        // Tetap dialihkan ke enrollment 2FA, token TIDAK terbit.
+        $res->assertJson(['mfa_enrollment_required' => true]);
+        $this->assertNull($res->json('data.tokens'));
+    }
+
+    /**
+     * BE-AUTH-2FABYPASS: default (flag false) tidak mengubah perilaku — 2FA tetap wajib.
+     */
+    public function test_be_auth_2fabypass_disabled_by_default_keeps_2fa_mandatory(): void
+    {
+        $res = $this->postJson('/api/v1/auth/admin/login', [
+            'identifier' => 'admin_demo',
+            'password' => 'AdminPass123!',
+        ]);
+
+        $res->assertStatus(200);
+        $res->assertJson(['mfa_enrollment_required' => true]);
+        $this->assertNull($res->json('data.tokens'));
     }
 
     /**
@@ -454,5 +516,132 @@ class AdminTwoFactorAuthFeatureTest extends TestCase
             ], "Role {$roleCode} gagal memicu mfa_enrollment_required");
             $this->assertNotEmpty($res->json('enrollment_token'), "Role {$roleCode} tidak menerima enrollment_token");
         }
+    }
+
+    /**
+     * FIX-BE-AUTH-2FA-01: Enrollment 2FA tidak membakar time-step sehingga admin dapat langsung login
+     * dengan kode 6-digit yang sama yang masih aktif di authenticator.
+     */
+    public function test_fix_be_auth_2fa_01_enrollment_does_not_burn_timestep_and_allows_immediate_login(): void
+    {
+        // 1. Dapatkan enrollment token
+        $loginRes = $this->postJson('/api/v1/auth/admin/login', [
+            'identifier' => 'admin_demo',
+            'password' => 'AdminPass123!',
+        ]);
+        $enrollmentToken = $loginRes->json('enrollment_token');
+
+        // 2. Setup 2FA
+        $setupRes = $this->postJson('/api/v1/auth/2fa/setup', [
+            'enrollment_token' => $enrollmentToken,
+        ]);
+        $secret = $setupRes->json('data.secret');
+        $this->assertNotEmpty($secret);
+
+        // 3. Konfirmasi 2FA dengan kode yang valid
+        $validCode = $this->twoFactorService->calculateCode($secret);
+        $verifyRes = $this->postJson('/api/v1/auth/2fa/verify', [
+            'enrollment_token' => $enrollmentToken,
+            'code' => $validCode,
+        ]);
+        $verifyRes->assertStatus(200);
+
+        // Pastikan kolom two_factor_last_step TIDAK dibakar (null) agar tidak memblokir login pertama
+        $this->adminUser->refresh();
+        $this->assertNotNull($this->adminUser->two_factor_confirmed_at);
+        $this->assertNull($this->adminUser->two_factor_last_step);
+
+        // 4. Admin langsung login kembali dengan kredensial
+        $loginChallengeRes = $this->postJson('/api/v1/auth/admin/login', [
+            'identifier' => 'admin_demo',
+            'password' => 'AdminPass123!',
+        ]);
+        $loginChallengeRes->assertStatus(200);
+        $this->assertTrue($loginChallengeRes->json('mfa_required'));
+        $mfaToken = $loginChallengeRes->json('mfa_token');
+        $this->assertNotEmpty($mfaToken);
+
+        // 5. Masukkan kode 6 digit YANG SAMA yang masih aktif di layar authenticator -> HARUS BERHASIL
+        $mfaSubmitRes = $this->postJson('/api/v1/auth/admin/login', [
+            'mfa_token' => $mfaToken,
+            'totp_code' => $validCode,
+        ]);
+        $mfaSubmitRes->assertStatus(200);
+        $this->assertNotEmpty($mfaSubmitRes->json('data.tokens.accessToken'));
+
+        // Pastikan setelah login berhasil, time-step barulah dibakar
+        $this->adminUser->refresh();
+        $this->assertNotNull($this->adminUser->two_factor_last_step);
+
+        // 6. Upaya replay serangan login dengan kode yang sama persis -> HARUS DITOLAK
+        $loginChallenge2 = $this->postJson('/api/v1/auth/admin/login', [
+            'identifier' => 'admin_demo',
+            'password' => 'AdminPass123!',
+        ]);
+        $mfaToken2 = $loginChallenge2->json('mfa_token');
+
+        $replayRes = $this->postJson('/api/v1/auth/admin/login', [
+            'mfa_token' => $mfaToken2,
+            'totp_code' => $validCode,
+        ]);
+        $replayRes->assertStatus(401);
+        $replayRes->assertJsonPath('error.code', 'INVALID_2FA_CODE');
+        $replayRes->assertJsonPath('error.is_replayed', true);
+        $this->assertStringContainsString('baru saja digunakan', $replayRes->json('error.message'));
+    }
+
+    /**
+     * FIX-BE-AUTH-2FA-01: Perintah artisan admin:2fa-reset mereset 2FA dan mencatat audit log.
+     */
+    public function test_fix_be_auth_2fa_01_artisan_admin_2fa_reset_clears_mfa_and_logs_audit(): void
+    {
+        $this->adminUser->two_factor_secret = 'JBSWY3DPEHPK3PXP';
+        $this->adminUser->two_factor_confirmed_at = now();
+        $this->adminUser->two_factor_recovery_codes = ['hashed1'];
+        $this->adminUser->two_factor_last_step = 12345;
+        $this->adminUser->save();
+
+        $this->artisan('admin:2fa-reset', [
+            'identifier' => 'admin_demo',
+            '--force' => true,
+        ])->assertSuccessful();
+
+        $this->adminUser->refresh();
+        $this->assertNull($this->adminUser->two_factor_secret);
+        $this->assertNull($this->adminUser->two_factor_confirmed_at);
+        $this->assertNull($this->adminUser->two_factor_recovery_codes);
+        $this->assertNull($this->adminUser->two_factor_last_step);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'auth.admin_2fa_reset_by_cli',
+            'entity' => 'User',
+            'entity_id' => $this->adminUser->id,
+        ]);
+    }
+
+    /**
+     * FIX-BE-AUTH-2FA-01: Toleransi deviasi waktu (clock drift) hingga +/- 60 detik (2 window) diterima.
+     */
+    public function test_fix_be_auth_2fa_01_clock_drift_within_60_seconds_is_accepted(): void
+    {
+        $secret = $this->twoFactorService->generateSecretKey();
+        $this->adminUser->two_factor_secret = $secret;
+        $this->adminUser->two_factor_confirmed_at = now();
+        $this->adminUser->two_factor_last_step = null;
+        $this->adminUser->save();
+
+        $currentTime = time();
+
+        // 1. Kode 60 detik yang lalu (2 step mundur) -> Harus valid
+        $pastCode = $this->twoFactorService->calculateCode($secret, $currentTime - 60);
+        $this->assertTrue($this->twoFactorService->verifyKey($secret, $pastCode));
+
+        // 2. Kode 60 detik ke depan (2 step maju) -> Harus valid
+        $futureCode = $this->twoFactorService->calculateCode($secret, $currentTime + 60);
+        $this->assertTrue($this->twoFactorService->verifyKey($secret, $futureCode));
+
+        // 3. Kode 120 detik meleset (4 step) -> Harus ditolak
+        $farFutureCode = $this->twoFactorService->calculateCode($secret, $currentTime + 120);
+        $this->assertFalse($this->twoFactorService->verifyKey($secret, $farFutureCode));
     }
 }

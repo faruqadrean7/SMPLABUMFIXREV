@@ -27,6 +27,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { cbtApi } from '@/features/cbt/cbt-api';
 import { StudentSessionQuestionItem, QuestionType } from '@/types/cbt';
 import { useAuth } from '@/providers/auth-provider';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { toast } from '@/components/ui/toast';
 
 export default function StudentCbtPlayerPage() {
   const params = useParams();
@@ -60,6 +62,7 @@ export default function StudentCbtPlayerPage() {
 
   // Submit Modals
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [showExitConfirmDialog, setShowExitConfirmDialog] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isFinished, setIsFinished] = useState<boolean>(false);
 
@@ -738,7 +741,7 @@ export default function StudentCbtPlayerPage() {
       setIsFinished(true);
       clearOfflineQueues();
     } catch (err: any) {
-      alert(err?.message || 'Gagal mengirim jawaban ujian.');
+      toast.error(err?.message || 'Gagal mengirim jawaban ujian.', 'Gagal Menyelesaikan Ujian');
     } finally {
       setIsSubmitting(false);
     }
@@ -1011,20 +1014,14 @@ export default function StudentCbtPlayerPage() {
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
 
-          <Link href="/portal/siswa/cbt">
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-[11px] h-8 bg-transparent text-slate-300 border-slate-700 hover:bg-slate-800"
-              onClick={(e) => {
-                if (!confirm('Apakah Anda yakin ingin keluar dari ruang ujian?')) {
-                  e.preventDefault();
-                }
-              }}
-            >
-              Keluar
-            </Button>
-          </Link>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-[11px] h-8 bg-transparent text-slate-300 border-slate-700 hover:bg-slate-800"
+            onClick={() => setShowExitConfirmDialog(true)}
+          >
+            Keluar
+          </Button>
         </div>
       </header>
 
@@ -1492,6 +1489,21 @@ export default function StudentCbtPlayerPage() {
           </div>
         </div>
       )}
+
+      {/* Exit Exam Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showExitConfirmDialog}
+        onClose={() => setShowExitConfirmDialog(false)}
+        onConfirm={() => {
+          setShowExitConfirmDialog(false);
+          router.push('/portal/siswa/cbt');
+        }}
+        title="Keluar dari Ruang Ujian"
+        description="Apakah Anda yakin ingin keluar dari ruang ujian? Waktu ujian akan terus berjalan di latar belakang selama batas waktu belum berakhir."
+        confirmLabel="Keluar"
+        cancelLabel="Tetap di Sini"
+        variant="warning"
+      />
     </div>
   );
 }

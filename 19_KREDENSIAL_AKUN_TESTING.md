@@ -4,7 +4,7 @@
 
 **Password (semua akun): `Password123!`**
 
-Login admin/kepsek: `/secret-admin-gate-login` (pakai 2FA). Login guru/siswa/ortu: `/masuk`.
+Login admin/kepsek: `/secret-admin-gate-login` (tanpa 2FA). Login guru/siswa/ortu: `/masuk`.
 
 Ringkasan: 5 staf, 20 guru, 420 siswa, 420 orang tua.
 

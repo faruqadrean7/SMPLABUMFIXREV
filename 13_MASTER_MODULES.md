@@ -233,5 +233,6 @@ Beberapa area kebijakan operasional sekolah berikut berstatus **[Menunggu Keputu
 ---
 
 ## Changelog
+- **1.2 (2026-11-04)**: Pembaruan status Modul Keuangan (FIN) pasca resolusi GOV-01: rilis bertahap v1 menggunakan rekening giro mitra sekolah dengan verifikasi slip transfer manual staf TU (kartu SPP dan info tagihan aktif), sedangkan jalur pembayaran online (VA) dipersiapkan untuk fase berikutnya via `PaymentChannelInterface` (lihat `docs/DECISION_PENDING_FINANCE.md`).
 - **1.1 (2026-10-27)**: Penyelarasan status Modul Keuangan (FIN) yang kodenya telah terbangun namun operasional produksinya menunggu keputusan resmi sekolah sesuai `AGENTS.md §8` (Fase 5 GOV-01 / `docs/DECISION_PENDING_FINANCE.md`).
 - **1.0 (2026-10-08)**: Dokumen Master Daftar Modul resmi diterbitkan. Penyelarasan 14 modul, 203 fitur terhitung riil, graf dependensi bebas siklus, dan dokumentasi pemetaan ID lama ke ID baru.

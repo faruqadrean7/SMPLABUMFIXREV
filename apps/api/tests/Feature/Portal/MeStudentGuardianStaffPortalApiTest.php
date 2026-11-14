@@ -3,32 +3,41 @@
 namespace Tests\Feature\Portal;
 
 use App\Models\AcademicYear;
+use App\Models\Achievement;
 use App\Models\Assignment;
 use App\Models\Attendance;
+use App\Models\CharacterNote;
 use App\Models\ClassStudent;
+use App\Models\CounselingRequest;
 use App\Models\Exam;
 use App\Models\ExamParticipant;
-use App\Models\ExamRoom;
+use App\Models\Extracurricular;
+use App\Models\ExtracurricularMember;
 use App\Models\Grade;
 use App\Models\GradeComponent;
-use App\Models\GradeLevel;
 use App\Models\GradePeriod;
 use App\Models\Guardian;
+use App\Models\LeaveRequest;
+use App\Models\PointType;
+use App\Models\ReportCard;
 use App\Models\Role;
-use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Models\Staff;
+use App\Models\StaffAttendance;
 use App\Models\Student;
+use App\Models\StudentPoint;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeachingAssignment;
+use App\Models\Ticket;
 use App\Models\TimeSlot;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class MeStudentGuardianStaffPortalApiTest extends TestCase
@@ -36,35 +45,23 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $guardianUser1;
-
     protected User $guardianUser2;
-
     protected Guardian $guardian1;
-
     protected Guardian $guardian2;
-
     protected Student $student1;
-
     protected Student $student2;
-
     protected SchoolClass $classA;
 
     protected User $studentUser1;
-
     protected User $teacherUser1;
-
     protected Teacher $teacher1;
-
     protected Subject $subjectMath;
 
     protected User $staffUser1;
-
     protected Staff $staff1;
 
     protected AcademicYear $academicYear;
-
     protected Semester $semester;
-
     protected TimeSlot $timeSlot;
 
     protected function setUp(): void
@@ -126,7 +123,7 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
             'passing_grade' => 75.0,
         ]);
 
-        $gradeLevel = GradeLevel::firstOrCreate(
+        $gradeLevel = \App\Models\GradeLevel::firstOrCreate(
             ['name' => 'Kelas 7'],
             ['sort_order' => 7]
         );
@@ -319,14 +316,14 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
             'created_by' => $this->teacherUser1->id,
         ]);
 
-        $room = Room::create([
+        $room = \App\Models\Room::create([
             'name' => 'Lab Komputer 1',
             'code' => 'LAB-1',
             'room_type' => 'laboratorium',
             'capacity' => 30,
         ]);
 
-        $examRoom = ExamRoom::create([
+        $examRoom = \App\Models\ExamRoom::create([
             'exam_id' => $exam->id,
             'room_id' => $room->id,
             'proctor_id' => $this->teacherUser1->id,
@@ -437,6 +434,109 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
             'requester_role' => 'student',
             'topic' => 'Konsultasi Penjurusan IPA/IPS',
             'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * BE-FE-PORTAL-STUDENT-POINTS:
+     * Siswa melihat catatan poin karakter, saldo prestasi/pelanggaran, dan ambang batas kedisiplinan.
+     */
+    public function test_be_fe_portal_student_points_summary_and_logs(): void
+    {
+        Achievement::create([
+            'student_id' => $this->student1->id,
+            'title' => 'Juara 1 Lomba Web Development Kota',
+            'rank_level' => 'Juara 1 Tingkat Kota',
+            'achieved_at' => '2026-08-10',
+            'points_awarded' => 50,
+            'verification_status' => 'verified',
+            'notes' => 'Surat tugas sekolah resmi.',
+        ]);
+
+        $pointType = PointType::create([
+            'name' => 'Kedisiplinan Pemimpin Upacara',
+            'kind' => 'prestasi',
+            'points' => 20,
+            'severity' => 'rendah',
+        ]);
+
+        StudentPoint::create([
+            'student_id' => $this->student1->id,
+            'point_type_id' => $pointType->id,
+            'recorded_by' => $this->teacherUser1->id,
+            'point_date' => '2026-08-17',
+            'notes' => 'Petugas upacara bendera.',
+        ]);
+
+        $response = $this->actingAs($this->studentUser1, 'sanctum')
+            ->getJson('/api/v1/me/points');
+
+        $response->assertOk()
+            ->assertJsonPath('data.totalPrestasi', 70)
+            ->assertJsonPath('data.totalPelanggaran', 0)
+            ->assertJsonPath('data.balancePoints', 70)
+            ->assertJsonPath('data.statusDisiplin', 'AMAN')
+            ->assertJsonCount(2, 'data.items');
+    }
+
+    /**
+     * BE-FE-PORTAL-STUDENT-EXTRACURRICULARS:
+     * Siswa melihat daftar ekstrakurikuler yang diikuti serta katalog pilihan dan mendaftar mandiri.
+     */
+    public function test_be_fe_portal_student_extracurriculars_and_registration(): void
+    {
+        $ekskul1 = Extracurricular::create([
+            'name' => 'Coding & Robotika',
+            'coach_id' => $this->teacher1->id,
+            'category' => 'Teknologi',
+            'description' => 'Klub robotika dan web.',
+            'quota' => 25,
+            'schedule_day' => 'Rabu',
+            'schedule_time' => '15:00 - 17:00',
+            'is_active' => true,
+        ]);
+
+        $ekskul2 = Extracurricular::create([
+            'name' => 'PMR Madya',
+            'coach_id' => $this->teacher1->id,
+            'category' => 'Kemanusiaan',
+            'description' => 'Palang merah remaja.',
+            'quota' => 30,
+            'schedule_day' => 'Sabtu',
+            'schedule_time' => '08:00 - 10:00',
+            'is_active' => true,
+        ]);
+
+        ExtracurricularMember::create([
+            'extracurricular_id' => $ekskul1->id,
+            'student_id' => $this->student1->id,
+            'role' => 'Anggota Inti',
+            'status' => 'aktif',
+            'joined_at' => '2026-07-20',
+        ]);
+
+        // 1. Ambil data ekstrakurikuler siswa
+        $response = $this->actingAs($this->studentUser1, 'sanctum')
+            ->getJson('/api/v1/me/extracurriculars');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data.myExtracurriculars')
+            ->assertJsonPath('data.myExtracurriculars.0.name', 'Coding & Robotika')
+            ->assertJsonCount(1, 'data.availableExtracurriculars')
+            ->assertJsonPath('data.availableExtracurriculars.0.name', 'PMR Madya');
+
+        // 2. Siswa mendaftar ke PMR Madya
+        $resReg = $this->actingAs($this->studentUser1, 'sanctum')
+            ->postJson('/api/v1/me/extracurriculars/register', [
+                'extracurricular_id' => $ekskul2->id,
+            ]);
+
+        $resReg->assertStatus(201)
+            ->assertJsonPath('data.member.status', 'aktif');
+
+        $this->assertDatabaseHas('extracurricular_members', [
+            'extracurricular_id' => $ekskul2->id,
+            'student_id' => $this->student1->id,
         ]);
     }
 
@@ -723,3 +823,4 @@ class MeStudentGuardianStaffPortalApiTest extends TestCase
             ->assertJsonPath('error.code', 'FORBIDDEN');
     }
 }
+

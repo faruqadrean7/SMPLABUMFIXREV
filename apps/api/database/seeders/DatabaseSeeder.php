@@ -96,6 +96,7 @@ class DatabaseSeeder extends Seeder
             ['code' => 'academic.grade.read', 'description' => 'Melihat nilai'],
             ['code' => 'academic.grade.write', 'description' => 'Menginput nilai'],
             ['code' => 'academic.report.generate', 'description' => 'Mencetak rapor'],
+            ['code' => 'program.manage', 'description' => 'Mengelola materi, tugas, dan target program khusus'],
 
             // CBT
             ['code' => 'cbt.bank.write', 'description' => 'Mengelola bank soal'],
@@ -242,6 +243,7 @@ class DatabaseSeeder extends Seeder
             'cbt.proctor.action',
             'student.point.read',
             'student.point.write',
+            'program.manage',
         ]);
 
         // 4. Wali Kelas (homeroom)
@@ -258,6 +260,7 @@ class DatabaseSeeder extends Seeder
             'cbt.proctor.action',
             'student.point.read',
             'student.point.write',
+            'program.manage',
         ]);
 
         // 5. Guru BK (counselor)

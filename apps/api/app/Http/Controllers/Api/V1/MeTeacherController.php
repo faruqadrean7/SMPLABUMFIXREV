@@ -238,14 +238,29 @@ class MeTeacherController extends Controller
         return app(TeacherHomeroomController::class)->decideHomeroomLeaveRequest($request, $id);
     }
 
+    public function studentPoints(Request $request): JsonResponse
+    {
+        return app(TeacherHomeroomController::class)->studentPoints($request);
+    }
+
     public function storeStudentPoint(Request $request): JsonResponse
     {
         return app(TeacherHomeroomController::class)->storeStudentPoint($request);
     }
 
+    public function counselingReferrals(Request $request): JsonResponse
+    {
+        return app(TeacherHomeroomController::class)->counselingReferrals($request);
+    }
+
     public function storeCounselingReferral(Request $request): JsonResponse
     {
         return app(TeacherHomeroomController::class)->storeCounselingReferral($request);
+    }
+
+    public function facilities(Request $request): JsonResponse
+    {
+        return app(TeacherHomeroomController::class)->facilities($request);
     }
 
     public function facilityBookings(Request $request): JsonResponse
@@ -256,6 +271,11 @@ class MeTeacherController extends Controller
     public function storeFacilityBooking(Request $request): JsonResponse
     {
         return app(TeacherHomeroomController::class)->storeFacilityBooking($request);
+    }
+
+    public function tickets(Request $request): JsonResponse
+    {
+        return app(TeacherHomeroomController::class)->tickets($request);
     }
 
     public function storeTicket(Request $request): JsonResponse

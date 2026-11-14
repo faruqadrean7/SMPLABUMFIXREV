@@ -10,6 +10,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\Finance\FinanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -97,6 +98,135 @@ class Phase2BackendP1Test extends TestCase
 
         $this->assertSame(404, $responseNotFound->status());
         $this->assertSame('NOT_FOUND', $responseNotFound->json('error.code'));
+    }
+
+    /**
+     * BE-01: Pastikan endpoint status siswa dan modul master lainnya mengembalikan kode kanonis (404/422), bukan 500.
+     */
+    public function test_be_01_student_status_and_master_controllers_handle_exceptions_cleanly(): void
+    {
+        // 1. Status siswa pada UUID non-existent mengembalikan 404
+        $fakeUuid = (string) Str::uuid();
+        $resNotFound = $this->actingAs($this->adminUser, 'sanctum')
+            ->postJson("/api/v1/students/{$fakeUuid}/status", [
+                'status' => 'lulus',
+                'effective_date' => '2026-11-04',
+                'reason' => 'Telah menyelesaikan pendidikan',
+            ]);
+
+        $this->assertSame(404, $resNotFound->status());
+        $this->assertSame('NOT_FOUND', $resNotFound->json('error.code'));
+
+        // 2. Status siswa validasi gagal mengembalikan 400 VALIDATION_FAILED (bukan 500)
+        $resInvalid = $this->actingAs($this->adminUser, 'sanctum')
+            ->postJson("/api/v1/students/{$this->studentModel->id}/status", [
+                'status' => 'status_tidak_dikenal',
+                'effective_date' => '2026-11-04',
+            ]);
+
+        $this->assertSame(400, $resInvalid->status());
+        $this->assertSame('VALIDATION_FAILED', $resInvalid->json('error.code'));
+
+        // 3. TeacherController show non-existent mengembalikan 404 (bukan 500)
+        $resTeacherNotFound = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson("/api/v1/teachers/{$fakeUuid}");
+
+        $this->assertSame(404, $resTeacherNotFound->status());
+        $this->assertSame('NOT_FOUND', $resTeacherNotFound->json('error.code'));
+
+        // 4. GuardianController show non-existent mengembalikan 404 (bukan 500)
+        $resGuardianNotFound = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson("/api/v1/guardians/{$fakeUuid}");
+
+        $this->assertSame(404, $resGuardianNotFound->status());
+        $this->assertSame('NOT_FOUND', $resGuardianNotFound->json('error.code'));
+
+        // 5. UserController show non-existent mengembalikan 404 (bukan 500)
+        $resUserNotFound = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson("/api/v1/users/{$fakeUuid}");
+
+        $this->assertSame(404, $resUserNotFound->status());
+        $this->assertSame('NOT_FOUND', $resUserNotFound->json('error.code'));
+    }
+
+    /**
+     * BE-04: Transaksi rekonsiliasi payment verification, void, dan recalculation status invoice di FinanceService.
+     */
+    public function test_be_04_payment_verification_and_void_recalculates_invoice_in_transaction(): void
+    {
+        $financeService = app(FinanceService::class);
+
+        // Buat tagihan Rp 600.000
+        $invoice = Invoice::create([
+            'invoice_number' => 'INV-TX-001',
+            'student_id' => $this->studentModel->id,
+            'issue_date' => Carbon::today(),
+            'due_date' => Carbon::today()->addDays(14),
+            'total_amount' => 600000,
+            'paid_amount' => 0,
+            'status' => 'belum_bayar',
+        ]);
+
+        InvoiceItem::create([
+            'invoice_id' => $invoice->id,
+            'fee_type_id' => $this->feeType->id,
+            'description' => 'SPP Pembayaran Bertransaksi',
+            'amount' => 600000,
+        ]);
+
+        // Pembayaran tahap 1: Rp 300.000 (status awal menunggu verifikasi)
+        $payment1 = Payment::create([
+            'invoice_id' => $invoice->id,
+            'submitted_by' => $this->studentUser->id,
+            'payment_method' => 'transfer_bank',
+            'amount' => 300000,
+            'status' => 'menunggu_verifikasi',
+            'payment_date' => Carbon::today(),
+            'external_reference' => 'EXT-TX-001',
+        ]);
+
+        // 1. Verifikasi pembayaran tahap 1
+        $verifiedPayment1 = $financeService->verifyPayment($payment1, 'Verifikasi tahap 1', $this->adminUser);
+
+        $this->assertSame('terverifikasi', $verifiedPayment1->status);
+        $this->assertNotEmpty($verifiedPayment1->receipt_number);
+
+        // Verifikasi invoice berubah ke 'sebagian' dengan paid_amount 300.000
+        $invoice->refresh();
+        $this->assertSame(300000, (int) $invoice->paid_amount);
+        $this->assertSame('sebagian', $invoice->status);
+
+        // Pembayaran tahap 2: Rp 300.000
+        $payment2 = Payment::create([
+            'invoice_id' => $invoice->id,
+            'submitted_by' => $this->studentUser->id,
+            'payment_method' => 'transfer_bank',
+            'amount' => 300000,
+            'status' => 'menunggu_verifikasi',
+            'payment_date' => Carbon::today(),
+            'external_reference' => 'EXT-TX-002',
+        ]);
+
+        // 2. Verifikasi pembayaran tahap 2 -> invoice lunas
+        $financeService->verifyPayment($payment2, 'Verifikasi tahap 2 pelunasan', $this->adminUser);
+
+        $invoice->refresh();
+        $this->assertSame(600000, (int) $invoice->paid_amount);
+        $this->assertSame('lunas', $invoice->status);
+
+        // 3. Void pembayaran tahap 2 -> invoice kembali ke 'sebagian'
+        $financeService->voidPayment($payment2, 'Koreksi kesalahan transfer bank', $this->adminUser);
+
+        $invoice->refresh();
+        $this->assertSame(300000, (int) $invoice->paid_amount);
+        $this->assertSame('sebagian', $invoice->status);
+
+        // 4. Void pembayaran tahap 1 -> invoice kembali ke 'belum_bayar'
+        $financeService->voidPayment($payment1, 'Koreksi pembatalan tahap 1', $this->adminUser);
+
+        $invoice->refresh();
+        $this->assertSame(0, (int) $invoice->paid_amount);
+        $this->assertSame('belum_bayar', $invoice->status);
     }
 
     /**

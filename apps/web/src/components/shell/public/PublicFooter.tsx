@@ -92,6 +92,11 @@ export function PublicFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/lapor" className="hover:text-white transition-colors">
+                  Lapor & Pengaduan
+                </Link>
+              </li>
+              <li>
                 <Link href="/ppdb" className="hover:text-white transition-colors">
                   PPDB Online
                 </Link>

@@ -40,8 +40,9 @@ class User extends Authenticatable
 
     /**
      * Sumber kebenaran tunggal peran yang wajib mengaktifkan 2FA / TOTP.
+     * Dinonaktifkan secara penuh sesuai arahan operasional.
      */
-    public const MANDATORY_2FA_ROLES = self::ADMIN_SHELL_ROLES;
+    public const MANDATORY_2FA_ROLES = [];
 
     /**
      * Pemetaan alias peran lama/kanonis untuk kompatibilitas mundur.

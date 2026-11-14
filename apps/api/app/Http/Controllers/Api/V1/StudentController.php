@@ -80,7 +80,7 @@ class StudentController extends Controller
 
             return $this->successResponse($result, 201);
         } catch (HttpException $e) {
-            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -99,13 +99,7 @@ class StudentController extends Controller
 
             return $this->successResponse($student, 201);
         } catch (HttpException $e) {
-            $code = match ($e->getStatusCode()) {
-                400 => 'BUSINESS_RULE_VIOLATION',
-                409 => 'CONFLICT',
-                default => 'INTERNAL_ERROR',
-            };
-
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -126,13 +120,7 @@ class StudentController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Siswa tidak ditemukan', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            $code = match ($e->getStatusCode()) {
-                403 => 'FORBIDDEN',
-                404 => 'NOT_FOUND',
-                default => 'INTERNAL_ERROR',
-            };
-
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -153,13 +141,7 @@ class StudentController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Siswa tidak ditemukan', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            $code = match ($e->getStatusCode()) {
-                400 => 'BUSINESS_RULE_VIOLATION',
-                409 => 'CONFLICT',
-                default => 'INTERNAL_ERROR',
-            };
-
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -200,6 +182,8 @@ class StudentController extends Controller
             return $this->successResponse($student);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Siswa tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -220,13 +204,7 @@ class StudentController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Siswa tidak ditemukan', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            $code = match ($e->getStatusCode()) {
-                403 => 'FORBIDDEN',
-                404 => 'NOT_FOUND',
-                default => 'INTERNAL_ERROR',
-            };
-
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 

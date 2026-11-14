@@ -492,7 +492,7 @@ class ProgramKhususService
      */
     public function listTargetsForTeacher(User $user, array $filters = []): LengthAwarePaginator
     {
-        $query = ProgramTarget::with(['student:id,full_name,nis,class_id', 'setter:id,username'])
+        $query = ProgramTarget::with(['student:id,full_name,nis', 'student.classes:id,name', 'setter:id,username'])
             ->orderBy('created_at', 'desc');
 
         if (! empty($user->school_id)) {
@@ -786,7 +786,7 @@ class ProgramKhususService
             $task->assigned_student_id
         );
 
-        $query = ProgramTaskSubmission::with(['student:id,full_name,nis,class_id', 'file', 'grader:id,username'])
+        $query = ProgramTaskSubmission::with(['student:id,full_name,nis', 'student.classes:id,name', 'file', 'grader:id,username'])
             ->where('task_id', $taskId)
             ->orderBy('submitted_at', 'desc');
 

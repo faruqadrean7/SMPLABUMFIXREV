@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGuardian } from '@/lib/guardian-context';
-import { AttendanceCalendarDay } from '@/lib/mock-guardian-data';
+import { AttendanceCalendarDay } from '@/types/guardian';
 import { useLeaveRequests, useCreateLeaveRequest } from '@/lib/use-guardian-data';
 
 export default function GuardianPresensiPage() {

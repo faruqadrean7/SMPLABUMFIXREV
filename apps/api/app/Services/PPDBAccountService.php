@@ -326,6 +326,7 @@ class PPDBAccountService
                 return [
                     'id' => $applicant->id,
                     'registration_no' => $applicant->registration_no,
+                    'nik' => $applicant->nik_enc,
                     'full_name' => $applicant->full_name,
                     'birth_date' => $applicant->birth_date?->format('Y-m-d'),
                     'status' => $applicant->status,

@@ -9,8 +9,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ApiClientError } from '@/lib/api/errors';
-import { apiClient } from '@/lib/api/api-client';
-import { Lock, AlertCircle, Eye, EyeOff, ShieldCheck, ShieldAlert, KeyRound } from 'lucide-react';
+import { Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 const adminLoginSchema = z.object({
   identifier: z.string().min(1, 'Username atau email administrator wajib diisi'),
@@ -18,12 +17,6 @@ const adminLoginSchema = z.object({
 });
 
 type AdminLoginFormValues = z.infer<typeof adminLoginSchema>;
-
-interface EnrollmentData {
-  enrollment_token: string;
-  secret?: string;
-  otpauth_url?: string;
-}
 
 export function AdminLoginForm() {
   const router = useRouter();
@@ -37,18 +30,6 @@ export function AdminLoginForm() {
   React.useEffect(() => {
     setIsHydrated(true);
   }, []);
-
-  // 2FA Challenge State
-  const [mfaToken, setMfaToken] = useState<string | null>(null);
-  const [totpCode, setTotpCode] = useState('');
-  const [isVerifyingMfa, setIsVerifyingMfa] = useState(false);
-  const [rememberDevice, setRememberDevice] = useState(true);
-
-  // Mandatory 2FA Enrollment State (Super Admin / Bendahara)
-  const [enrollment, setEnrollment] = useState<EnrollmentData | null>(null);
-  const [enrollmentCode, setEnrollmentCode] = useState('');
-  const [isEnrolling, setIsEnrolling] = useState(false);
-  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
 
   const redirectParam = searchParams.get('redirect');
 
@@ -67,43 +48,24 @@ export function AdminLoginForm() {
   const onSubmit = async (values: AdminLoginFormValues) => {
     setServerError(null);
     try {
-      const result = await login({
+      await login({
         identifier: values.identifier,
         password: values.password,
         platform: 'web',
         isAdminLogin: true,
       });
 
-      // 1. Mandatory 2FA Enrollment required
-      if (result.mfa_enrollment_required && result.enrollment_token) {
-        setIsEnrolling(true);
-        try {
-          const setupRes = await apiClient.post<{ message: string; data: { secret: string; otpauth_url: string } }>(
-            '/auth/2fa/setup',
-            { enrollment_token: result.enrollment_token }
-          );
-          setEnrollment({
-            enrollment_token: result.enrollment_token,
-            secret: setupRes.data.data.secret,
-            otpauth_url: setupRes.data.data.otpauth_url,
-          });
-        } catch {
-          setServerError('Gagal menyiapkan otentikasi dua faktor. Silakan hubungi administrator sistem.');
-        } finally {
-          setIsEnrolling(false);
-        }
-        return;
-      }
-
-      // 2. MFA Challenge required
-      if (result.mfa_required && result.mfa_token) {
-        setMfaToken(result.mfa_token);
-        return;
-      }
-
-      // 3. Normal Admin Login success
+      // Normal Admin Login success: langsung arahkan ke admin shell dengan cookie sesi admin
       const destination = redirectParam && redirectParam.startsWith('/admin') ? redirectParam : '/admin';
       router.push(destination);
+      if (typeof window !== 'undefined') {
+        document.cookie = 'sistlabum_admin_session=1; path=/; SameSite=Lax';
+        try {
+          window.location.href = destination;
+        } catch {
+          // Abaikan error navigasi di lingkungan pengujian jsdom
+        }
+      }
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         setServerError(err.message);
@@ -115,242 +77,7 @@ export function AdminLoginForm() {
     }
   };
 
-  const handleMfaSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mfaToken || !totpCode.trim()) return;
-
-    setServerError(null);
-    setIsVerifyingMfa(true);
-    try {
-      const isRecovery = totpCode.includes('-');
-      await login({
-        mfa_token: mfaToken,
-        totp_code: isRecovery ? undefined : totpCode.trim(),
-        recovery_code: isRecovery ? totpCode.trim() : undefined,
-        remember_device: rememberDevice,
-        platform: 'web',
-        isAdminLogin: true,
-      });
-
-      const destination = redirectParam && redirectParam.startsWith('/admin') ? redirectParam : '/admin';
-      router.push(destination);
-    } catch (err: unknown) {
-      if (err instanceof ApiClientError) {
-        setServerError(err.message);
-      } else if (err instanceof Error) {
-        setServerError(err.message);
-      } else {
-        setServerError('Kode autentikasi dua faktor atau kode pemulihan tidak valid.');
-      }
-    } finally {
-      setIsVerifyingMfa(false);
-    }
-  };
-
-  const handleEnrollmentVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!enrollment || !enrollmentCode.trim()) return;
-
-    setServerError(null);
-    setIsEnrolling(true);
-    try {
-      const verifyRes = await apiClient.post<{ message: string; data: { confirmed: boolean; recovery_codes: string[] } }>(
-        '/auth/2fa/verify',
-        {
-          enrollment_token: enrollment.enrollment_token,
-          code: enrollmentCode.trim(),
-        }
-      );
-      setRecoveryCodes(verifyRes.data.data.recovery_codes);
-    } catch (err: unknown) {
-      if (err instanceof ApiClientError) {
-        setServerError(err.message);
-      } else {
-        setServerError('Kode verifikasi 2FA tidak valid. Pastikan waktu jam perangkat Anda sinkron.');
-      }
-    } finally {
-      setIsEnrolling(false);
-    }
-  };
-
-  // Layar Selesai Enrollment & Tampil Kode Pemulihan
-  if (recoveryCodes) {
-    return (
-      <div className="space-y-6">
-        <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 mb-3">
-            <ShieldCheck className="h-6 w-6 text-emerald-600" />
-          </div>
-          <h2 className="text-lg font-bold text-slate-900">2FA Berhasil Diaktifkan</h2>
-          <p className="text-xs text-slate-600 mt-1">
-            Simpan kode pemulihan darurat berikut di tempat aman. Kode ini hanya ditampilkan sekali.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200 font-mono text-xs text-slate-800">
-          {recoveryCodes.map((code, idx) => (
-            <div key={idx} className="p-1.5 bg-white border border-slate-200 rounded text-center select-all">
-              {code}
-            </div>
-          ))}
-        </div>
-
-        <Button
-          type="button"
-          className="w-full bg-slate-900 hover:bg-slate-800 text-white"
-          onClick={() => {
-            setRecoveryCodes(null);
-            setEnrollment(null);
-            setMfaToken(null);
-          }}
-        >
-          Lanjut ke Halaman Masuk
-        </Button>
-      </div>
-    );
-  }
-
-  // Layar Mandatory 2FA Enrollment
-  if (enrollment) {
-    return (
-      <form onSubmit={handleEnrollmentVerify} method="POST" className="space-y-6">
-        <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 mb-3">
-            <KeyRound className="h-6 w-6 text-amber-600" />
-          </div>
-          <h2 className="text-lg font-bold text-slate-900">Aktivasi Wajib Otentikasi 2 Faktor</h2>
-          <p className="text-xs text-slate-600 mt-1">
-            Peran Administrator/Bendahara mewajibkan 2FA untuk keamanan data finansial dan identitas civitas.
-          </p>
-        </div>
-
-        {serverError && (
-          <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
-            <span>{serverError}</span>
-          </div>
-        )}
-
-        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
-          <p className="font-semibold text-slate-800">Kunci Rahasia Base32:</p>
-          <p data-testid="secret-code" className="font-mono bg-white p-2 border border-slate-200 rounded text-slate-900 select-all text-center tracking-wider text-sm font-bold">
-            {enrollment.secret}
-          </p>
-          <p className="text-slate-500">
-            Masukkan kunci di atas ke aplikasi Google Authenticator atau aplikasi TOTP kompatibel lainnya.
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700">Kode Verifikasi 6 Digit</label>
-          <Input
-            id="enrollment-code"
-            data-testid="enrollment-code"
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            placeholder="Contoh: 123456"
-            value={enrollmentCode}
-            onChange={(e) => setEnrollmentCode(e.target.value.replace(/\D/g, ''))}
-            className="text-center tracking-widest text-lg font-mono"
-            autoFocus
-          />
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-1/2"
-            onClick={() => setEnrollment(null)}
-          >
-            Batal
-          </Button>
-          <Button
-            type="submit"
-            className="w-1/2 bg-slate-900 hover:bg-slate-800 text-white"
-            disabled={!isHydrated || isEnrolling || enrollmentCode.length !== 6}
-          >
-            {isEnrolling ? 'Memverifikasi...' : 'Aktifkan 2FA'}
-          </Button>
-        </div>
-      </form>
-    );
-  }
-
-  // Layar Tantangan MFA 2FA
-  if (mfaToken) {
-    return (
-      <form onSubmit={handleMfaSubmit} method="POST" className="space-y-6">
-        <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 mb-3">
-            <ShieldAlert className="h-6 w-6 text-brand-blue" />
-          </div>
-          <h2 className="text-lg font-bold text-slate-900">Verifikasi Dua Faktor</h2>
-          <p className="text-xs text-slate-600 mt-1">
-            Masukkan 6 digit kode dari aplikasi Authenticator atau gunakan kode pemulihan.
-          </p>
-        </div>
-
-        {serverError && (
-          <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
-            <span>{serverError}</span>
-          </div>
-        )}
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700">Kode Autentikasi / Recovery Code</label>
-          <Input
-            id="totp-code"
-            data-testid="totp-code"
-            type="text"
-            placeholder="123456 atau XXXX-XXXX"
-            value={totpCode}
-            onChange={(e) => setTotpCode(e.target.value)}
-            className="text-center tracking-widest text-lg font-mono"
-            autoFocus
-          />
-        </div>
-
-        <label className="flex items-start gap-2.5 cursor-pointer select-none rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <input
-            type="checkbox"
-            checked={rememberDevice}
-            onChange={(e) => setRememberDevice(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-          />
-          <span className="text-xs text-slate-600">
-            <span className="font-semibold text-slate-800">Percayai perangkat ini selama 30 hari.</span>{' '}
-            Di perangkat & browser ini, Anda tidak akan diminta kode 2FA lagi hingga masa berlaku habis. Jangan centang di komputer publik/bersama.
-          </span>
-        </label>
-
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-1/2"
-            onClick={() => {
-              setMfaToken(null);
-              setTotpCode('');
-            }}
-          >
-            Batal
-          </Button>
-          <Button
-            type="submit"
-            className="w-1/2 bg-slate-900 hover:bg-slate-800 text-white"
-            disabled={!isHydrated || isVerifyingMfa || !totpCode.trim()}
-          >
-            {isVerifyingMfa ? 'Memverifikasi...' : 'Verifikasi'}
-          </Button>
-        </div>
-      </form>
-    );
-  }
-
-  // Layar Form Login Admin Utama
+  // Layar Form Login Admin Utama (Langsung tanpa 2FA)
   return (
     <form onSubmit={handleSubmit(onSubmit)} method="POST" className="space-y-5">
       {serverError && (

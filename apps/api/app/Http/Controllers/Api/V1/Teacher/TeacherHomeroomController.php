@@ -12,7 +12,9 @@ use App\Models\PointType;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentPoint;
+use App\Models\TeachingAssignment;
 use App\Models\Ticket;
+use App\Models\TicketEvent;
 use App\Services\AcademicAttendanceService;
 use App\Traits\ApiResponse;
 use Carbon\Carbon;
@@ -202,6 +204,56 @@ class TeacherHomeroomController extends Controller
         );
 
         return $this->successResponse($decidedLeave);
+    }
+
+    /**
+     * GET /api/v1/me/teacher/student-points
+     */
+    public function studentPoints(Request $request): JsonResponse
+    {
+        $teacher = $this->getTeacher($request);
+        if (! $teacher) {
+            return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $homeroomClassIds = SchoolClass::where('homeroom_teacher_id', $teacher->id)->pluck('id');
+        $teachingClassIds = TeachingAssignment::where('teacher_id', $teacher->id)->pluck('class_id');
+        $allAccessibleClassIds = $homeroomClassIds->merge($teachingClassIds)->unique()->filter();
+
+        $classId = $request->query('class_id', $request->query('classId'));
+        if ($classId) {
+            if (! Str::isUuid($classId) || ! $allAccessibleClassIds->contains($classId)) {
+                return $this->errorResponse('Akses ditolak: Anda tidak memiliki akses ke kelas ini.', 'FORBIDDEN', 403);
+            }
+            $targetClassIds = collect([$classId]);
+        } else {
+            if ($allAccessibleClassIds->isEmpty()) {
+                return $this->paginatedResponse(new LengthAwarePaginator([], 0, 20));
+            }
+            $targetClassIds = $allAccessibleClassIds;
+        }
+
+        $query = StudentPoint::with(['student.classes', 'pointType', 'recorder'])
+            ->whereNotNull('student_id')
+            ->whereHas('student.classes', fn ($q) => $q->whereIn('classes.id', $targetClassIds));
+
+        if ($request->filled('student_id')) {
+            $studentId = $request->query('student_id');
+            if (! $this->verifyStudentAccess($teacher, $studentId)) {
+                return $this->errorResponse('Akses ditolak: Anda tidak memiliki wewenang mengajar atau menjadi wali kelas untuk siswa ini.', 'FORBIDDEN', 403);
+            }
+            $query->where('student_id', $studentId);
+        }
+
+        if ($request->filled('type')) {
+            $type = $request->query('type');
+            $query->whereHas('pointType', fn ($q) => $q->where('kind', $type));
+        }
+
+        $perPage = max(1, min(100, (int) $request->input('per_page', 20)));
+        $paginator = $query->latest('point_date')->latest('created_at')->paginate($perPage);
+
+        return $this->paginatedResponse($paginator);
     }
 
     /**
@@ -425,6 +477,57 @@ class TeacherHomeroomController extends Controller
     }
 
     /**
+     * GET /api/v1/me/teacher/counseling-referrals
+     */
+    public function counselingReferrals(Request $request): JsonResponse
+    {
+        $teacher = $this->getTeacher($request);
+        if (! $teacher) {
+            return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $homeroomClassIds = SchoolClass::where('homeroom_teacher_id', $teacher->id)->pluck('id');
+        $teachingClassIds = TeachingAssignment::where('teacher_id', $teacher->id)->pluck('class_id');
+        $allAccessibleClassIds = $homeroomClassIds->merge($teachingClassIds)->unique()->filter();
+
+        $classId = $request->query('class_id', $request->query('classId'));
+        if ($classId) {
+            if (! Str::isUuid($classId) || ! $allAccessibleClassIds->contains($classId)) {
+                return $this->errorResponse('Akses ditolak: Anda tidak memiliki akses ke kelas ini.', 'FORBIDDEN', 403);
+            }
+            $targetClassIds = collect([$classId]);
+        } else {
+            $targetClassIds = $allAccessibleClassIds;
+        }
+
+        $query = CounselingReferral::with(['student.classes', 'referrer'])
+            ->where(function ($q) use ($request, $targetClassIds) {
+                // Rujukan yang diajukan oleh guru ini ATAU untuk siswa di kelas binaan/ajarnya
+                $q->where('referred_by', $request->user()->id);
+                if (! $targetClassIds->isEmpty()) {
+                    $q->orWhereHas('student.classes', fn ($sub) => $sub->whereIn('classes.id', $targetClassIds));
+                }
+            });
+
+        if ($request->filled('student_id')) {
+            $studentId = $request->query('student_id');
+            if (! $this->verifyStudentAccess($teacher, $studentId)) {
+                return $this->errorResponse('Akses ditolak: Anda tidak memiliki wewenang mengajar atau menjadi wali kelas untuk siswa ini.', 'FORBIDDEN', 403);
+            }
+            $query->where('student_id', $studentId);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->query('status'));
+        }
+
+        $perPage = max(1, min(100, (int) $request->input('per_page', 20)));
+        $paginator = $query->latest('created_at')->paginate($perPage);
+
+        return $this->paginatedResponse($paginator);
+    }
+
+    /**
      * POST /api/v1/me/teacher/counseling-referrals
      */
     public function storeCounselingReferral(Request $request): JsonResponse
@@ -475,7 +578,13 @@ class TeacherHomeroomController extends Controller
                 'action' => 'teacher.counseling_referral.created',
                 'entity' => 'CounselingReferral',
                 'entity_id' => $ref->id,
-                'new_values' => $ref->toArray(),
+                'new_values' => [
+                    'id' => $ref->id,
+                    'student_id' => $ref->student_id,
+                    'referred_by' => $ref->referred_by,
+                    'status' => $ref->status,
+                    'reason' => '[REDACTED_CONFIDENTIAL_BK]',
+                ],
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
@@ -485,6 +594,38 @@ class TeacherHomeroomController extends Controller
         });
 
         return $this->successResponse($referral->load(['student']), 201);
+    }
+
+    /**
+     * GET /api/v1/me/teacher/facilities
+     */
+    public function facilities(Request $request): JsonResponse
+    {
+        $teacher = $this->getTeacher($request);
+        if (! $teacher) {
+            return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $query = Facility::query()->where('is_active', true);
+        if ($request->user()->school_id) {
+            $query->where(function ($q) use ($request) {
+                $q->where('school_id', $request->user()->school_id)
+                    ->orWhereNull('school_id');
+            });
+        }
+
+        $facilities = $query->orderBy('name')->get()->map(fn (Facility $f) => [
+            'id' => $f->id,
+            'name' => $f->name,
+            'facility_type' => $f->facility_type,
+            'type' => $f->facility_type,
+            'capacity' => $f->capacity,
+            'status' => $f->status,
+            'is_active' => (bool) $f->is_active,
+            'location' => $f->location,
+        ]);
+
+        return $this->successResponse($facilities);
     }
 
     /**
@@ -600,6 +741,24 @@ class TeacherHomeroomController extends Controller
     }
 
     /**
+     * GET /api/v1/me/teacher/tickets
+     */
+    public function tickets(Request $request): JsonResponse
+    {
+        $teacher = $this->getTeacher($request);
+        if (! $teacher) {
+            return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $tickets = Ticket::with(['room', 'asset', 'events'])
+            ->where('reporter_id', $request->user()->id)
+            ->latest('created_at')
+            ->get();
+
+        return $this->successResponse($tickets);
+    }
+
+    /**
      * POST /api/v1/me/teacher/tickets
      */
     public function storeTicket(Request $request): JsonResponse
@@ -651,6 +810,15 @@ class TeacherHomeroomController extends Controller
                 'priority' => $priority,
                 'status' => 'pending',
                 'photo_file_id' => $validated['photo_file_id'] ?? null,
+            ]);
+
+            TicketEvent::create([
+                'ticket_id' => $t->id,
+                'actor_id' => $request->user()->id,
+                'event_type' => 'lapor',
+                'note' => 'Tiket kendala sarpras dilaporkan oleh guru.',
+                'file_id' => $validated['photo_file_id'] ?? null,
+                'created_at' => now(),
             ]);
 
             AuditLog::create([

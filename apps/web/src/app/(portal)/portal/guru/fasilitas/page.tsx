@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   useFacilities,
   useFacilityBookings,
   useCreateFacilityBooking,
+  useSarprasTickets,
   useCreateSarprasTicket,
 } from '@/features/portal/guru';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -45,7 +46,15 @@ export default function TeacherFacilitiesPage() {
   const [attendeesCount, setAttendeesCount] = useState<number>(30);
   const [bookingFeedback, setBookingFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Ticket Form State
+  // FIX-GURU-11: Otomatis pilih fasilitas pertama yang tersedia saat data fasilitas selesai dimuat
+  useEffect(() => {
+    if (facilities.length > 0 && !facilityId) {
+      setFacilityId(facilities[0].id);
+    }
+  }, [facilities, facilityId]);
+
+  // Ticket Query & Form State
+  const { data: tickets = [], isLoading: isLoadingTickets, error: ticketsError } = useSarprasTickets();
   const createTicketMutation = useCreateSarprasTicket();
   const [ticketTitle, setTicketTitle] = useState('');
   const [ticketCategory, setTicketCategory] = useState('Laboratorium Komputer');
@@ -129,7 +138,15 @@ export default function TeacherFacilitiesPage() {
       setTicketDescription('');
       setTimeout(() => setTicketFeedback(null), 6000);
     } catch (err: any) {
-      const msg = err.response?.data?.error?.message || err.message || 'Gagal membuat tiket pelaporan sarpras.';
+      const isTimeout =
+        err.code === 'REQUEST_TIMEOUT' ||
+        err.code === 'ECONNABORTED' ||
+        err.message?.toLowerCase().includes('timeout') ||
+        err.message?.toLowerCase().includes('batas waktu');
+
+      const msg = isTimeout
+        ? 'Batas waktu permintaan habis. Server membutuhkan waktu lebih lama untuk memproses tiket, silakan periksa daftar tiket Anda sebelum mengirim ulang.'
+        : err.response?.data?.error?.message || err.message || 'Gagal membuat tiket pelaporan sarpras.';
       setTicketFeedback({ type: 'error', message: msg });
     }
   };
@@ -236,6 +253,11 @@ export default function TeacherFacilitiesPage() {
                       </option>
                     ))}
                   </select>
+                  {!facilityId && !isLoadingFacilities && (
+                    <p className="text-[11px] text-amber-600 font-medium">
+                      * Silakan pilih fasilitas sekolah yang akan dipinjam.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -305,8 +327,9 @@ export default function TeacherFacilitiesPage() {
                 <Button
                   type="submit"
                   size="sm"
+                  disabled={createBookingMutation.isPending || !facilityId || isLoadingFacilities}
                   isLoading={createBookingMutation.isPending}
-                  className="w-full font-bold bg-brand-blue hover:bg-blue-800 text-white"
+                  className="w-full font-bold bg-brand-blue hover:bg-blue-800 text-white disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
                   Ajukan Peminjaman
                 </Button>
@@ -389,111 +412,187 @@ export default function TeacherFacilitiesPage() {
         </div>
       )}
 
-      {/* TAB 2: LIKET SARPRAS */}
+      {/* TAB 2: TIKET SARPRAS */}
       {activeTab === 'tiket' && (
-        <div className="max-w-2xl bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-          <div>
-            <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-              <Wrench className="w-5 h-5 text-indigo-600" />
-              <span>Tiket Pelaporan Gangguan Fasilitas KBM</span>
-            </h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Laporkan kendala komputer, proyektor, AC, atau jaringan internet kelas langsung ke helpdesk teknisi.
-            </p>
-          </div>
-
-          <form onSubmit={handleCreateTicket} className="space-y-4 text-xs">
-            {ticketFeedback && (
-              <div
-                className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 ${
-                  ticketFeedback.type === 'success'
-                    ? 'bg-emerald-50 text-status-success border border-emerald-200'
-                    : 'bg-rose-50 text-rose-800 border border-rose-200'
-                }`}
-              >
-                {ticketFeedback.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 shrink-0" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="border-slate-200 shadow-2xs lg:col-span-1">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Wrench className="w-4 h-4 text-indigo-600" />
+                <span>Tiket Pelaporan Gangguan Fasilitas KBM</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Laporkan kerusakan komputer, proyektor, AC, atau fasilitas KBM lainnya.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreateTicket} className="space-y-3.5 text-xs">
+                {ticketFeedback && (
+                  <div
+                    className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 ${
+                      ticketFeedback.type === 'success'
+                        ? 'bg-emerald-50 text-status-success border border-emerald-200'
+                        : 'bg-rose-50 text-rose-800 border border-rose-200'
+                    }`}
+                  >
+                    {ticketFeedback.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                    )}
+                    <span>{ticketFeedback.message}</span>
+                  </div>
                 )}
-                <span>{ticketFeedback.message}</span>
+
+                <div className="space-y-1">
+                  <label htmlFor="ticket-title" className="font-bold text-slate-700">Judul Laporan</label>
+                  <input
+                    id="ticket-title"
+                    type="text"
+                    placeholder="Contoh: Proyektor Kelas 7-A Tidak Menyala"
+                    value={ticketTitle}
+                    onChange={(e) => setTicketTitle(e.target.value)}
+                    disabled={createTicketMutation.isPending}
+                    className="w-full p-2 border border-slate-200 rounded-lg text-xs disabled:bg-slate-50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label htmlFor="ticket-category" className="font-bold text-slate-700">Kategori</label>
+                    <select
+                      id="ticket-category"
+                      value={ticketCategory}
+                      onChange={(e) => setTicketCategory(e.target.value)}
+                      disabled={createTicketMutation.isPending}
+                      className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white disabled:bg-slate-50"
+                    >
+                      <option value="Laboratorium Komputer">Lab Komputer / PC</option>
+                      <option value="Proyektor & Audio">Proyektor & Audio</option>
+                      <option value="Jaringan Internet">Internet / Wi-Fi</option>
+                      <option value="Listrik & Lampu">Listrik & Lampu</option>
+                      <option value="Meja Kursi Kelas">Meja & Kursi</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="ticket-priority" className="font-bold text-slate-700">Prioritas</label>
+                    <select
+                      id="ticket-priority"
+                      value={ticketPriority}
+                      onChange={(e) => setTicketPriority(e.target.value as any)}
+                      disabled={createTicketMutation.isPending}
+                      className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white disabled:bg-slate-50"
+                    >
+                      <option value="rendah">Rendah</option>
+                      <option value="sedang">Sedang</option>
+                      <option value="tinggi">Tinggi</option>
+                      <option value="darurat">Darurat</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="ticket-location" className="font-bold text-slate-700">Lokasi / Ruangan</label>
+                  <input
+                    id="ticket-location"
+                    type="text"
+                    placeholder="Contoh: Lab Komputer 1 Meja No. 12"
+                    value={ticketLocation}
+                    onChange={(e) => setTicketLocation(e.target.value)}
+                    disabled={createTicketMutation.isPending}
+                    className="w-full p-2 border border-slate-200 rounded-lg text-xs disabled:bg-slate-50"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="ticket-desc" className="font-bold text-slate-700">Deskripsi Kendala</label>
+                  <textarea
+                    id="ticket-desc"
+                    rows={4}
+                    required
+                    placeholder="Jelaskan kendala secara spesifik, kode error yang muncul jika ada..."
+                    value={ticketDescription}
+                    onChange={(e) => setTicketDescription(e.target.value)}
+                    disabled={createTicketMutation.isPending}
+                    className="w-full p-2 border border-slate-200 rounded-lg text-xs disabled:bg-slate-50"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={createTicketMutation.isPending || !ticketDescription.trim()}
+                  isLoading={createTicketMutation.isPending}
+                  className="w-full font-bold bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-300 disabled:cursor-not-allowed"
+                >
+                  Kirim Tiket Pelaporan
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Daftar Riwayat Tiket Kendala Guru */}
+          <div className="lg:col-span-2 space-y-4">
+            <h3 className="font-bold text-sm text-slate-900 flex items-center justify-between">
+              <span>Riwayat Laporan Kendala Sarpras Saya</span>
+              <span className="text-xs text-slate-500 font-normal">{tickets.length} tiket tercatat</span>
+            </h3>
+
+            {isLoadingTickets ? (
+              <div className="min-h-[250px] flex items-center justify-center bg-white rounded-xl border border-slate-200">
+                <LoadingSpinner label="Memuat riwayat tiket sarpras..." />
+              </div>
+            ) : ticketsError ? (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Gagal memuat daftar tiket sarpras.</span>
+              </div>
+            ) : tickets.length === 0 ? (
+              <EmptyState
+                title="Belum Ada Laporan Kendala"
+                description="Anda belum pernah membuat laporan tiket kerusakan sarpras atau kendala KBM."
+                className="bg-white border-slate-200 py-12"
+              />
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 shadow-2xs overflow-hidden">
+                {tickets.map((t) => (
+                  <div key={t.id} className="p-4 hover:bg-slate-50/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                          {t.ticket_number}
+                        </span>
+                        <span className="font-bold text-slate-900 text-sm">{t.title}</span>
+                        <Badge
+                          className={`text-[10px] font-bold px-2 py-0.5 ${
+                            t.status === 'selesai'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                              : t.status === 'diproses'
+                              ? 'bg-blue-100 text-blue-800 border-blue-200'
+                              : t.status === 'dibatalkan'
+                              ? 'bg-rose-100 text-rose-800 border-rose-200'
+                              : 'bg-amber-100 text-amber-800 border-amber-200'
+                          }`}
+                        >
+                          {t.status}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] uppercase font-semibold text-slate-600">
+                          {t.priority}
+                        </Badge>
+                      </div>
+
+                      <p className="text-slate-600 whitespace-pre-line line-clamp-2">{t.description}</p>
+
+                      <div className="text-[11px] text-slate-400">
+                        <span>Dilaporkan pada: {t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Judul Laporan</label>
-              <input
-                type="text"
-                placeholder="Contoh: Proyektor Kelas 7-A Tidak Menyala"
-                value={ticketTitle}
-                onChange={(e) => setTicketTitle(e.target.value)}
-                className="w-full p-2 border border-slate-200 rounded-lg text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Kategori Perangkat</label>
-                <select
-                  value={ticketCategory}
-                  onChange={(e) => setTicketCategory(e.target.value)}
-                  className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white"
-                >
-                  <option value="Laboratorium Komputer">Laboratorium Komputer / PC</option>
-                  <option value="Proyektor & Audio">Proyektor & Audio Ruang Kelas</option>
-                  <option value="Jaringan Internet">Jaringan Internet / Wi-Fi</option>
-                  <option value="Listrik & Lampu">Listrik & Kelistrikan</option>
-                  <option value="Meja Kursi Kelas">Meja & Kursi Siswa</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Tingkat Prioritas</label>
-                <select
-                  value={ticketPriority}
-                  onChange={(e) => setTicketPriority(e.target.value as any)}
-                  className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white"
-                >
-                  <option value="rendah">Rendah (Dapat menunggu)</option>
-                  <option value="sedang">Sedang (Standar)</option>
-                  <option value="tinggi">Tinggi (Mengganggu KBM)</option>
-                  <option value="darurat">Darurat (Ujian sedang berjalan)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Lokasi / Ruangan</label>
-              <input
-                type="text"
-                placeholder="Contoh: Lab Komputer 1 Meja No. 12 atau Ruang Kelas 7-A"
-                value={ticketLocation}
-                onChange={(e) => setTicketLocation(e.target.value)}
-                className="w-full p-2 border border-slate-200 rounded-lg text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Deskripsi Kendala</label>
-              <textarea
-                rows={4}
-                required
-                placeholder="Jelaskan kendala secara spesifik, kode error yang muncul jika ada..."
-                value={ticketDescription}
-                onChange={(e) => setTicketDescription(e.target.value)}
-                className="w-full p-2 border border-slate-200 rounded-lg text-xs"
-              />
-            </div>
-
-            <Button
-              type="submit"
-              size="sm"
-              isLoading={createTicketMutation.isPending}
-              className="w-full font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              Kirim Tiket Pelaporan
-            </Button>
-          </form>
+          </div>
         </div>
       )}
     </div>

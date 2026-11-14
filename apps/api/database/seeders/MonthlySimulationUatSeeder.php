@@ -1137,15 +1137,16 @@ class MonthlySimulationUatSeeder extends Seeder
             );
 
             // 23. PPDB (Pendaftar Baru & Berkas)
-            $wave = PpdbWave::firstOrCreate(
-                ['school_id' => $schoolId, 'name' => 'PPDB Gelombang 1 '.$academicYearName],
-                [
-                    'open_at' => $startDate.' 00:00:00',
-                    'close_at' => Carbon::parse($endDate)->addDays(30)->toDateTimeString(),
-                    'result_publish_at' => Carbon::parse($endDate)->addDays(40)->toDateTimeString(),
-                    'status' => 'aktif',
-                ]
-            );
+            $wave = PpdbWave::where('school_id', $schoolId)->where('status', 'aktif')->first()
+                ?: PpdbWave::firstOrCreate(
+                    ['school_id' => $schoolId, 'name' => 'PPDB Gelombang 1 '.$academicYearName],
+                    [
+                        'open_at' => $startDate.' 00:00:00',
+                        'close_at' => Carbon::parse($endDate)->addDays(30)->toDateTimeString(),
+                        'result_publish_at' => Carbon::parse($endDate)->addDays(40)->toDateTimeString(),
+                        'status' => 'aktif',
+                    ]
+                );
 
             $trackZonasi = PpdbTrack::firstOrCreate(
                 ['wave_id' => $wave->id, 'code' => 'zonasi'],

@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Achievement;
 use App\Models\Attendance;
 use App\Models\CharacterNote;
 use App\Models\Grade;
 use App\Models\ProgressReport;
 use App\Models\ReportCard;
 use App\Models\Student;
+use App\Models\StudentPoint;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -309,5 +311,83 @@ class MeChildController extends Controller
         });
 
         return $this->successResponse($data);
+    }
+
+    /**
+     * GET /api/v1/me/children/{child}/points
+     * Rekapitulasi poin karakter, kedisiplinan, dan prestasi anak perwalian.
+     */
+    public function points(Request $request, string $child): JsonResponse
+    {
+        if ($err = $this->verifyAccess($request, $child)) {
+            return $err;
+        }
+
+        $student = Student::find($child);
+        if (! $student) {
+            return $this->errorResponse('Data anak tidak ditemukan.', 'NOT_FOUND', 404);
+        }
+
+        $studentPoints = StudentPoint::with(['pointType', 'recorder'])
+            ->where('student_id', $student->id)
+            ->orderBy('point_date', 'desc')
+            ->get();
+
+        $achievements = Achievement::where('student_id', $student->id)
+            ->orderBy('achieved_at', 'desc')
+            ->get();
+
+        $items = collect();
+
+        foreach ($achievements as $ach) {
+            $dateStr = $ach->achieved_at ? $ach->achieved_at->format('d M Y') : $ach->created_at->format('d M Y');
+            $items->push([
+                'id' => 'ach-' . $ach->id,
+                'student_id' => $student->id,
+                'kind' => 'prestasi',
+                'title' => $ach->title,
+                'category' => $ach->rank_level ?: 'Prestasi & Kompetisi',
+                'point_date' => $dateStr,
+                'points' => (int) ($ach->points_awarded ?: 25),
+                'note' => $ach->notes ?: 'Diverifikasi oleh tim kesiswaan SMP Labschool UM.',
+                'recorder_name' => 'Tim Kesiswaan',
+            ]);
+        }
+
+        foreach ($studentPoints as $sp) {
+            $isViolation = ($sp->pointType?->kind === 'pelanggaran');
+            $dateStr = $sp->point_date ? $sp->point_date->format('d M Y') : $sp->created_at->format('d M Y');
+            $items->push([
+                'id' => 'pt-' . $sp->id,
+                'student_id' => $student->id,
+                'kind' => $isViolation ? 'pelanggaran' : 'prestasi',
+                'title' => $sp->pointType?->name ?: ($isViolation ? 'Pelanggaran Kedisiplinan' : 'Apresiasi Karakter'),
+                'category' => ucfirst($sp->pointType?->severity ?: 'Disiplin'),
+                'point_date' => $dateStr,
+                'points' => (int) ($sp->pointType?->points ?: 0),
+                'note' => $sp->notes ?: 'Tercatat dalam buku pembiasaan siswa.',
+                'recorder_name' => $sp->recorder?->name ?: 'Guru Piket / Kesiswaan',
+            ]);
+        }
+
+        $totalPrestasi = $items->where('kind', 'prestasi')->sum('points');
+        $totalPelanggaran = $items->where('kind', 'pelanggaran')->sum('points');
+        $balancePoints = $totalPrestasi - $totalPelanggaran;
+
+        $statusDisiplin = match (true) {
+            $totalPelanggaran >= 75 => 'SP3 - Konferensi Kasus',
+            $totalPelanggaran >= 50 => 'SP2 - Peringatan 2',
+            $totalPelanggaran >= 25 => 'SP1 - Peringatan 1',
+            default => 'AMAN',
+        };
+
+        return $this->successResponse([
+            'totalPrestasi' => $totalPrestasi,
+            'totalPelanggaran' => $totalPelanggaran,
+            'balancePoints' => $balancePoints,
+            'statusDisiplin' => $statusDisiplin,
+            'achievementsCount' => $achievements->count(),
+            'items' => $items->values()->all(),
+        ]);
     }
 }

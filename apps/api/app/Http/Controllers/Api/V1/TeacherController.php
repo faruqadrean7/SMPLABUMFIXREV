@@ -109,6 +109,8 @@ class TeacherController extends Controller
             return $this->successResponse($teacher);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Guru tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -295,6 +297,8 @@ class TeacherController extends Controller
             return $this->successResponse($recap);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Guru tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -354,6 +358,8 @@ class TeacherController extends Controller
             $recap = $this->teacherStaffService->getTeachingHoursRecap($teacher->id);
 
             return $this->successResponse($recap);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 

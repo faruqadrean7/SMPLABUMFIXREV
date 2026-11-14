@@ -4,6 +4,7 @@ namespace Tests\Feature\Security;
 
 use App\Models\AuditLog;
 use App\Models\FeeType;
+use App\Models\Guardian;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Permission;
@@ -416,5 +417,108 @@ class Phase1SecurityP0Test extends TestCase
             ->getJson('/api/v1/me/payments/00000000-0000-0000-0000-000000000000/receipt');
 
         $notFoundResponse->assertStatus(404);
+    }
+
+    /**
+     * SEC-03: IDOR protection on guardian viewing children data.
+     */
+    public function test_sec_03_guardian_cannot_access_unlinked_child_data_403(): void
+    {
+        $roleGuardian = Role::firstOrCreate(['code' => 'guardian'], ['name' => 'Wali Murid', 'is_system' => true]);
+
+        // Guardian A & Student A
+        $userGuardianA = User::create([
+            'username' => 'wali_a',
+            'email' => 'wali_a@labschool.sch.id',
+            'password_hash' => Hash::make('Password123!'),
+            'status' => 'active',
+        ]);
+        $userGuardianA->roles()->attach($roleGuardian->id);
+
+        $guardianA = Guardian::create([
+            'user_id' => $userGuardianA->id,
+            'full_name' => 'Wali Murid A',
+            'phone' => '081234567891',
+        ]);
+
+        $studentA = Student::create([
+            'nis' => '10002',
+            'nisn' => '0011223355',
+            'nik_enc' => '3171010101010002',
+            'full_name' => 'Siswa A',
+            'gender' => 'L',
+            'birth_place' => 'Malang',
+            'birth_date' => '2009-01-01',
+            'entry_date' => '2026-07-01',
+            'status' => 'aktif',
+        ]);
+        $guardianA->students()->attach($studentA->id, ['relationship' => 'ayah', 'is_primary' => true]);
+
+        // Student B (unlinked to Guardian A)
+        $studentB = Student::create([
+            'nis' => '10003',
+            'nisn' => '0011223366',
+            'nik_enc' => '3171010101010003',
+            'full_name' => 'Siswa B',
+            'gender' => 'P',
+            'birth_place' => 'Malang',
+            'birth_date' => '2009-02-02',
+            'entry_date' => '2026-07-01',
+            'status' => 'aktif',
+        ]);
+
+        // Guardian A accessing own child -> 200 OK
+        $this->actingAs($userGuardianA, 'sanctum')
+            ->getJson("/api/v1/me/children/{$studentA->id}")
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Siswa A');
+
+        // Guardian A attempting to access Student B -> 403 Forbidden across all child endpoints
+        $this->actingAs($userGuardianA, 'sanctum')
+            ->getJson("/api/v1/me/children/{$studentB->id}")
+            ->assertStatus(403);
+
+        $this->actingAs($userGuardianA, 'sanctum')
+            ->getJson("/api/v1/me/children/{$studentB->id}/attendance")
+            ->assertStatus(403);
+
+        $this->actingAs($userGuardianA, 'sanctum')
+            ->getJson("/api/v1/me/children/{$studentB->id}/grades")
+            ->assertStatus(403);
+
+        $this->actingAs($userGuardianA, 'sanctum')
+            ->getJson("/api/v1/me/children/{$studentB->id}/invoices")
+            ->assertStatus(403);
+
+        $this->actingAs($userGuardianA, 'sanctum')
+            ->getJson("/api/v1/me/children/{$studentB->id}/progress-reports")
+            ->assertStatus(403);
+
+        $this->actingAs($userGuardianA, 'sanctum')
+            ->getJson("/api/v1/me/children/{$studentB->id}/report-cards")
+            ->assertStatus(403);
+    }
+
+    /**
+     * SEC-02: Telemetry endpoint rate limiting (throttle:30,1).
+     */
+    public function test_sec_02_telemetry_rate_limiting_protects_against_spam(): void
+    {
+        for ($i = 0; $i < 30; $i++) {
+            $this->actingAs($this->teacherA, 'sanctum')
+                ->postJson('/api/v1/audit-logs', [
+                    'action' => 'ui.heartbeat',
+                    'entity' => 'Heartbeat',
+                ])
+                ->assertOk();
+        }
+
+        // 31st request in the same minute -> 429 Too Many Requests
+        $this->actingAs($this->teacherA, 'sanctum')
+            ->postJson('/api/v1/audit-logs', [
+                'action' => 'ui.heartbeat',
+                'entity' => 'Heartbeat',
+            ])
+            ->assertStatus(429);
     }
 }

@@ -9,8 +9,15 @@ RUN apk add --no-cache \
     git \
     curl \
     linux-headers \
+    freetype \
+    freetype-dev \
+    libjpeg-turbo \
+    libjpeg-turbo-dev \
+    libpng \
+    libpng-dev \
     $PHPIZE_DEPS \
-    && docker-php-ext-install pdo pdo_pgsql pgsql zip pcntl bcmath \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo pdo_pgsql pgsql zip pcntl bcmath gd \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && apk del $PHPIZE_DEPS

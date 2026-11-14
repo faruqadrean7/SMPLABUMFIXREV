@@ -124,3 +124,51 @@ export interface GetPublicBulletinsParams {
   per_page?: number;
 }
 
+export interface PublicTeacherSubject {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface PublicTeacherPhoto {
+  id: string;
+  object_key: string;
+  mime_type: string;
+}
+
+export interface PublicTeacherItem {
+  id: string;
+  full_name: string;
+  position?: string | null;
+  photo?: PublicTeacherPhoto | null;
+  subjects?: PublicTeacherSubject[];
+}
+
+export interface PublicStaffItem {
+  id: string;
+  full_name: string;
+  position?: string | null;
+  unit?: string | null;
+}
+
+export interface GetPublicTeachersParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  position?: string;
+  subject?: string;
+  subject_id?: string;
+  school_id?: string;
+  all?: boolean;
+}
+
+export interface GetPublicStaffParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  position?: string;
+  unit?: string;
+  school_id?: string;
+  all?: boolean;
+}
+

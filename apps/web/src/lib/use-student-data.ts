@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './api-client';
 import { ApiResponse } from '@/types/auth';
 import { useAuth } from '@/lib/auth-context';
+import { StudentPointsData, StudentExtracurricularsData } from '@/types/student';
 
 export type StudentProgramType = 'reguler' | 'tahfidz' | 'icp' | 'inklusi';
 
@@ -542,6 +543,44 @@ export function useSubmitProgramTask() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['program-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+    },
+  });
+}
+
+export function useStudentPoints() {
+  return useQuery({
+    queryKey: ['student-points'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentPointsData>>('/me/points');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useStudentExtracurriculars() {
+  return useQuery({
+    queryKey: ['student-extracurriculars'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentExtracurricularsData>>('/me/extracurriculars');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useRegisterExtracurricular() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (extracurricularId: string) => {
+      const res = await apiClient.post<ApiResponse<any>>('/me/extracurriculars/register', {
+        extracurricular_id: extracurricularId,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student-extracurriculars'] });
     },
   });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -81,7 +81,7 @@ export default function SpeedGraderPage() {
     }
   });
 
-  const handleSaveGrade = (e?: React.FormEvent) => {
+  const handleSaveGrade = useCallback((e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!currentSubmission) return;
 
@@ -97,7 +97,7 @@ export default function SpeedGraderPage() {
       score: numScore,
       feedback: feedbackInput,
     });
-  };
+  }, [assignment?.max_score, currentSubmission, feedbackInput, gradeMutation, scoreInput]);
 
   // Sync to Grade Ledger (BE-GRD-01)
   const handleSyncToGradebook = () => {
@@ -108,8 +108,9 @@ export default function SpeedGraderPage() {
 
   // Export submissions to CSV
   const handleExportCSV = () => {
+    const maxScore = assignment?.max_score ?? 100;
     const rows = [
-      ['NIS', 'Nama Siswa', 'Waktu Kumpul', 'Keterlambatan', 'Nilai (0-100)', 'Status KKTP', 'Umpan Balik Guru'],
+      ['NIS', 'Nama Siswa', 'Waktu Kumpul', 'Keterlambatan', `Nilai (0-${maxScore})`, 'Status KKTP', 'Umpan Balik Guru'],
       ...submissions.map(s => [
         s.student.nis,
         `"${s.student.name}"`,
@@ -141,7 +142,7 @@ export default function SpeedGraderPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [scoreInput, feedbackInput, currentSubmission]);
+  }, [handleSaveGrade]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-6rem)]">
@@ -201,6 +202,7 @@ export default function SpeedGraderPage() {
             <button
               onClick={() => setActiveStudentIndex(prev => Math.max(0, prev - 1))}
               disabled={activeStudentIndex === 0}
+              aria-label="Siswa Sebelumnya"
               className="w-8 h-8 rounded-lg border border-slate-300 bg-white flex items-center justify-center text-slate-800 hover:bg-slate-100 disabled:opacity-40 cursor-pointer shadow-xs"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -208,6 +210,7 @@ export default function SpeedGraderPage() {
             <button
               onClick={() => setActiveStudentIndex(prev => Math.min(submissions.length - 1, prev + 1))}
               disabled={activeStudentIndex === submissions.length - 1}
+              aria-label="Siswa Berikutnya"
               className="w-8 h-8 rounded-lg border border-slate-300 bg-white flex items-center justify-center text-slate-800 hover:bg-slate-100 disabled:opacity-40 cursor-pointer shadow-xs"
             >
               <ChevronRight className="w-4 h-4" />
@@ -305,7 +308,7 @@ export default function SpeedGraderPage() {
                 {currentSubmission?.notes && (
                   <div className="mt-6 p-3.5 rounded-lg bg-blue-900 text-white text-xs">
                     <span className="font-bold block mb-1">Catatan Tambahan dari Siswa:</span>
-                    <p className="text-blue-100 font-medium italic">"{currentSubmission.notes}"</p>
+                    <p className="text-blue-100 font-medium italic">&ldquo;{currentSubmission.notes}&rdquo;</p>
                   </div>
                 )}
               </div>
@@ -319,6 +322,7 @@ export default function SpeedGraderPage() {
           <div className="p-5 border-b border-slate-300 bg-slate-50">
             <div className="flex items-start gap-3">
               {currentSubmission?.student.avatar_url ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={currentSubmission.student.avatar_url}
                   alt={currentSubmission.student.name}
@@ -364,13 +368,13 @@ export default function SpeedGraderPage() {
           </div>
 
           {/* Form Penilaian */}
-          <form onSubmit={handleSaveGrade} className="p-5 flex-1 flex flex-col justify-between space-y-5">
+          <form onSubmit={handleSaveGrade} noValidate className="p-5 flex-1 flex flex-col justify-between space-y-5">
             <div className="space-y-4">
               {/* Input Skor Nilai */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                    Nilai Siswa (Skor 0 - 100)
+                    Nilai Siswa (Skor 0 - {assignment?.max_score ?? 100})
                   </label>
                   <span className="text-xs font-bold text-white bg-slate-900 px-2 py-0.5 rounded-md shadow-xs">
                     KKTP: 75
@@ -381,31 +385,38 @@ export default function SpeedGraderPage() {
                   <input
                     type="number"
                     min={0}
-                    max={100}
+                    max={assignment?.max_score ?? 100}
                     step={1}
                     value={scoreInput}
                     onChange={(e) => setScoreInput(e.target.value)}
-                    placeholder="Contoh: 92"
+                    placeholder={`Contoh: ${Math.min(90, assignment?.max_score ?? 100)}`}
                     className="w-full px-4 py-2.5 text-xl font-black font-mono text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 focus:border-blue-900"
                   />
                   <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">
-                    / 100
+                    / {assignment?.max_score ?? 100}
                   </span>
                 </div>
 
                 {/* Quick Score Preset Chips - SOLID */}
                 <div className="flex items-center gap-1.5 mt-2.5">
                   <span className="text-xs text-slate-600 font-bold mr-1">Preset:</span>
-                  {[75, 80, 85, 90, 95, 100].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setScoreInput(String(preset))}
-                      className="px-2 py-1 text-xs font-bold rounded-md bg-white border border-slate-300 hover:bg-blue-900 hover:text-white hover:border-blue-900 text-slate-800 transition-colors shadow-xs"
-                    >
-                      {preset}
-                    </button>
-                  ))}
+                  {(() => {
+                    const max = assignment?.max_score ?? 100;
+                    const defaultPresets = [75, 80, 85, 90, 95, 100].filter(p => p <= max);
+                    const presets = defaultPresets.length > 0
+                      ? defaultPresets
+                      : [Math.round(max * 0.5), Math.round(max * 0.75), max];
+                    return presets.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setScoreInput(String(preset))}
+                        className="px-2 py-1 text-xs font-bold rounded-md bg-white border border-slate-300 hover:bg-blue-900 hover:text-white hover:border-blue-900 text-slate-800 transition-colors shadow-xs"
+                      >
+                        {preset}
+                      </button>
+                    ));
+                  })()}
                 </div>
               </div>
 

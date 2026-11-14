@@ -33,6 +33,8 @@ class RbacController extends Controller
             $permissions = $this->rbacService->listPermissions($module);
 
             return $this->successResponse($permissions);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -50,6 +52,8 @@ class RbacController extends Controller
             $roles = $this->rbacService->listRoles($request);
 
             return $this->paginatedResponse($roles);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -67,6 +71,8 @@ class RbacController extends Controller
             $role = $this->rbacService->createRole($request->validated(), $request);
 
             return $this->successResponse($role, 201);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -84,6 +90,10 @@ class RbacController extends Controller
             $role = $this->rbacService->getRole($id);
 
             return $this->successResponse($role);
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Role tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             return $this->errorResponse('Role tidak ditemukan', 'NOT_FOUND', 404);
         }
@@ -102,7 +112,7 @@ class RbacController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Role tidak ditemukan', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -123,14 +133,7 @@ class RbacController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Role tidak ditemukan', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            $code = match ($e->getStatusCode()) {
-                400 => 'BUSINESS_RULE_VIOLATION',
-                409 => 'CONFLICT',
-                404 => 'NOT_FOUND',
-                default => 'INTERNAL_ERROR',
-            };
-
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 
@@ -148,6 +151,10 @@ class RbacController extends Controller
             $data = $this->rbacService->getUserRoles($id);
 
             return $this->successResponse($data);
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Pengguna tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             return $this->errorResponse('Pengguna tidak ditemukan', 'NOT_FOUND', 404);
         }
@@ -174,6 +181,10 @@ class RbacController extends Controller
                     'roles' => $user->roles->pluck('code')->all(),
                 ],
             ]);
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Pengguna tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->handleHttpException($e);
         } catch (Throwable $e) {
             report($e);
 

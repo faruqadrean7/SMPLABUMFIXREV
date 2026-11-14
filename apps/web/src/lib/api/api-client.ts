@@ -127,8 +127,13 @@ apiClient.interceptors.response.use(
     const backendError = backendPayload?.error;
 
     // Tangani refresh token pada 401 UNAUTHENTICATED (hanya jika ada refresh token dan belum dicoba ulang)
-    const isLoginEndpoint = originalRequest.url?.includes('/auth/login');
-    const isRefreshEndpoint = originalRequest.url?.includes('/auth/refresh');
+    const requestUrl = originalRequest.url || '';
+    const isLoginEndpoint =
+      requestUrl.includes('/auth/login') ||
+      requestUrl.includes('/auth/admin/login') ||
+      requestUrl.includes('/auth/2fa') ||
+      requestUrl.includes('/ppdb/login');
+    const isRefreshEndpoint = requestUrl.includes('/auth/refresh');
 
     if (status === 401 && !originalRequest._retry && !isLoginEndpoint && !isRefreshEndpoint) {
       const storedRefreshToken = tokenStorage.getRefreshToken();
@@ -166,9 +171,26 @@ apiClient.interceptors.response.use(
         } catch (refreshErr) {
           processQueue(refreshErr, null);
           tokenStorage.clearAll();
-          // Redirect ke halaman login jika sesi habis di browser
+          // Redirect ke halaman login yang sesuai jika sesi habis di browser
           if (typeof window !== 'undefined') {
-            window.location.href = '/masuk?session_expired=1';
+            const isPPDB = window.location.pathname.startsWith('/ppdb');
+            const isAdmin =
+              window.location.pathname.startsWith('/admin') ||
+              window.location.pathname.includes('secret-admin-gate-login') ||
+              window.location.pathname.includes('admin-gateway-internal');
+
+            if (
+              !window.location.pathname.includes('/masuk') &&
+              !window.location.pathname.includes('secret-admin-gate-login') &&
+              !window.location.pathname.includes('admin-gateway-internal')
+            ) {
+              const loginUrl = isPPDB
+                ? '/ppdb/masuk?session_expired=1'
+                : isAdmin
+                  ? '/secret-admin-gate-login?session_expired=1'
+                  : '/masuk?session_expired=1';
+              window.location.href = loginUrl;
+            }
           }
           return Promise.reject(
             new ApiClientError(
@@ -181,8 +203,29 @@ apiClient.interceptors.response.use(
           isRefreshing = false;
         }
       } else {
-        // Tidak ada refresh token
+        // Tidak ada refresh token (misal sesi pendaftar PPDB)
         tokenStorage.clearAll();
+        if (typeof window !== 'undefined') {
+          const isPPDB = window.location.pathname.startsWith('/ppdb');
+          const isAdmin =
+            window.location.pathname.startsWith('/admin') ||
+            window.location.pathname.includes('secret-admin-gate-login') ||
+            window.location.pathname.includes('admin-gateway-internal');
+
+          // Jangan redirect jika pengguna SUDAH berada di halaman login atau gateway admin
+          if (
+            !window.location.pathname.includes('/masuk') &&
+            !window.location.pathname.includes('secret-admin-gate-login') &&
+            !window.location.pathname.includes('admin-gateway-internal')
+          ) {
+            const loginUrl = isPPDB
+              ? '/ppdb/masuk?session_expired=1'
+              : isAdmin
+                ? '/secret-admin-gate-login?session_expired=1'
+                : '/masuk?session_expired=1';
+            window.location.href = loginUrl;
+          }
+        }
       }
     }
 

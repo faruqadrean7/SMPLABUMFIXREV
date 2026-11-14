@@ -143,7 +143,7 @@ export default function TeacherAttendanceSessionPage() {
           <div className="flex items-center gap-2 mb-2">
             <Link
               href="/portal/guru"
-              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 font-medium transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Kembali ke Beranda</span>
@@ -153,24 +153,24 @@ export default function TeacherAttendanceSessionPage() {
             <CheckSquare className="h-6 w-6 text-brand-blue" />
             <span>Presensi Siswa per Sesi KBM</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-600 mt-1 font-medium">
             Input kehadiran tatap muka kelas binaan secara realtime melalui perangkat Anda.
           </p>
         </div>
 
-        {/* Quick Stats Summary */}
+        {/* Quick Stats Summary (FIX-GURU-02: Memenuhi rasio kontras WCAG AA >= 4.5:1) */}
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge className="bg-emerald-50 text-status-success border-emerald-200 text-xs px-2.5 py-1">
+          <Badge className="bg-emerald-50 text-emerald-800 border-emerald-300 text-xs px-2.5 py-1 font-bold shadow-2xs">
             Hadir: {presentCount}
           </Badge>
-          <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-xs px-2.5 py-1">
+          <Badge className="bg-amber-50 text-amber-800 border-amber-300 text-xs px-2.5 py-1 font-bold shadow-2xs">
             Sakit: {sickCount}
           </Badge>
-          <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-xs px-2.5 py-1">
+          <Badge className="bg-blue-50 text-blue-800 border-blue-300 text-xs px-2.5 py-1 font-bold shadow-2xs">
             Izin: {permissionCount}
           </Badge>
           {unexcusedCount > 0 && (
-            <Badge className="bg-red-50 text-status-danger border-red-200 text-xs px-2.5 py-1">
+            <Badge className="bg-rose-50 text-rose-800 border-rose-300 text-xs px-2.5 py-1 font-bold shadow-2xs">
               Alpa: {unexcusedCount}
             </Badge>
           )}
@@ -278,8 +278,8 @@ export default function TeacherAttendanceSessionPage() {
           </div>
 
           <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <span className="text-xs text-slate-500 font-medium">
-              Kelas aktif: <strong className="text-slate-800">{activeClass?.name || '-'}</strong> • Mapel: <strong className="text-slate-800">{activeSubject?.name || '-'}</strong>
+            <span className="text-xs text-slate-600 font-medium">
+              Kelas aktif: <strong className="text-slate-900">{activeClass?.name || '-'}</strong> • Mapel: <strong className="text-slate-900">{activeSubject?.name || '-'}</strong>
             </span>
             <Button
               type="button"
@@ -287,7 +287,7 @@ export default function TeacherAttendanceSessionPage() {
               size="sm"
               onClick={handleSetAllPresent}
               disabled={students.length === 0}
-              className="gap-1.5 text-xs text-brand-blue border-blue-200 hover:bg-blue-50"
+              className="gap-1.5 text-xs text-blue-900 border-blue-300 hover:bg-blue-50 font-bold"
             >
               <Check className="h-4 w-4" />
               <span>Set Semua Hadir</span>
@@ -316,24 +316,24 @@ export default function TeacherAttendanceSessionPage() {
                 className="p-4 hover:bg-slate-50/60 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3"
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
+                  <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-700 border border-slate-200 shrink-0">
                     {idx + 1}
                   </div>
                   <div>
                     <h4 className="font-bold text-sm text-slate-900">{student.studentName}</h4>
-                    <p className="text-[11px] text-slate-400">NISN: {student.nisn} {student.nis && `• NIS: ${student.nis}`}</p>
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">NISN: {student.nisn} {student.nis && `• NIS: ${student.nis}`}</p>
                   </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  {/* Status Pills */}
-                  <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+                  {/* Status Pills (FIX-GURU-02: Memastikan rasio kontras teks aktif & inaktif >= 4.5:1 WCAG AA) */}
+                  <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 shadow-2xs">
                     {(
                       [
-                        { id: 'present', label: 'Hadir', activeClass: 'bg-emerald-600 text-white' },
-                        { id: 'sick', label: 'Sakit', activeClass: 'bg-amber-500 text-white' },
-                        { id: 'permission', label: 'Izin', activeClass: 'bg-blue-600 text-white' },
-                        { id: 'unexcused', label: 'Alpa', activeClass: 'bg-red-600 text-white' },
+                        { id: 'present', label: 'Hadir', activeClass: 'bg-emerald-700 text-white shadow-xs' },
+                        { id: 'sick', label: 'Sakit', activeClass: 'bg-amber-700 text-white shadow-xs' },
+                        { id: 'permission', label: 'Izin', activeClass: 'bg-blue-700 text-white shadow-xs' },
+                        { id: 'unexcused', label: 'Alpa', activeClass: 'bg-rose-700 text-white shadow-xs' },
                       ] as const
                     ).map((statusOption) => (
                       <button
@@ -341,10 +341,10 @@ export default function TeacherAttendanceSessionPage() {
                         type="button"
                         onClick={() => handleStatusChange(student.studentId, statusOption.id)}
                         className={cn(
-                          'px-3 py-1.5 text-xs font-bold rounded-md transition-all',
+                          'px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer',
                           student.status === statusOption.id
                             ? statusOption.activeClass
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-white'
                         )}
                       >
                         {statusOption.label}
@@ -358,7 +358,7 @@ export default function TeacherAttendanceSessionPage() {
                     placeholder="Catatan (opsional)..."
                     value={student.notes || ''}
                     onChange={(e) => handleNotesChange(student.studentId, e.target.value)}
-                    className="h-8 text-xs max-w-xs"
+                    className="h-8 text-xs max-w-xs bg-white text-slate-900 border-slate-300 placeholder:text-slate-500"
                   />
                 </div>
               </div>
@@ -371,7 +371,7 @@ export default function TeacherAttendanceSessionPage() {
               size="md"
               isLoading={isSaving}
               disabled={!selectedSubjectId || !selectedClassId || students.length === 0}
-              className="gap-2 font-bold px-6"
+              className="gap-2 font-bold px-6 bg-blue-900 text-white hover:bg-blue-800"
             >
               <Save className="h-4 w-4" />
               <span>Simpan Presensi KBM</span>

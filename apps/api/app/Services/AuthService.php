@@ -448,6 +448,16 @@ class AuthService
             return $user;
         }
 
+        // 1.1 Support 'admin' alias for super administrator
+        if (strtolower($identifier) === 'admin') {
+            $adminUser = User::with(['roles.permissions', 'student', 'teacher', 'guardian', 'staff'])
+                ->whereIn('username', ['admin_demo', 'superadmin'])
+                ->first();
+            if ($adminUser) {
+                return $adminUser;
+            }
+        }
+
         // 2. Student NIS or NISN
         $student = Student::where('nis', $identifier)
             ->orWhere('nisn', $identifier)

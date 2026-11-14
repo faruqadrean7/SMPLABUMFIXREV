@@ -109,6 +109,17 @@ export default function PerizinanSiswaPage() {
   );
 
 
+  // Ekstrak daftar kelas dinamis dari permohonan yang ada
+  const availableClasses = React.useMemo(() => {
+    const set = new Set<string>();
+    requests.forEach((r) => {
+      if (r.className && r.className !== '-') {
+        set.add(r.className);
+      }
+    });
+    return Array.from(set).sort();
+  }, [requests]);
+
   const handleDecision = async (id: string, newStatus: 'disetujui' | 'ditolak') => {
     try {
       await decideMutation.mutateAsync({
@@ -167,19 +178,6 @@ export default function PerizinanSiswaPage() {
 
   return (
     <div className="flex flex-col gap-3.5 max-w-full xl:h-[calc(100vh-112px)] xl:overflow-hidden text-slate-900">
-      {/* ─── 0. BANNER STATUS PROTOTIPE ─── */}
-      <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs px-3.5 py-2 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>
-            <strong>Aplikasi Prototipe (apps/portal)</strong>: Modul ini terhubung ke API LMS (<code>/me/teacher/homeroom/leave-requests</code>). Aplikasi resmi kanonis portal sekolah adalah <code>apps/web</code>.
-          </span>
-        </div>
-        <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-2 py-0.5 rounded shrink-0">
-          {apiRequests.length > 0 ? `${apiRequests.length} Data Live API` : 'Mode Demo'}
-        </span>
-      </div>
-
       {/* ─── 1. HEADER ─── */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs shrink-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -188,7 +186,7 @@ export default function PerizinanSiswaPage() {
               <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-900 text-white shadow-2xs">
                 Modul Perizinan
               </span>
-              <span className="text-xs text-slate-500 font-semibold">• Kelas: {classFilter === 'ALL' ? 'Semua Kelas (Prioritas VII-A)' : classFilter}</span>
+              <span className="text-xs text-slate-500 font-semibold">• Kelas: {classFilter === 'ALL' ? 'Semua Kelas' : classFilter}</span>
             </div>
             <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
               Verifikasi Surat Izin & Sakit Siswa
@@ -258,10 +256,11 @@ export default function PerizinanSiswaPage() {
                   className="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer"
                 >
                   <option value="ALL">Semua Kelas</option>
-                  <option value="VII-A">Kelas VII-A (Walas)</option>
-                  <option value="VII-B">Kelas VII-B</option>
-                  <option value="VIII-A">Kelas VIII-A</option>
-                  <option value="IX-A">Kelas IX-A</option>
+                  {availableClasses.map((cls) => (
+                    <option key={cls} value={cls}>
+                      {cls}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -358,6 +357,7 @@ export default function PerizinanSiswaPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5">
                         {item.avatar_url ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img
                             src={item.avatar_url}
                             alt={item.studentName}
@@ -426,6 +426,7 @@ export default function PerizinanSiswaPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     {activeItem.avatar_url ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img
                         src={activeItem.avatar_url}
                         alt={activeItem.studentName}
@@ -508,7 +509,7 @@ export default function PerizinanSiswaPage() {
                 <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5">
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">Alasan Permohonan Ketidakhadiran</span>
                   <p className="text-xs text-slate-800 font-medium leading-relaxed bg-white p-3 rounded-lg border border-slate-200">
-                    "{activeItem.reason}"
+                    &ldquo;{activeItem.reason}&rdquo;
                   </p>
                 </div>
 
@@ -567,18 +568,20 @@ export default function PerizinanSiswaPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      disabled={decideMutation.isPending}
                       onClick={() => handleDecision(activeItem.id, 'ditolak')}
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold border border-rose-300 text-rose-700 hover:bg-rose-50 cursor-pointer transition-colors"
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold border border-rose-300 text-rose-700 hover:bg-rose-50 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Tolak
+                      {decideMutation.isPending ? 'Memproses...' : 'Tolak'}
                     </button>
                     <button
                       type="button"
+                      disabled={decideMutation.isPending}
                       onClick={() => handleDecision(activeItem.id, 'disetujui')}
-                      className="px-4 py-1.5 rounded-xl text-xs font-bold bg-emerald-800 hover:bg-emerald-900 text-white flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                      className="px-4 py-1.5 rounded-xl text-xs font-bold bg-emerald-800 hover:bg-emerald-900 text-white flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <CheckCircle2 className="w-4 h-4 text-white" />
-                      <span>Setujui & Sinkron ke KBM</span>
+                      <span>{decideMutation.isPending ? 'Memproses...' : 'Setujui & Sinkron ke KBM'}</span>
                     </button>
                   </div>
                 ) : (

@@ -17,11 +17,12 @@ import {
   ChevronRight,
   X
 } from 'lucide-react';
-import { StudentTaskItem } from '@/lib/mock-student-data';
+import { StudentTaskItem } from '@/types/student';
 import { useStudentTasks, useSubmitTask, useTeachingMaterials } from '@/lib/use-student-data';
 import { TaskListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { toast } from '@/components/ui/toast';
 
 export default function StudentTugasPage() {
   const [activeTab, setActiveTab] = useState<'tugas' | 'modul'>('tugas');
@@ -371,7 +372,7 @@ export default function StudentTugasPage() {
                       onClick={(e) => {
                         if (!mat.file?.url) {
                           e.preventDefault();
-                          alert(`Materi "${mat.title}" siap diunduh saat sesi tatap muka KBM.`);
+                          toast.info(`Materi "${mat.title}" siap diunduh saat sesi tatap muka KBM.`, 'Informasi Berkas');
                         }
                       }}
                       className="px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
@@ -522,7 +523,7 @@ export default function StudentTugasPage() {
                   Umpan Balik Pedagogis Guru:
                 </span>
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 font-medium leading-relaxed italic">
-                  "{feedbackTask.submission?.feedback}"
+                  &ldquo;{feedbackTask.submission?.feedback}&rdquo;
                 </div>
               </div>
 

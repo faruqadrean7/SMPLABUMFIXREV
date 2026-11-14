@@ -63,7 +63,7 @@ function GuardianShell({ children }: { children: React.ReactNode }) {
       name: 'Poin & Tata Tertib',
       href: '/ortu/poin',
       icon: Award,
-      badge: `${activeChild.points_balance > 0 ? '+' : ''}${activeChild.points_balance}`,
+      badge: (activeChild.points_balance && activeChild.points_balance > 0) ? `+${activeChild.points_balance}` : undefined,
       badgeColor: activeChild.points_balance >= 0 ? 'bg-slate-800 text-white' : 'bg-rose-700 text-white',
     },
     {

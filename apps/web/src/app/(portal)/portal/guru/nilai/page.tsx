@@ -328,15 +328,16 @@ export default function BukuNilaiPage() {
                 
                 <button
                   type="button"
+                  disabled={approvalStatus === 'menunggu_acc' || approvalStatus === 'disetujui'}
                   onClick={() => {
                     setApprovalStatus('menunggu_acc');
                     setSuccessToast('Permohonan ACC E-Progress Report berhasil diajukan ke Kepala Sekolah!');
                     setTimeout(() => setSuccessToast(null), 3000);
                   }}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-black bg-emerald-800 hover:bg-emerald-900 text-white flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-black bg-emerald-800 hover:bg-emerald-900 text-white flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Ajukan ACC</span>
+                  <span>{approvalStatus === 'menunggu_acc' ? 'Menunggu ACC' : approvalStatus === 'disetujui' ? 'Telah Di-ACC' : 'Ajukan ACC'}</span>
                 </button>
               </>
             )}
@@ -846,7 +847,7 @@ export default function BukuNilaiPage() {
             <div className="p-4 border-b border-slate-200 flex items-center justify-between">
               <div>
                 <h3 className="font-extrabold text-sm text-slate-900">Daftar E-Progress Report Siswa Kelas IX-A</h3>
-                <p className="text-xs text-slate-500">Klik "Pratinjau PDF" untuk memeriksa dokumen sebelum diajukan ke kepala sekolah</p>
+                <p className="text-xs text-slate-500">Klik &quot;Pratinjau PDF&quot; untuk memeriksa dokumen sebelum diajukan ke kepala sekolah</p>
               </div>
               <span className="text-xs font-bold bg-blue-900 text-white px-3 py-1 rounded-md shadow-xs">
                 32 Berkas Siap
@@ -1015,7 +1016,7 @@ export default function BukuNilaiPage() {
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs space-y-1">
               <span className="font-bold text-blue-950 uppercase text-[10px] block">Catatan Pembinaan Wali Kelas:</span>
               <p className="text-blue-900 font-medium italic">
-                "{previewStudent.notes || 'Ananda menunjukkan kemajuan belajar yang sangat membanggakan dan aktif membantu rekan tim lab. Pertahankan fokus belajar.'}"
+                &quot;{previewStudent.notes || 'Ananda menunjukkan kemajuan belajar yang sangat membanggakan dan aktif membantu rekan tim lab. Pertahankan fokus belajar.'}&quot;
               </p>
             </div>
 
