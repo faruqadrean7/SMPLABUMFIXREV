@@ -115,9 +115,6 @@ export default function MasterDataHubPage() {
                   <div className="p-2.5 rounded-lg bg-blue-50 text-brand-blue">
                     <Icon className="h-5 w-5" />
                   </div>
-                  <Badge variant={mod.statusVariant} className="text-[10px]">
-                    {mod.status}
-                  </Badge>
                 </div>
                 <CardTitle className="text-sm font-bold text-slate-900 mt-2">
                   {mod.title}
@@ -128,12 +125,8 @@ export default function MasterDataHubPage() {
               </CardHeader>
 
               <CardContent className="pt-0 space-y-3">
-                <div className="p-2.5 rounded bg-slate-50 border border-slate-100 text-[11px] font-mono text-slate-600 truncate">
-                  <span className="text-slate-400">Endpoint:</span> {mod.endpoint}
-                </div>
-
                 <Link href={mod.href} className="block">
-                  <Button variant="outline" size="sm" className="w-full justify-between text-xs">
+                  <Button variant="outline" size="sm" className="w-full justify-between text-xs hover:bg-brand-blue hover:text-white transition-colors">
                     <span>Buka Modul</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>

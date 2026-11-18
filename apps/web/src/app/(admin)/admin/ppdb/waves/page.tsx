@@ -396,8 +396,7 @@ export default function PPDBWavesPage() {
               Konfigurasi Gelombang & Jalur PPDB
             </h1>
             <p className="text-sm text-gray-500">
-              Kelola periode gelombang pendaftaran, alokasi kuota per jalur, dan persyaratan berkas
-              masuk (ADM-PPDB-01)
+              Kelola periode gelombang pendaftaran, alokasi kuota per jalur, dan persyaratan berkas masuk
             </p>
           </div>
           <div className="flex items-center gap-2">

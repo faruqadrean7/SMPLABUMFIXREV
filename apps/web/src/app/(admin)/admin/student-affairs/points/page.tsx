@@ -330,10 +330,6 @@ export default function StudentPointsAdminPage() {
               <ArrowLeft className="h-3.5 w-3.5" />
               Portal Kesiswaan
             </Link>
-            <span className="text-slate-300">•</span>
-            <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[10px]">
-              ADM-STD-01
-            </Badge>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
             Poin Kedisiplinan & Prestasi Siswa 🛡️

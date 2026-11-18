@@ -217,7 +217,12 @@ class PPDBEnrollmentService
             $entryDate = $data['entry_date'] ?? Carbon::now()->toDateString();
 
             // Link photo if uploaded
-            $photoDoc = $applicant->documents()->whereIn('document_type', ['foto', 'pas_foto', 'photo', 'foto_siswa'])->first();
+            $photoDoc = $applicant->documents()
+                ->where(function ($q) {
+                    $q->whereIn('document_type', ['foto', 'pas_foto', 'photo', 'foto_siswa', 'FOTO', 'PAS_FOTO', 'PHOTO', 'FOTO_SISWA'])
+                      ->orWhereRaw("LOWER(document_type) IN ('foto', 'pas_foto', 'photo', 'foto_siswa', 'pasfoto')");
+                })
+                ->first();
             $photoFileId = $photoDoc?->file_id;
 
             // E. Create Student

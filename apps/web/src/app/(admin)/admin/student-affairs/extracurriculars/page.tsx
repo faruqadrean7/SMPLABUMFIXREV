@@ -592,7 +592,7 @@ export default function ExtracurricularAdminPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <Compass className="h-6 w-6 text-blue-600" />
-            ADM-STD-02: Ekstrakurikuler & Keanggotaan Siswa
+            Ekstrakurikuler & Keanggotaan Siswa
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Pengelolaan kegiatan ekstrakurikuler, pembina pelatih, pendaftaran siswa, jurnal kehadiran, dan penilaian E-Rapor Semester.
@@ -690,7 +690,7 @@ export default function ExtracurricularAdminPage() {
             <Award className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">ADM-GRD-04</div>
+            <div className="text-2xl font-bold text-amber-600">Terintegrasi</div>
             <p className="text-[11px] text-slate-500 mt-1">Otomatis sinkron ke rapor semester</p>
           </CardContent>
         </Card>
@@ -1615,7 +1615,7 @@ export default function ExtracurricularAdminPage() {
                   ))}
                 </select>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Predikat ini otomatis ditarik ke dalam Buku Rapor Semester (ADM-GRD-04).
+                  Predikat ini otomatis ditarik ke dalam Buku Rapor Semester.
                 </p>
               </div>
 

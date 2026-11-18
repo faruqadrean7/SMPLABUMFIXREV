@@ -2,10 +2,11 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import GuruTugasPage, { 
+import GuruTugasPage from '@/app/(portal)/portal/guru/tugas/page';
+import { 
   getAssignmentStatus, 
   getDefaultDueDate 
-} from '@/app/(portal)/portal/guru/tugas/page';
+} from '@/lib/tugas-utils';
 import { lmsApi } from '@/lib/api-client';
 
 // Mock Sonner Toast

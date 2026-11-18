@@ -49,7 +49,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     }
   }, [teacherSubjects, selectedSubjectId]);
 
-  const teacherDisplayName = user?.full_name || user?.name || 'Agus Santoso, M.Pd.';
+  const teacherDisplayName = user?.full_name || user?.name || user?.username || 'Pendidik Guru';
   const isHomeroom = (user?.roles || []).some((r: any) => String(r).toLowerCase() === 'homeroom');
   const isCounselor = (user?.roles || []).some((r: any) => String(r).toLowerCase() === 'counselor');
   const roleLabel = isHomeroom ? 'Wali Kelas' : isCounselor ? 'Guru BK' : 'Guru Pengampu';
@@ -65,8 +65,15 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
   const activeClasses = teacherClasses.map(c => ({ id: c.id, name: c.name, total_students: c.studentCount }));
 
+  interface NavLinkItem {
+    name: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string;
+    badgeColor?: string;
+  }
 
-  const navLinks = [
+  const navLinks: NavLinkItem[] = [
     {
       name: 'Ringkasan KBM',
       href: '/guru/dashboard',
@@ -76,29 +83,21 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       name: 'Jurnal & Presensi',
       href: '/guru/jurnal',
       icon: CalendarCheck,
-      badge: 'Hari Ini',
-      badgeColor: 'bg-emerald-800 text-white',
     },
     {
       name: 'Jadwal Mengajar',
       href: '/guru/jadwal',
       icon: Calendar,
-      badge: '2 Sesi',
-      badgeColor: 'bg-teal-800 text-white',
     },
     {
       name: 'Tugas & Penilaian',
       href: '/guru/tugas',
       icon: CheckSquare,
-      badge: '4 Aktif',
-      badgeColor: 'bg-blue-900 text-white',
     },
     {
       name: 'Buku Nilai Ledger',
       href: '/guru/nilai',
       icon: FileSpreadsheet,
-      badge: 'KKTP 75',
-      badgeColor: 'bg-slate-800 text-white',
     },
     {
       name: 'Bank Soal & CBT',
@@ -109,22 +108,16 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       name: 'Modul Ajar',
       href: '/guru/materi',
       icon: BookOpen,
-      badge: '3 Dokumen',
-      badgeColor: 'bg-teal-800 text-white',
     },
     {
       name: 'Program Khusus',
       href: '/guru/program-khusus',
       icon: Sparkles,
-      badge: 'Tahfidz/ICP',
-      badgeColor: 'bg-indigo-900 text-white',
     },
     {
       name: 'Perizinan Siswa',
       href: '/guru/perizinan',
       icon: UserCheck,
-      badge: '2 Menunggu',
-      badgeColor: 'bg-amber-600 text-white',
     },
     {
       name: 'Data Siswa & Poin',

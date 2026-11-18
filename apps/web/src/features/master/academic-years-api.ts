@@ -1,6 +1,12 @@
 import { apiClient } from '@/lib/api/api-client';
 import { ApiResponse, PaginatedResponse } from '@/types/api';
-import { AcademicYearItem, ActivePeriodData, AcademicYearFormValues } from '@/types/master';
+import {
+  AcademicYearItem,
+  ActivePeriodData,
+  AcademicYearFormValues,
+  SemesterItem,
+  SemesterFormValues,
+} from '@/types/master';
 
 export const academicYearsApi = {
   /**
@@ -54,5 +60,50 @@ export const academicYearsApi = {
    */
   async delete(id: string): Promise<void> {
     await apiClient.delete(`/academic-years/${id}`);
+  },
+
+  // =========================================================================
+  // SEMESTERS CRUD
+  // =========================================================================
+
+  /**
+   * Ambil daftar semester (bisa difilter berdasarkan academic_year_id)
+   */
+  async listSemesters(academicYearId?: string): Promise<SemesterItem[]> {
+    const res = await apiClient.get<ApiResponse<SemesterItem[]>>('/semesters', {
+      params: academicYearId ? { academic_year_id: academicYearId } : undefined,
+    });
+    return res.data.data;
+  },
+
+  /**
+   * Tambah semester baru
+   */
+  async createSemester(data: SemesterFormValues & { academic_year_id: string }): Promise<SemesterItem> {
+    const res = await apiClient.post<ApiResponse<SemesterItem>>('/semesters', data);
+    return res.data.data;
+  },
+
+  /**
+   * Perbarui semester
+   */
+  async updateSemester(id: string, data: Partial<SemesterFormValues>): Promise<SemesterItem> {
+    const res = await apiClient.put<ApiResponse<SemesterItem>>(`/semesters/${id}`, data);
+    return res.data.data;
+  },
+
+  /**
+   * Aktifkan semester (dan tahun ajaran induknya)
+   */
+  async activateSemester(id: string): Promise<SemesterItem> {
+    const res = await apiClient.patch<ApiResponse<SemesterItem>>(`/semesters/${id}/activate`);
+    return res.data.data;
+  },
+
+  /**
+   * Hapus semester
+   */
+  async deleteSemester(id: string): Promise<void> {
+    await apiClient.delete(`/semesters/${id}`);
   },
 };

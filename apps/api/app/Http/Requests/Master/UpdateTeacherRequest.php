@@ -19,6 +19,10 @@ class UpdateTeacherRequest extends BaseApiRequest
             'status' => ['nullable', 'in:tetap,honorer,kontrak'],
             'photo_file_id' => ['nullable', 'string', 'exists:files,id'],
             'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('teachers', 'user_id')->ignore($id)],
+            'create_user_account' => ['nullable', 'boolean'],
+            'username' => ['nullable', 'string', 'max:50', 'unique:users,username'],
+            'email' => ['nullable', 'email', 'max:100', 'unique:users,email'],
+            'password' => ['nullable', 'string', 'min:6'],
         ];
     }
 

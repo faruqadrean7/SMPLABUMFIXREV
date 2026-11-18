@@ -157,7 +157,7 @@ export default function LiveCbtMonitorPage() {
             </Link>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            Live Monitor Lab Ujian CBT (ADM-CBT-04) 🖥️
+            Live Monitor Lab Ujian CBT 🖥️
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Pengawasan real-time layar komputer siswa di laboratorium: pantau pengerjaan, sisa waktu, dan deteksi anomali perpindahan tab.

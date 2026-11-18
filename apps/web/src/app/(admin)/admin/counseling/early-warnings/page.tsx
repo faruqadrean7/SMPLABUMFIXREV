@@ -23,7 +23,7 @@ export default function EarlyWarningsAdminPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <ShieldAlert className="h-6 w-6 text-indigo-600" />
-            ADM-BK-02: Deteksi Dini Siswa Berisiko (Early Warning System)
+            Deteksi Dini Siswa Berisiko (Early Warning System)
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Sistem deteksi dini otomatis untuk mengidentifikasi anomali presensi, penurunan nilai drastis, dan akumulasi poin pelanggaran sebelum terjadi masalah yang lebih kompleks.

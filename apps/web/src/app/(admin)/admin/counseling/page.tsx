@@ -310,7 +310,7 @@ export default function CounselingAdminPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <HeartHandshake className="h-6 w-6 text-indigo-600" />
-            ADM-BK-01: Bimbingan & Konseling Siswa
+            Bimbingan & Konseling Siswa
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Pengelolaan catatan kasus privat, sesi konseling terjadwal, pembinaan siswa, dan rujukan dari guru mata pelajaran/wali kelas.

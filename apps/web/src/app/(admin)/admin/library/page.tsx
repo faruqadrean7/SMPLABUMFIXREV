@@ -584,9 +584,6 @@ export default function LibraryAndLabPage() {
             <h1 className="text-2xl font-bold tracking-tight text-gray-900">
               Perpustakaan & Inventaris Alat Lab
             </h1>
-            <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
-              ADM-SAR-04 / BE-SAR-04
-            </Badge>
           </div>
           <p className="text-sm text-gray-500 mt-1">
             Manajemen sirkulasi katalog buku pustaka, inventaris peralatan laboratorium, pencatatan pinjam-kembali, dan denda otomatis.

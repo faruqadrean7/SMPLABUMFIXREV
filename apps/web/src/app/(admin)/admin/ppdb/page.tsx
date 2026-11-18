@@ -46,7 +46,7 @@ export default function PPDBDashboardPage() {
               Penerimaan Peserta Didik Baru (PPDB)
             </h1>
             <p className="text-sm text-gray-500">
-              Pusat kendali operasional pendaftaran, verifikasi berkas, seleksi berkuota, dan laporan statistik (ADM-PPDB-01 s/d ADM-PPDB-06)
+              Pusat kendali operasional pendaftaran, verifikasi berkas, seleksi berkuota, dan laporan statistik
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -145,7 +145,6 @@ export default function PPDBDashboardPage() {
                   <h3 className="font-semibold text-gray-900 group-hover:text-emerald-600 transition">
                     Gelombang & Jalur
                   </h3>
-                  <span className="text-xs text-gray-500">ADM-PPDB-01</span>
                 </div>
               </div>
               <p className="text-xs text-gray-600 mt-2">
@@ -171,7 +170,6 @@ export default function PPDBDashboardPage() {
                   <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition">
                     Verifikasi Berkas
                   </h3>
-                  <span className="text-xs text-gray-500">ADM-PPDB-02 & ADM-PPDB-03</span>
                 </div>
               </div>
               <p className="text-xs text-gray-600 mt-2">
@@ -197,7 +195,6 @@ export default function PPDBDashboardPage() {
                   <h3 className="font-semibold text-gray-900 group-hover:text-purple-600 transition">
                     Seleksi & Perankingan
                   </h3>
-                  <span className="text-xs text-gray-500">ADM-PPDB-04 & ADM-PPDB-05</span>
                 </div>
               </div>
               <p className="text-xs text-gray-600 mt-2">
@@ -220,7 +217,6 @@ export default function PPDBDashboardPage() {
                 Statistik Keterisian Kuota per Jalur Pendaftaran
               </h2>
             </div>
-            <span className="text-xs text-gray-500">ADM-PPDB-06 (Laporan PPDB)</span>
           </div>
 
           <div className="overflow-x-auto">

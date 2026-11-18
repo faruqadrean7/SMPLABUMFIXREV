@@ -166,8 +166,6 @@ export default function ReportsCenterPage() {
               <Badge variant="outline" className="text-white border-white/30 bg-white/10 text-xs">
                 Pusat Data Terpadu
               </Badge>
-              <span className="text-xs text-slate-400">•</span>
-              <span className="text-xs text-slate-400">ADM-RPT-01 / BE-RPT-01</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight">Pusat Laporan & Rekapitulasi</h1>
             <p className="mt-1 text-sm text-slate-300 max-w-2xl">

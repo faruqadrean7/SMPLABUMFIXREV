@@ -468,7 +468,7 @@ export default function HelpdeskTicketsPage() {
                 Helpdesk Perbaikan & Kerusakan Sarpras
               </h1>
               <p className="text-sm text-gray-500">
-                Modul BE-SAR-03 / ADM-SAR-03: Tiket pelaporan, papan Kanban, penugasan teknisi, dan SLA pemeliharaan.
+                Tiket pelaporan, papan Kanban, penugasan teknisi, dan SLA pemeliharaan sarana prasarana sekolah
               </p>
             </div>
           </div>

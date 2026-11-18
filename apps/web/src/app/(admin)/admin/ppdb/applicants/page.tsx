@@ -177,7 +177,7 @@ export default function PPDBApplicantsPage() {
               Verifikasi Berkas Calon Siswa
             </h1>
             <p className="text-sm text-gray-500">
-              Pemeriksaan berkas pendaftaran, approval dokumen persyaratan, dan evaluasi status pendaftar (ADM-PPDB-02 & ADM-PPDB-03)
+              Pemeriksaan berkas pendaftaran, verifikasi dokumen persyaratan, dan evaluasi status pendaftar
             </p>
           </div>
           <Button

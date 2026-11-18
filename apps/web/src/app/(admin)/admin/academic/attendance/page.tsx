@@ -314,10 +314,7 @@ export default function AcademicAttendancePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-              ADM-ACD-03
-            </span>
-            <span className="text-xs text-slate-400">Modul Akademik & KBM</span>
+            <span className="text-xs text-slate-500 font-medium">Modul Akademik & KBM</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">Presensi KBM & Sesi Kelas</h1>
           <p className="text-sm text-slate-500">

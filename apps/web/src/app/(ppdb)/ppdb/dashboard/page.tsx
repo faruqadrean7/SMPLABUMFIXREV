@@ -207,7 +207,7 @@ export default function ApplicantDashboardPage() {
       setChoiceData((prev) => ({
         ...prev,
         wave_id: activeWave.id,
-        track_id: tracks[0].id,
+        track_id: prev.track_id || tracks[0].id,
       }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,22 +215,27 @@ export default function ApplicantDashboardPage() {
 
   // Mutation Inisialisasi Pendaftaran Baru (jika belum ada aplikasi)
   const createApplicationMutation = useMutation({
-    mutationFn: () =>
-      ppdbApi.createApplication({
+    mutationFn: () => {
+      const selectedTrackId = choiceData.track_id || tracks[0]?.id;
+      if (!selectedTrackId) {
+        throw new Error('Jalur pendaftaran belum tersedia. Pastikan gelombang pendaftaran aktif.');
+      }
+      return ppdbApi.createApplication({
         wave_id: choiceData.wave_id || activeWave?.id || '',
-        track_id: choiceData.track_id || tracks[0]?.id || '',
+        track_id: selectedTrackId,
         full_name: personalData.full_name || profile?.username || 'Calon Siswa',
         nik: personalData.nik || '3579000000000000',
         birth_date: personalData.birth_date || '2010-01-01',
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ppdb-applicant-me'] });
-      setFeedbackMessage({ type: 'success', text: 'Draf pendaftaran berhasil dibuat! Silakan lengkapi formulir.' });
+      setFeedbackMessage({ type: 'success', text: 'Draf pendaftaran berhasil dibuat! Silakan lengkapi formulir dan berkas.' });
     },
     onError: (err: any) => {
       setFeedbackMessage({
         type: 'error',
-        text: err.response?.data?.message || 'Gagal memulai pendaftaran. Pastikan gelombang pendaftaran aktif.',
+        text: err.response?.data?.message || err.message || 'Gagal memulai pendaftaran. Pastikan gelombang pendaftaran aktif.',
       });
     },
   });
@@ -298,6 +303,11 @@ export default function ApplicantDashboardPage() {
       saveStepMutation.mutate({ step: 'school', data: schoolData });
     } else if (activeStep === 4) {
       saveStepMutation.mutate({ step: 'track', data: choiceData });
+    } else if (activeStep === 5) {
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Semua berkas yang telah Anda unggah otomatis tersimpan secara aman di server. Klik "Submit Final Pendaftaran" bila semua berkas wajib telah lengkap.',
+      });
     }
   };
 
@@ -975,14 +985,18 @@ export default function ApplicantDashboardPage() {
                   <select
                     value={choiceData.track_id}
                     onChange={(e) => setChoiceData({ ...choiceData, track_id: e.target.value })}
-                    disabled={isLocked || !!activeApplication?.track?.id}
-                    className="w-full h-10 px-3 border rounded-md text-xs bg-white text-slate-900 border-slate-300"
+                    disabled={isLocked}
+                    className="w-full h-10 px-3 border rounded-md text-xs bg-white text-slate-900 border-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   >
-                    {tracks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} (Kuota: {t.quota} siswa)
-                      </option>
-                    ))}
+                    {tracks.length === 0 ? (
+                      <option value="">Belum ada jalur pendaftaran yang dibuka</option>
+                    ) : (
+                      tracks.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} (Kuota: {t.quota} siswa)
+                        </option>
+                      ))
+                    )}
                   </select>
                   <p className="text-[11px] text-slate-500 mt-1">
                     Jalur yang telah disubmit dikunci untuk menjaga ketepatan kuota seleksi.
@@ -1016,19 +1030,31 @@ export default function ApplicantDashboardPage() {
                     <div>
                       <p className="font-bold text-xs">Draf Pendaftaran Belum Dibuat</p>
                       <p className="text-[11px] text-amber-800 mt-0.5">
-                        Dokumen persyaratan hanya dapat disimpan setelah formulir pendaftaran memiliki nomor registrasi draf.
-                        Silakan lengkapi <strong>Langkah 1 (Data Diri Siswa)</strong> dan klik <strong>"Simpan Draf"</strong> terlebih dahulu.
+                        Dokumen persyaratan dapat disimpan setelah formulir pendaftaran memiliki nomor registrasi draf.
+                        Klik <strong>&quot;Buat Draf Sekarang&quot;</strong> atau lengkapi Langkah 1 untuk mulai mengunggah berkas.
                       </p>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setActiveStep(1)}
-                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shrink-0"
-                  >
-                    Buka Langkah 1
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setActiveStep(1)}
+                      variant="outline"
+                      className="border-amber-400 text-amber-800 bg-white hover:bg-amber-100 text-xs font-semibold"
+                    >
+                      Buka Langkah 1
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => createApplicationMutation.mutate()}
+                      disabled={createApplicationMutation.isPending}
+                      className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
+                    >
+                      {createApplicationMutation.isPending ? 'Membuat Draf...' : 'Buat Draf Sekarang'}
+                    </Button>
+                  </div>
                 </div>
               )}
 

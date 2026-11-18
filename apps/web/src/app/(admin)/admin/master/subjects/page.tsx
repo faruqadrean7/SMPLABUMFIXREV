@@ -283,7 +283,7 @@ export default function SubjectsMasterPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider text-brand-blue">
-              Master Data • ADM-MST-06
+              Master Data
             </span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">

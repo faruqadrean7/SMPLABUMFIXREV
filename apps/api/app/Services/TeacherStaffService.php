@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\File;
+use App\Models\Role;
 use App\Models\Staff;
 use App\Models\Teacher;
 use App\Models\TeacherSalarySlip;
@@ -13,7 +14,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -33,6 +36,7 @@ class TeacherStaffService
             'teachingAssignments.class',
             'homeroomClasses',
             'photoFile',
+            'user',
         ]);
 
         if ($status) {
@@ -73,9 +77,42 @@ class TeacherStaffService
     public function createTeacher(array $data, Request $request): Teacher
     {
         return DB::transaction(function () use ($data, $request) {
+            $schoolId = $data['school_id'] ?? $request->user()?->school_id;
+            $userId = $data['user_id'] ?? null;
+
+            // Buat akun login jika diminta atau jika username/password disertakan
+            if (empty($userId) && (! empty($data['create_user_account']) || ! empty($data['username']))) {
+                $rawUsername = ! empty($data['username']) ? $data['username'] : Str::slug($data['full_name'], '');
+                $username = strtolower(trim((string) $rawUsername));
+                if (empty($username)) {
+                    $username = 'guru_'.(! empty($data['nip']) ? preg_replace('/\D/', '', $data['nip']) : Str::random(6));
+                }
+
+                $baseUsername = $username;
+                $counter = 1;
+                while (User::where('username', $username)->exists()) {
+                    $username = $baseUsername.$counter;
+                    $counter++;
+                }
+
+                $password = ! empty($data['password']) ? $data['password'] : 'Guru123!@#';
+                $user = User::create([
+                    'school_id' => $schoolId,
+                    'username' => $username,
+                    'email' => ! empty($data['email']) ? strtolower(trim($data['email'])) : null,
+                    'password_hash' => Hash::make($password),
+                    'status' => 'active',
+                    'must_change_password' => false,
+                ]);
+
+                $role = Role::firstOrCreate(['code' => 'teacher'], ['name' => 'Guru Mata Pelajaran', 'is_system' => true]);
+                $user->roles()->syncWithoutDetaching([$role->id]);
+                $userId = $user->id;
+            }
+
             $teacher = Teacher::create([
-                'school_id' => $data['school_id'] ?? $request->user()?->school_id,
-                'user_id' => $data['user_id'] ?? null,
+                'school_id' => $schoolId,
+                'user_id' => $userId,
                 'nip' => $data['nip'] ?? null,
                 'nuptk' => $data['nuptk'] ?? null,
                 'full_name' => $data['full_name'],
@@ -94,7 +131,7 @@ class TeacherStaffService
                 $request
             );
 
-            return $teacher;
+            return $teacher->load('user');
         });
     }
 
@@ -106,6 +143,55 @@ class TeacherStaffService
         return DB::transaction(function () use ($id, $data, $request) {
             $teacher = Teacher::findOrFail($id);
             $oldValue = $teacher->toArray();
+
+            // Buat akun baru jika belum ada dan diminta
+            if (empty($teacher->user_id) && (! empty($data['create_user_account']) || ! empty($data['username']))) {
+                $schoolId = $teacher->school_id ?? $request->user()?->school_id;
+                $rawUsername = ! empty($data['username']) ? $data['username'] : Str::slug($teacher->full_name, '');
+                $username = strtolower(trim((string) $rawUsername));
+                if (empty($username)) {
+                    $username = 'guru_'.(! empty($teacher->nip) ? preg_replace('/\D/', '', $teacher->nip) : Str::random(6));
+                }
+
+                $baseUsername = $username;
+                $counter = 1;
+                while (User::where('username', $username)->exists()) {
+                    $username = $baseUsername.$counter;
+                    $counter++;
+                }
+
+                $password = ! empty($data['password']) ? $data['password'] : 'Guru123!@#';
+                $user = User::create([
+                    'school_id' => $schoolId,
+                    'username' => $username,
+                    'email' => ! empty($data['email']) ? strtolower(trim($data['email'])) : null,
+                    'password_hash' => Hash::make($password),
+                    'status' => 'active',
+                    'must_change_password' => false,
+                ]);
+
+                $role = Role::firstOrCreate(['code' => 'teacher'], ['name' => 'Guru Mata Pelajaran', 'is_system' => true]);
+                $user->roles()->syncWithoutDetaching([$role->id]);
+                $teacher->user_id = $user->id;
+            } elseif (! empty($teacher->user_id)) {
+                // Perbarui akun user yang sudah ada bila password, email, atau username diubah
+                $user = User::find($teacher->user_id);
+                if ($user) {
+                    if (! empty($data['password'])) {
+                        $user->password_hash = Hash::make($data['password']);
+                    }
+                    if (isset($data['email'])) {
+                        $user->email = ! empty($data['email']) ? strtolower(trim($data['email'])) : null;
+                    }
+                    if (! empty($data['username'])) {
+                        $newUsername = strtolower(trim((string) $data['username']));
+                        if ($newUsername !== $user->username && ! User::where('username', $newUsername)->where('id', '!=', $user->id)->exists()) {
+                            $user->username = $newUsername;
+                        }
+                    }
+                    $user->save();
+                }
+            }
 
             $fields = ['nip', 'nuptk', 'full_name', 'position', 'status', 'photo_file_id', 'user_id'];
             foreach ($fields as $field) {
@@ -126,7 +212,7 @@ class TeacherStaffService
                 $request
             );
 
-            return $teacher;
+            return $teacher->load('user');
         });
     }
 

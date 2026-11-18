@@ -53,7 +53,7 @@ describe('FIX-INPUT-01: Form Input and Submission Fixes', () => {
     expect(result.topic).toBe('Pembelajaran Bab 3');
   });
 
-  it('lmsApi.createJournalWithAttendance passes valid UUID schedule_id to journals and attendance sessions', async () => {
+  it('lmsApi.createJournalWithAttendance passes valid UUID schedule_id and attendances to journals endpoint', async () => {
     const validScheduleId = '01a19b00-0000-7000-8000-000000000001';
     const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: {
@@ -77,22 +77,14 @@ describe('FIX-INPUT-01: Form Input and Submission Fixes', () => {
       ],
     });
 
-    // Called both journals and attendance sessions
+    // FIX-GURU-01: Presensi dikirim bersama jurnal dalam satu transaksi
     expect(postSpy).toHaveBeenCalledWith(
       '/me/teacher/journals',
       expect.objectContaining({
         schedule_id: validScheduleId,
         topic: 'Struktur Sel',
-      })
-    );
-
-    expect(postSpy).toHaveBeenCalledWith(
-      '/me/teacher/attendance/sessions',
-      expect.objectContaining({
-        schedule_id: validScheduleId,
-        session_topic: 'Struktur Sel',
-        attendees: [
-          expect.objectContaining({ student_id: 'std-1', status: 'present' }),
+        attendances: [
+          expect.objectContaining({ student_id: 'std-1', status: 'hadir' }),
         ],
       })
     );

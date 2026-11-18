@@ -304,7 +304,7 @@ export default function PPDBSelectionPage() {
               Seleksi & Perankingan PPDB
             </h1>
             <p className="text-sm text-gray-500">
-              Kalkulasi pemeringkatan otomatis berdasarkan kuota, override keputusan panitia, dan konversi ke siswa aktif (ADM-PPDB-04 & ADM-PPDB-05)
+              Kalkulasi pemeringkatan otomatis berdasarkan kuota, override keputusan panitia, dan konversi ke siswa aktif
             </p>
           </div>
           <div className="flex items-center gap-2">

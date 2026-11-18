@@ -362,7 +362,7 @@ export default function QuestionBanksPage() {
             </Link>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            Bank Soal Ujian (ADM-CBT-01) 📝
+            Bank Soal Ujian 📝
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Kelola repositori butir soal dengan 6 model (PG, PG Kompleks, Benar/Salah, Menjodohkan, Isian, Uraian).

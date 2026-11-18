@@ -149,7 +149,7 @@ export default function StudentAffairsHubPage() {
                 <ShieldAlert className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-base text-slate-900">Poin Kedisiplinan & Prestasi (ADM-STD-01)</CardTitle>
+                <CardTitle className="text-base text-slate-900">Poin Kedisiplinan & Prestasi</CardTitle>
                 <CardDescription className="text-xs text-slate-500">
                   Manajemen jenis poin, input cepat pelanggaran, ambang batas sanksi otomatis, dan riwayat siswa.
                 </CardDescription>
@@ -177,7 +177,7 @@ export default function StudentAffairsHubPage() {
                 <Compass className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-base text-slate-900">Ekstrakurikuler & Organisasi (ADM-STD-02)</CardTitle>
+                <CardTitle className="text-base text-slate-900">Ekstrakurikuler & Organisasi</CardTitle>
                 <CardDescription className="text-xs text-slate-500">
                   Master kegiatan ekskul, pendaftaran daring siswa, jurnal kegiatan pembina, dan penilaian rapor.
                 </CardDescription>
@@ -205,7 +205,7 @@ export default function StudentAffairsHubPage() {
                 <Trophy className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-base text-slate-900">Lomba & Prestasi Siswa (ADM-STD-03)</CardTitle>
+                <CardTitle className="text-base text-slate-900">Lomba & Prestasi Siswa</CardTitle>
                 <CardDescription className="text-xs text-slate-500">
                   Katalog kompetisi, delegasi kontingen, galeri piala & medali, serta verifikasi berkas bukti.
                 </CardDescription>

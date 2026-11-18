@@ -7,6 +7,7 @@ import { AcademicYearItem, AcademicYearFormValues } from '@/types/master';
 import { DataTable, ColumnDef } from '@/components/shared/data-table';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { AcademicYearDialog } from '@/features/master/academic-year-dialog';
+import { SemesterManagementDialog } from '@/features/master/semester-management-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PermissionGate } from '@/components/shared/permission-gate';
@@ -39,6 +40,9 @@ export default function AcademicYearsPage() {
 
   // State Dialog Konfirmasi Hapus
   const [deletingItem, setDeletingItem] = useState<AcademicYearItem | null>(null);
+
+  // State Dialog Kelola Semester
+  const [managingSemesterYear, setManagingSemesterYear] = useState<AcademicYearItem | null>(null);
 
   // Global action error message
   const [actionError, setActionError] = useState<string | null>(null);
@@ -162,10 +166,18 @@ export default function AcademicYearsPage() {
       header: 'Semester',
       align: 'center',
       render: (item) => (
-        <div className="inline-flex items-center gap-1 text-slate-600 font-medium">
-          <Calendar className="h-3.5 w-3.5 text-slate-400" />
-          <span>{item.semesters_count ?? 0}</span>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setActionError(null);
+            setManagingSemesterYear(item);
+          }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-brand-teal bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors cursor-pointer group"
+          title="Klik untuk Kelola Semester"
+        >
+          <Calendar className="h-3.5 w-3.5 text-brand-teal group-hover:scale-110 transition-transform" />
+          <span>{item.semesters_count ?? 0} Semester</span>
+        </button>
       ),
     },
     {
@@ -174,6 +186,20 @@ export default function AcademicYearsPage() {
       align: 'right',
       render: (item) => (
         <div className="flex items-center justify-end gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setActionError(null);
+              setManagingSemesterYear(item);
+            }}
+            title="Kelola Semester"
+            className="h-8 px-2 text-xs gap-1 border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-brand-teal"
+          >
+            <Calendar className="h-3.5 w-3.5 text-brand-teal" />
+            <span className="hidden md:inline">Kelola Semester</span>
+          </Button>
+
           {!item.is_active && (
             <Button
               variant="outline"
@@ -230,7 +256,7 @@ export default function AcademicYearsPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider text-brand-blue">
-              Master Data • ADM-MST-01
+              Master Data
             </span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -305,6 +331,13 @@ export default function AcademicYearsPage() {
         onSubmit={handleFormSubmit}
         initialData={editingItem}
         isLoading={createMutation.isPending || updateMutation.isPending}
+      />
+
+      {/* Modal Kelola Semester */}
+      <SemesterManagementDialog
+        isOpen={!!managingSemesterYear}
+        onClose={() => setManagingSemesterYear(null)}
+        academicYear={managingSemesterYear}
       />
 
       {/* Dialog Konfirmasi Aktivasi */}

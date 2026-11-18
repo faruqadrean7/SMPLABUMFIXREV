@@ -502,7 +502,7 @@ export default function AssetsAndInventoryPage() {
                 Aset & Inventarisasi Berbasis QR / Barcode
               </h1>
               <p className="text-sm text-gray-500">
-                Modul BE-SAR-02 / ADM-SAR-02: Registrasi master aset, cetak label QR, scan lookup instan, dan sesi stok opname berkala.
+                Registrasi master aset, cetak label QR, scan lookup instan, dan sesi stok opname berkala
               </p>
             </div>
           </div>

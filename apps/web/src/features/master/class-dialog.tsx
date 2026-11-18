@@ -62,12 +62,6 @@ export function ClassDialog({
     enabled: isOpen,
   });
 
-  const { data: majors } = useQuery({
-    queryKey: ['majors-lookup'],
-    queryFn: () => classesApi.getMajors(),
-    enabled: isOpen,
-  });
-
   const { data: teachers } = useQuery({
     queryKey: ['teachers-lookup'],
     queryFn: () => teachersApi.list({ limit: 100 }),
@@ -124,7 +118,7 @@ export function ClassDialog({
         program_type: 'reguler',
       });
     }
-  }, [initialData, reset, isOpen, academicYears, gradeLevels, majors, teachers]);
+  }, [initialData, reset, isOpen, academicYears, gradeLevels, teachers]);
 
   if (!isOpen) return null;
 
@@ -147,7 +141,7 @@ export function ClassDialog({
               <p className="text-xs text-slate-500">
                 {isEditing
                   ? `Mengubah kelas ${initialData?.name}`
-                  : 'Tetapkan tingkat, jurusan, dan wali kelas'}
+                  : 'Tetapkan tingkat kelas, kapasitas, dan wali kelas'}
               </p>
             </div>
           </div>
@@ -166,7 +160,17 @@ export function ClassDialog({
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="mt-4 space-y-4">
+        <form
+          onSubmit={handleSubmit((values) => {
+            const sanitized: ClassFormValues = {
+              ...values,
+              major_id: undefined,
+              homeroom_teacher_id: values.homeroom_teacher_id || undefined,
+            };
+            return onSubmit(sanitized);
+          })}
+          className="mt-4 space-y-4"
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -222,7 +226,7 @@ export function ClassDialog({
               </label>
               <Input
                 {...register('name')}
-                placeholder="Contoh: VII-A / X-MIPA-1"
+                placeholder="Contoh: VII-A, VIII-B, IX-C"
                 className="h-9 text-xs font-semibold"
                 disabled={isLoading || isSubmitting}
               />
@@ -268,42 +272,22 @@ export function ClassDialog({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Jurusan (SMA/SMK)
-              </label>
-              <select
-                {...register('major_id')}
-                className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                disabled={isLoading || isSubmitting}
-              >
-                <option value="">Umum / Tanpa Jurusan</option>
-                {majors?.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Wali Kelas
-              </label>
-              <select
-                {...register('homeroom_teacher_id')}
-                className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                disabled={isLoading || isSubmitting}
-              >
-                <option value="">Belum Ditentukan</option>
-                {teachers?.data.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.full_name} {t.nip ? `(${t.nip})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Wali Kelas (Opsional)
+            </label>
+            <select
+              {...register('homeroom_teacher_id')}
+              className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              disabled={isLoading || isSubmitting}
+            >
+              <option value="">Belum Ditentukan</option>
+              {teachers?.data.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.full_name} {t.nip ? `(${t.nip})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">

@@ -190,13 +190,13 @@ export const lmsApi = {
       })),
     };
 
-    if (payload.schedule_id) {
+    if (isUuid(payload.schedule_id)) {
       journalPayload.schedule_id = payload.schedule_id;
     }
-    if (payload.class_id) {
+    if (isUuid(payload.class_id)) {
       journalPayload.class_id = payload.class_id;
     }
-    if (payload.subject_id) {
+    if (isUuid(payload.subject_id)) {
       journalPayload.subject_id = payload.subject_id;
     }
 

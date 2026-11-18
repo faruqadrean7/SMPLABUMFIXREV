@@ -326,9 +326,6 @@ export default function ReportCardsAdminPage() {
             <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">
               E-Rapor Semester &amp; Capaian Kompetensi
             </h1>
-            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 border border-blue-200">
-              ADM-GRD-04
-            </span>
           </div>
           <p className="mt-1 text-xs text-gray-500 sm:text-sm">
             Kompilasi laporan hasil belajar semester, deskripsi capaian pembelajaran Kurikulum Merdeka (KKTP), dan pengesahan resmi.

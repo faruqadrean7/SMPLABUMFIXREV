@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // 0. Default Canonical School (Tenant)
-        School::firstOrCreate(
+        $school = School::firstOrCreate(
             ['id' => '00000000-0000-0000-0000-000000000001'],
             [
                 'name' => 'SMP Laboratorium Universitas Negeri Malang',
@@ -30,6 +30,11 @@ class DatabaseSeeder extends Seeder
                 'is_active' => true,
             ]
         );
+
+        // 0.1 Canonical Grade Levels (SMP: VII, VIII, IX)
+        \App\Models\GradeLevel::firstOrCreate(['school_id' => $school->id, 'sort_order' => 7], ['name' => 'Kelas VII']);
+        \App\Models\GradeLevel::firstOrCreate(['school_id' => $school->id, 'sort_order' => 8], ['name' => 'Kelas VIII']);
+        \App\Models\GradeLevel::firstOrCreate(['school_id' => $school->id, 'sort_order' => 9], ['name' => 'Kelas IX']);
 
         // 1. Roles
         $rolesData = [
@@ -408,5 +413,73 @@ class DatabaseSeeder extends Seeder
                 'is_active' => true,
             ]
         );
+
+        // 5. Default Active PPDB Wave & SMP Tracks
+        $ppdbWave = \App\Models\PPDBWave::firstOrCreate(
+            ['name' => 'Gelombang 1 Reguler & Prestasi 2026/2027'],
+            [
+                'school_id' => $school->id,
+                'open_at' => \Illuminate\Support\Carbon::now()->subDays(5),
+                'close_at' => \Illuminate\Support\Carbon::now()->addDays(60),
+                'result_publish_at' => \Illuminate\Support\Carbon::now()->addDays(65),
+                'status' => 'aktif',
+            ]
+        );
+
+        $defaultTracks = [
+            [
+                'code' => 'REGULER',
+                'name' => 'Jalur Reguler',
+                'quota' => 120,
+                'formula' => ['rapor_weight' => 60, 'test_weight' => 40],
+            ],
+            [
+                'code' => 'PRESTASI',
+                'name' => 'Jalur Prestasi (Akademik & Non-Akademik)',
+                'quota' => 40,
+                'formula' => ['rapor_weight' => 40, 'achievement_weight' => 60],
+            ],
+            [
+                'code' => 'AFIRMASI',
+                'name' => 'Jalur Afirmasi / KIP',
+                'quota' => 30,
+                'formula' => ['rapor_weight' => 100],
+            ],
+            [
+                'code' => 'ZONASI',
+                'name' => 'Jalur Zonasi & Domisili',
+                'quota' => 50,
+                'formula' => ['distance_weight' => 70, 'rapor_weight' => 30],
+            ],
+        ];
+
+        foreach ($defaultTracks as $t) {
+            $track = \App\Models\PPDBTrack::firstOrCreate(
+                ['wave_id' => $ppdbWave->id, 'code' => $t['code']],
+                [
+                    'name' => $t['name'],
+                    'quota' => $t['quota'],
+                    'score_formula' => $t['formula'],
+                ]
+            );
+
+            $requirements = [
+                ['document_type' => 'KK', 'is_required' => true, 'description' => 'Kartu Keluarga asli / fotokopi legalisir'],
+                ['document_type' => 'AKTA', 'is_required' => true, 'description' => 'Akta Kelahiran calon siswa'],
+                ['document_type' => 'FOTO', 'is_required' => true, 'description' => 'Pas foto berseragam / rapi 3x4 latar belakang merah/biru'],
+                ['document_type' => 'RAPOR', 'is_required' => true, 'description' => 'Scan nilai rapor 5 semester terakhir atau SKL'],
+                ['document_type' => 'PRESTASI', 'is_required' => ($t['code'] === 'PRESTASI'), 'description' => 'Piagam / sertifikat kejuaraan minimal tingkat kota/kabupaten'],
+            ];
+
+            foreach ($requirements as $r) {
+                \App\Models\PPDBRequirement::firstOrCreate(
+                    ['track_id' => $track->id, 'document_type' => $r['document_type']],
+                    [
+                        'is_required' => $r['is_required'],
+                        'description' => $r['description'],
+                    ]
+                );
+            }
+        }
     }
 }

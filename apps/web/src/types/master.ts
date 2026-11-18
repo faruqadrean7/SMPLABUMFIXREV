@@ -56,6 +56,13 @@ export interface AcademicYearFormValues {
   is_active?: boolean;
 }
 
+export interface SemesterFormValues {
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_active?: boolean;
+}
+
 // ============================================================================
 // ADM-MST-02: Siswa
 // ============================================================================
@@ -255,6 +262,10 @@ export interface TeacherFormValues {
   status: TeacherEmploymentStatus;
   user_id?: string;
   photo_file_id?: string | null;
+  create_user_account?: boolean;
+  username?: string;
+  email?: string;
+  password?: string;
 }
 
 export interface TeacherSalarySlipFormValues {

@@ -311,7 +311,7 @@ export default function ExamsAdminPage() {
             </Link>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            Jadwal & Paket Ujian (ADM-CBT-02) 📋
+            Jadwal & Paket Ujian 📋
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Kendali asesmen: Ulangan Harian, Formatif, Sumatif, UTS/UAS, distribusi token lab, dan integrasi Gradebook.
@@ -868,7 +868,7 @@ export default function ExamsAdminPage() {
               <div className="flex items-center gap-2">
                 <BookOpen className="h-4 w-4 text-blue-600" />
                 <h4 className="font-bold text-xs text-blue-900">
-                  Publikasikan Nilai ke Buku Nilai (Gradebook / ADM-GRD-01)
+                  Publikasikan Nilai ke Buku Nilai (Gradebook)
                 </h4>
               </div>
               <form onSubmit={handlePublishGradebook} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">

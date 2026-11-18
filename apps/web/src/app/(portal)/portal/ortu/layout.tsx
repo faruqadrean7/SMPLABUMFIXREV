@@ -56,8 +56,6 @@ function GuardianShell({ children }: { children: React.ReactNode }) {
       name: 'Capaian Nilai & Rapor',
       href: '/ortu/nilai',
       icon: FileSpreadsheet,
-      badge: 'STS Gasal',
-      badgeColor: 'bg-blue-800 text-white',
     },
     {
       name: 'Poin & Tata Tertib',
@@ -85,8 +83,6 @@ function GuardianShell({ children }: { children: React.ReactNode }) {
       name: 'Konseling Walas & BK',
       href: '/ortu/konseling',
       icon: HeartHandshake,
-      badge: 'Konsultasi',
-      badgeColor: 'bg-teal-800 text-white',
     },
   ];
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\PpdbOtpMail;
 use App\Models\Applicant;
 use App\Models\AuditLog;
 use App\Models\PPDBWave;
@@ -12,6 +13,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -80,6 +83,13 @@ class PPDBAccountService
         Cache::put('ppdb_otp:'.$email, $cachePayload, 900);
         // Cooldown 60 detik untuk permintaan kirim ulang
         Cache::put('ppdb_otp_cooldown:'.$email, true, 60);
+
+        // Kirim email OTP
+        try {
+            Mail::to($email)->send(new PpdbOtpMail($otp, $data['full_name']));
+        } catch (\Throwable $e) {
+            Log::warning('Gagal mengirimkan email OTP PPDB ke ' . $email . ': ' . $e->getMessage());
+        }
 
         // 4. Log audit
         $this->logAudit(
@@ -206,6 +216,14 @@ class PPDBAccountService
 
         Cache::put('ppdb_otp:'.$normalizedEmail, $cachePayload, 900);
         Cache::put($cooldownKey, true, 60);
+
+        // Kirim email OTP baru
+        try {
+            $fullName = $oldCache['full_name'] ?? $user->username;
+            Mail::to($normalizedEmail)->send(new PpdbOtpMail($newOtp, $fullName));
+        } catch (\Throwable $e) {
+            Log::warning('Gagal mengirim ulang email OTP PPDB ke ' . $normalizedEmail . ': ' . $e->getMessage());
+        }
 
         // Log audit
         $this->logAudit(

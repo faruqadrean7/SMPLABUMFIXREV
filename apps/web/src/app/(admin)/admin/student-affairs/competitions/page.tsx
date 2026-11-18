@@ -502,10 +502,10 @@ export default function CompetitionsAndAchievementsPage() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Badge className="bg-amber-500/20 text-amber-300 border border-amber-400/30">
-                ADM-STD-03 • P1 SSOT
+                Kesiswaan
               </Badge>
               <span className="text-xs text-amber-200">•</span>
-              <span className="text-xs text-amber-200">Kesiswaan Labschool UM</span>
+              <span className="text-xs text-amber-200">Labschool UM</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight">Lomba, Delegasi & Prestasi Siswa 🏆</h1>
             <p className="mt-1 text-sm text-slate-300 max-w-2xl">

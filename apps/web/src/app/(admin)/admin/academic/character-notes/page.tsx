@@ -316,7 +316,7 @@ export default function CharacterNotesPage() {
             <div className="rounded-xl bg-emerald-600 p-2 text-white shadow-sm">
               <Sparkles className="h-5 w-5" />
             </div>
-            Catatan Karakter Bulanan Siswa (ADM-GRD-02)
+            Catatan Karakter Bulanan Siswa
           </h1>
           <p className="text-xs text-gray-600 mt-1">
             Penilaian pembiasaan profil pelajar Pancasila & catatan naratif wali kelas untuk E-Progress
