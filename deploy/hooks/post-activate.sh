@@ -3,7 +3,7 @@
 # Kalau health check gagal, keluar dengan kode 1 supaya workflow rollback.
 set -euo pipefail
 
-PORT="${WEB_PORT:-3002}"
+PORT="${WEB_PORT:-3100}"
 TRIES="${HEALTH_TRIES:-30}"
 
 log() { printf '[post-activate] %s\n' "$*"; }
