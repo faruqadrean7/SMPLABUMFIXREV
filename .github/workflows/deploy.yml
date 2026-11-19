@@ -1,68 +1,136 @@
-name: Deploy to VPS
+name: Deploy
 
 on:
   push:
-    branches: [ develop, main ]
+    branches: [develop, main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP_NAME: sistlabum
+  APP_ROOT: /var/www/sistlabum
 
 jobs:
-  deploy:
+  # ------------------------------------------------------------------
+  # 1. Gerbang: tidak ada deploy kalau test merah.
+  # ------------------------------------------------------------------
+  test:
+    name: Test
     runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.3
+    services:
+      postgres:
+        image: postgres:16
         env:
-          # Kunci dekripsi manifest CBT (hanya ciphertext .enc yang ada di repo).
-          CBT_MANIFEST_KEY: ${{ secrets.CBT_MANIFEST_KEY }}
-          # Set variabel repo CBT_DEMO_SCHEDULE=1 untuk menjadwalkan ujian demo otomatis.
-          CBT_DEMO_SCHEDULE: ${{ vars.CBT_DEMO_SCHEDULE }}
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sistlabum_testing
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          envs: CBT_MANIFEST_KEY,CBT_DEMO_SCHEDULE
-          script: |
-            set -e
-            echo "Deploying update..."
-            cd /home/fafnir/SMPLABUMFIXREV
-            git fetch origin develop
-            git reset --hard origin/develop
+          php-version: '8.3'
+          extensions: pdo_pgsql, mbstring, intl, zip, gd, bcmath, redis
+          tools: composer
+          coverage: none
 
-            # Backend Laravel
-            cd /home/fafnir/SMPLABUMFIXREV/apps/api
-            php /home/fafnir/.local/bin/composer install --no-dev --optimize-autoloader --no-interaction
-            php artisan migrate --force
+      - name: Backend — install
+        working-directory: apps/api
+        run: composer install --no-interaction --prefer-dist --no-progress
 
-            # CBT: impor paket PAS Matematika dari manifest terenkripsi. Idempoten.
-            # Hanya ciphertext (.enc) ada di repo; didekripsi di sini pakai CBT_MANIFEST_KEY.
-            if [ -n "$CBT_MANIFEST_KEY" ]; then
-              echo "Seeding paket CBT Matematika..."
-              mkdir -p storage/app/import
-              openssl enc -d -aes-256-cbc -pbkdf2 -md sha256 -iter 100000 \
-                -in deploy/cbt/mtk-pas-9-genap-2526.json.enc \
-                -out storage/app/import/mtk-pas-9-genap-2526.json \
-                -pass env:CBT_MANIFEST_KEY
-              php artisan cbt:import-package storage/app/import/mtk-pas-9-genap-2526.json
-              php artisan cbt:attach-mtk-figures
-              if [ "${CBT_DEMO_SCHEDULE:-0}" = "1" ]; then
-                php artisan cbt:demo-schedule-exam
-              fi
-              # Hapus plaintext (berisi kunci jawaban) setelah impor; data sudah di DB.
-              rm -f storage/app/import/mtk-pas-9-genap-2526.json
-              echo "Seeding CBT selesai."
-            else
-              echo "CBT_MANIFEST_KEY tidak diset; lewati seeding CBT."
-            fi
+      - name: Backend — siapkan env
+        working-directory: apps/api
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
 
-            php artisan config:cache
-            php artisan route:cache
+      - name: Backend — test
+        working-directory: apps/api
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: sistlabum_testing
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: php artisan test
 
-            # Frontend Next.js
-            cd /home/fafnir/SMPLABUMFIXREV/apps/web
-            npm run build
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
 
-            # Restart PM2
-            pm2 restart sistlabum-api || true
-            pm2 restart sistlabum-web || true
-            pm2 save
-            echo "Deployment finished successfully!"
+      - name: Frontend — install
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+
+      - name: Frontend — typecheck & lint
+        working-directory: apps/web
+        run: |
+          npm run typecheck
+          npm run lint
+
+      - name: Frontend — build
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || 'https://api.sistlabum.local/api/v1' }}
+          NEXT_PUBLIC_APP_NAME: SISTLABUM
+          ADMIN_LOGIN_PATH: ${{ vars.ADMIN_LOGIN_PATH || '/admin-masuk' }}
+        run: npm run build
+
+  # ------------------------------------------------------------------
+  # 2. Deploy: upload ke release baru, swap symlink, rollback bila gagal.
+  # ------------------------------------------------------------------
+  deploy:
+    name: Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Siapkan SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload release
+        run: |
+          REL="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
+          echo "REL=$REL" >> "$GITHUB_ENV"
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+
+          ssh -i ~/.ssh/deploy_key "$TARGET" "mkdir -p $APP_ROOT/releases/$REL"
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key" \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude 'vendor' \
+            --exclude '.next' \
+            --exclude 'storage' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            ./ "$TARGET:$APP_ROOT/releases/$REL/"
+
+      - name: Aktifkan release
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "~/deploy/bin/release.sh $APP_NAME $REL --skip-build"
+
+      - name: Rollback bila gagal
+        if: failure()
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "~/deploy/bin/rollback.sh $APP_NAME" || true
