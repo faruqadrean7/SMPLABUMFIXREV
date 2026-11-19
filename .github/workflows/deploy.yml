@@ -113,7 +113,7 @@ jobs:
             --exclude 'node_modules' \
             --exclude 'vendor' \
             --exclude '.next' \
-            --exclude 'storage' \
+            --exclude '/apps/api/storage' \
             --exclude '.env' \
             --exclude '.env.*' \
             ./ "$APP_ROOT/releases/$REL/"
