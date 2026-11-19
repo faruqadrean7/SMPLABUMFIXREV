@@ -98,6 +98,9 @@ tar -xzf storage-20261119-143147.tar.gz -C /home/j1nkisaragi/projects/SMPLABUMFI
 
 ## Catatan penting
 
+- **Runtime saat ini** masih berjalan dari working copy `~/projects/SMPLABUMFIXREV`
+  (bukan `/var/www/sistlabum/releases`). Layout release + rollback baru aktif setelah
+  deploy CI pertama jalan — `/var/www` butuh sudo untuk dibuat.
 - `php artisan serve` **tidak dipakai lagi** — sudah diganti Caddy + PHP-FPM.
 - Setelah mengubah `.env`, jalankan `php artisan config:clear` lalu
   `php artisan config:cache`, dan restart `sistlabum-fpm` + `sistlabum-queue`.
