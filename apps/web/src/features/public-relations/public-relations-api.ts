@@ -109,6 +109,41 @@ export const publicRelationsApi = {
   },
 
   // =========================================================================
+  // 2b. LAMPIRAN FOTO PENGADUAN (BE-GUEST-04)
+  // Alur: presign -> upload (multipart ke URL bertanda tangan) -> confirm
+  // =========================================================================
+
+  presignComplaintAttachment: async (payload: {
+    filename: string;
+    mime_type: string;
+    size_bytes: number;
+  }): Promise<ApiResponse<{ token: string; upload_url: string; expires_at: string }>> => {
+    const res = await apiClient.post<
+      ApiResponse<{ token: string; upload_url: string; expires_at: string }>
+    >('/public/complaints/attachments/presign', payload);
+    return res.data;
+  },
+
+  uploadComplaintAttachment: async (uploadUrl: string, file: File): Promise<void> => {
+    const form = new FormData();
+    form.append('file', file);
+    // URL sudah bertanda tangan & absolut: kirim apa adanya, tanpa baseURL.
+    await apiClient.post(uploadUrl, form, {
+      baseURL: '',
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  confirmComplaintAttachment: async (
+    token: string
+  ): Promise<ApiResponse<{ file_id: string; mime_type: string; size_bytes: number }>> => {
+    const res = await apiClient.post<
+      ApiResponse<{ file_id: string; mime_type: string; size_bytes: number }>
+    >(`/public/complaints/attachments/${token}/confirm`);
+    return res.data;
+  },
+
+  // =========================================================================
   // 3. KEMITRAAN & DOKUMEN MOU (BE-HUM-01 / ADM-HUM-01)
   // =========================================================================
 
