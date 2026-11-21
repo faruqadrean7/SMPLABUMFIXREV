@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Student;
 use App\Models\StudentStatusHistory;
 use App\Models\User;
+use App\Services\Concerns\ProvisionsLoginAccount;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -16,6 +17,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class StudentService
 {
+    use ProvisionsLoginAccount;
+
     /**
      * BE-MST-02: List students with filters and search.
      * Scoped based on user role and permissions.
@@ -147,6 +150,40 @@ class StudentService
     /**
      * BE-MST-02: Update student details and track status change if applicable.
      */
+    /**
+     * Buat / setel ulang akun login portal siswa.
+     * Tanpa ini, siswa hasil input admin tidak punya akun untuk masuk portal.
+     */
+    public function createOrResetAccount(string $id, array $data, Request $request): Student
+    {
+        return DB::transaction(function () use ($id, $data, $request) {
+            $student = Student::with('user')->findOrFail($id);
+            $schoolId = $student->school_id ?? $request->user()?->school_id;
+
+            $user = $this->upsertLoginAccount(
+                person: $student,
+                roleCode: 'student',
+                roleName: 'Siswa',
+                data: $data,
+                schoolId: $schoolId,
+                phone: null,
+                usernameFallback: 'siswa_'.preg_replace('/\D/', '', (string) $student->nis),
+            );
+
+            $this->logAudit(
+                $request->user()?->id,
+                'student.account_provisioned',
+                'Student',
+                $student->id,
+                null,
+                ['user_id' => $user->id, 'username' => $user->username],
+                $request
+            );
+
+            return $student->load('user');
+        });
+    }
+
     public function updateStudent(string $id, array $data, Request $request): Student
     {
         return DB::transaction(function () use ($id, $data, $request) {

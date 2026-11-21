@@ -176,7 +176,10 @@ class ImportCbtExamPackage extends Command
     {
         $path = $this->argument('manifest');
         if (! str_starts_with($path, '/')) {
-            $path = storage_path('app/'.$path);
+            // Terima dua bentuk: "import/x.json" (relatif ke storage/app)
+            // maupun "storage/app/import/x.json" (relatif ke root proyek).
+            $candidates = [base_path($path), storage_path('app/'.$path)];
+            $path = collect($candidates)->first(fn ($p) => is_file($p)) ?? $candidates[1];
         }
         if (! is_file($path)) {
             $this->error("Manifest tidak ditemukan: {$path}");

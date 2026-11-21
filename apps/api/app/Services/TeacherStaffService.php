@@ -9,6 +9,7 @@ use App\Models\Staff;
 use App\Models\Teacher;
 use App\Models\TeacherSalarySlip;
 use App\Models\User;
+use App\Services\Concerns\ProvisionsLoginAccount;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -22,6 +23,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class TeacherStaffService
 {
+    use ProvisionsLoginAccount;
+
     /**
      * BE-MST-03: List teachers with pagination, search, and relations.
      */
@@ -138,6 +141,40 @@ class TeacherStaffService
     /**
      * BE-MST-03: Update teacher.
      */
+    /**
+     * Buat / setel ulang akun login portal guru.
+     * Tanpa ini, guru hasil input admin tidak punya akun untuk masuk portal guru.
+     */
+    public function createOrResetAccount(string $id, array $data, Request $request): Teacher
+    {
+        return DB::transaction(function () use ($id, $data, $request) {
+            $teacher = Teacher::with('user')->findOrFail($id);
+            $schoolId = $teacher->school_id ?? $request->user()?->school_id;
+
+            $user = $this->upsertLoginAccount(
+                person: $teacher,
+                roleCode: 'teacher',
+                roleName: 'Guru Mata Pelajaran',
+                data: $data,
+                schoolId: $schoolId,
+                phone: null,
+                usernameFallback: 'guru_'.preg_replace('/\D/', '', (string) $teacher->nip),
+            );
+
+            $this->logAudit(
+                $request->user()?->id,
+                'teacher.account_provisioned',
+                'Teacher',
+                $teacher->id,
+                null,
+                ['user_id' => $user->id, 'username' => $user->username],
+                $request
+            );
+
+            return $teacher->load('user');
+        });
+    }
+
     public function updateTeacher(string $id, array $data, Request $request): Teacher
     {
         return DB::transaction(function () use ($id, $data, $request) {

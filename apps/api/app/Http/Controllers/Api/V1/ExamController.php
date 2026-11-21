@@ -251,6 +251,15 @@ class ExamController extends Controller
             return $this->successResponse($exam);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Ujian CBT tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            $code = match ($e->getStatusCode()) {
+                401 => 'UNAUTHENTICATED',
+                403 => 'FORBIDDEN',
+                422 => 'BUSINESS_RULE_VIOLATION',
+                default => 'BAD_REQUEST',
+            };
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 

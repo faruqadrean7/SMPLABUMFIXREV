@@ -9,6 +9,7 @@ use App\Models\ExamParticipant;
 use App\Models\ExamQuestion;
 use App\Models\ExamRoom;
 use App\Models\User;
+use App\Services\Concerns\GuardsExamOwnership;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ExamService
 {
+    use GuardsExamOwnership;
+
     /**
      * BE-CBT-02: Daftar ujian CBT dengan filter.
      */
@@ -103,12 +106,10 @@ class ExamService
             ->findOrFail($id);
     }
 
-    /**
-     * BE-CBT-02: Perbarui pengaturan ujian.
-     */
     public function updateExam(string $id, array $data, Request $request): Exam
     {
         $exam = Exam::findOrFail($id);
+        $this->assertCanManage($exam, $request->user());
         $oldData = $exam->toArray();
 
         if (in_array($exam->status, ['berlangsung', 'selesai']) && isset($data['duration_min']) && $data['duration_min'] !== $exam->duration_min) {
@@ -136,6 +137,7 @@ class ExamService
     public function deleteExam(string $id, Request $request): void
     {
         $exam = Exam::findOrFail($id);
+        $this->assertCanManage($exam, $request->user());
 
         if ($exam->status !== 'draft') {
             throw new HttpException(422, "Ujian tidak dapat dihapus karena sudah berstatus {$exam->status}. Silakan arsipkan ujian jika tidak lagi digunakan.");
@@ -160,6 +162,7 @@ class ExamService
     public function assignQuestions(string $id, array $data, Request $request): array
     {
         $exam = Exam::findOrFail($id);
+        $this->assertCanManage($exam, $request->user());
 
         if (in_array($exam->status, ['berlangsung', 'selesai'])) {
             throw new HttpException(422, 'Tidak dapat mengubah komposisi butir soal pada ujian yang sedang berlangsung atau selesai.');
@@ -207,6 +210,7 @@ class ExamService
     public function assignRooms(string $id, array $data, Request $request): array
     {
         $exam = Exam::findOrFail($id);
+        $this->assertCanManage($exam, $request->user());
         $assignedRooms = [];
 
         DB::transaction(function () use ($exam, $data, &$assignedRooms, $request) {
@@ -245,6 +249,7 @@ class ExamService
     public function enrollParticipants(string $id, array $data, Request $request): array
     {
         $exam = Exam::findOrFail($id);
+        $this->assertCanManage($exam, $request->user());
         $examRoom = ExamRoom::where('exam_id', $exam->id)->findOrFail($data['exam_room_id']);
 
         $studentIds = collect();
@@ -303,6 +308,7 @@ class ExamService
     public function updateStatus(string $id, string $status, Request $request): Exam
     {
         $exam = Exam::findOrFail($id);
+        $this->assertCanManage($exam, $request->user());
         $oldStatus = $exam->status;
 
         $exam->status = $status;
