@@ -10,22 +10,26 @@ class Download extends Model
 {
     use HasUuids;
 
+    public const VISIBILITIES = ['publik', 'internal'];
+
     protected $fillable = [
+        'school_id',
         'title',
         'category',
+        'visibility',
         'file_id',
-        'description',
-        'download_count',
-        'is_public',
-    ];
-
-    protected $casts = [
-        'download_count' => 'integer',
-        'is_public' => 'boolean',
     ];
 
     public function file(): BelongsTo
     {
         return $this->belongsTo(File::class, 'file_id');
+    }
+
+    /**
+     * Scope a query to only include downloads visible to the public.
+     */
+    public function scopePublicView($query)
+    {
+        return $query->where('visibility', 'publik');
     }
 }

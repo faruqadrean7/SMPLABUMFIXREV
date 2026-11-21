@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 210" font-family="Arial, sans-serif" font-size="13">
+  <rect width="340" height="210" fill="#ffffff"/>
+  <!-- trapezoidal prism pool: front trapezoid (shallow 1m left, deep 6m right) -->
+  <!-- top edge back + perspective -->
+  <g fill="#e6eef5" stroke="#333" stroke-width="1.4">
+    <polygon points="60,70 230,70 230,150 60,95"/>
+  </g>
+  <g fill="#d3e2ef" stroke="#333" stroke-width="1.4">
+    <polygon points="230,70 290,55 290,135 230,150"/>
+  </g>
+  <polygon points="60,70 120,55 290,55 230,70" fill="#f1f6fa" stroke="#333" stroke-width="1.4"/>
+  <!-- depth guide lines -->
+  <line x1="60" y1="95" x2="120" y2="80" stroke="#333" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="40" y="86" fill="#333">1 m</text>
+  <text x="296" y="100" fill="#333">6 m</text>
+  <text x="140" y="118" fill="#333">13 m</text>
+  <text x="250" y="52" fill="#333">8 m</text>
+</svg>

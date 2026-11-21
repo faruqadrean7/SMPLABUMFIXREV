@@ -14,19 +14,22 @@ class LabEquipment extends Model
     protected $table = 'lab_equipment';
 
     protected $fillable = [
+        'school_id',
+        'room_id',
         'code',
         'name',
-        'room_id',
         'category',
-        'total_qty',
-        'available_qty',
+        'stock',
         'condition',
         'notes',
     ];
 
     protected $casts = [
-        'total_qty' => 'integer',
-        'available_qty' => 'integer',
+        'stock' => 'integer',
+    ];
+
+    protected $appends = [
+        'available_stock',
     ];
 
     public function room(): BelongsTo
@@ -37,5 +40,21 @@ class LabEquipment extends Model
     public function loans(): HasMany
     {
         return $this->hasMany(LabLoan::class, 'equipment_id');
+    }
+
+    /**
+     * Jumlah unit alat lab yang sedang aktif dipinjam.
+     */
+    public function getActiveLoansQuantityAttribute(): int
+    {
+        return (int) $this->loans()->where('status', 'dipinjam')->sum('quantity');
+    }
+
+    /**
+     * Jumlah unit alat lab yang siap dipinjam.
+     */
+    public function getAvailableStockAttribute(): int
+    {
+        return max(0, $this->stock - $this->active_loans_quantity);
     }
 }

@@ -17,16 +17,21 @@ class Alumni extends Model
         'student_id',
         'graduation_year',
         'current_status',
-        'company_or_university',
-        'position_or_major',
+        'next_institution',
+        'study_program',
+        'occupation',
+        'company_name',
+        'contact',
         'phone',
         'email',
         'linkedin_url',
         'address',
+        'is_public',
     ];
 
     protected $casts = [
         'graduation_year' => 'integer',
+        'is_public' => 'boolean',
     ];
 
     public function student(): BelongsTo

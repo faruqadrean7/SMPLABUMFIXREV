@@ -3,31 +3,27 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EarlyWarning extends Model
 {
-    use HasUuids;
+    use HasFactory, HasUuids;
 
-    public $timestamps = false;
+    protected $table = 'early_warnings';
 
     protected $fillable = [
         'student_id',
-        'trigger_type',
+        'rule_code',
         'severity',
-        'details',
-        'is_resolved',
-        'resolved_at',
-        'resolved_by',
-        'created_at',
+        'data',
+        'status',
+        'handled_by',
     ];
 
     protected $casts = [
-        'details' => 'array',
-        'is_resolved' => 'boolean',
-        'resolved_at' => 'datetime',
-        'created_at' => 'datetime',
+        'data' => 'array',
     ];
 
     public function student(): BelongsTo
@@ -35,8 +31,8 @@ class EarlyWarning extends Model
         return $this->belongsTo(Student::class, 'student_id');
     }
 
-    public function resolver(): BelongsTo
+    public function handler(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'resolved_by');
+        return $this->belongsTo(User::class, 'handled_by');
     }
 }

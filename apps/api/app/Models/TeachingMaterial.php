@@ -6,19 +6,30 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TeachingMaterial extends Model
 {
     use HasFactory, HasUuids;
 
     protected $fillable = [
+        'title',
+        'description',
         'grade_level_id',
         'subject_id',
         'uploaded_by',
         'file_id',
         'material_type',
         'version',
+        'parent_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'version' => 'integer',
+        ];
+    }
 
     public function gradeLevel(): BelongsTo
     {
@@ -38,5 +49,15 @@ class TeachingMaterial extends Model
     public function file(): BelongsTo
     {
         return $this->belongsTo(File::class);
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    public function versions(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id')->orderBy('version', 'asc');
     }
 }

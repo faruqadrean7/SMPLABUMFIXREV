@@ -10,17 +10,13 @@ class MediaItem extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
+    public const MEDIA_TYPES = ['image', 'video'];
 
     protected $fillable = [
         'album_id',
         'file_id',
+        'media_type',
         'caption',
-        'sort_order',
-    ];
-
-    protected $casts = [
-        'sort_order' => 'integer',
     ];
 
     public function album(): BelongsTo

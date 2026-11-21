@@ -11,7 +11,7 @@ Paket ini adalah sumber kebenaran (source of truth) untuk membangun portal sekol
 | `03_ARCHITECTURE.md` | Arsitektur sistem, komponen, alur data, deployment | Dev, DevOps |
 | `04_PRD_BACKEND.md` | PRD API backend per modul | Backend dev, AI agent |
 | `05_PRD_WEB_PPDB.md` | PRD website publik + portal PPDB | Frontend dev |
-| `06_PRD_SYSTEM_ADMIN.md` | PRD sistem admin (web dashboard) | Frontend dev |
+| `06_PRD_SYSTEM_ADMIN.md` | PRD web portal & dashboard terpadu (admin, guru, siswa, ortu) | Frontend dev |
 | `07_PRD_MOBILE.md` | PRD aplikasi mobile ortu/guru/siswa | Mobile dev |
 | `08_DATABASE_SCHEMA.md` | Entitas, relasi, aturan data | Backend dev |
 | `09_SECURITY_PRIVACY.md` | Keamanan, hak akses, perlindungan data anak | Semua |
@@ -62,22 +62,22 @@ Endpoint / Layar / Tabel terkait: ...
 ## Indeks Modul (14 Modul Final)
 Rincian kuantitatif, daftar fitur lengkap, dan graf dependensi ada di `13_MASTER_MODULES.md`.
 
-| Kode modul | Nama | Prioritas | Backend | Web | Admin | Mobile |
+| Kode modul | Nama | Prioritas | Backend | Web Portal | Admin | Mobile |
 |---|---|:-:|:-:|:-:|:-:|:-:|
 | AUTH | Autentikasi & hak akses | **P0** | ✅ | ✅ | ✅ | ✅ |
 | MST | Master data | **P0** | ✅ | | ✅ | |
 | CMS | Konten & profil sekolah | **P0** | ✅ | ✅ | ✅ | |
 | PPDB | Penerimaan murid baru | **P0** | ✅ | ✅ | ✅ | |
 | GUEST | Buku tamu digital & aspirasi | **P0** | ✅ | ✅ | ✅ | |
-| ACD | Akademik (jadwal, jurnal, presensi, izin, materi) | **P0** | ✅ | | ✅ | ✅ |
-| GRD | Penilaian & Rapor (komponen, karakter, e-progress, e-rapor) | **P0** | ✅ | | ✅ | ✅ |
-| CBT | Ujian digital | **P0** | ✅ | | ✅ | ✅ |
-| STD | Kesiswaan (poin, ekskul, lomba, study trip) | **P1** | ✅ | | ✅ | ✅ |
-| BK | Bimbingan konseling | **P1** | ✅ | | ✅ | ✅ |
-| SAR | Sarpras, aset, helpdesk, perpustakaan | **P1** | ✅ | | ✅ | ✅ |
-| HUM | Humas, kemitraan, alumni & tracer | **P2** | ✅ | | ✅ | |
-| RPT | Laporan & dashboard eksekutif | **P0** | ✅ | | ✅ | ✅ |
-| NTF/SYS | Notifikasi & utilitas sistem | **P0** | ✅ | | ✅ | ✅ |
+| ACD | Akademik (jadwal, jurnal, presensi, izin, materi) | **P0** | ✅ | ✅ | ✅ | ✅ |
+| GRD | Penilaian & Rapor (komponen, karakter, e-progress, e-rapor) | **P0** | ✅ | ✅ | ✅ | ✅ |
+| CBT | Ujian digital | **P0** | ✅ | ✅ | ✅ | ✅ |
+| STD | Kesiswaan (poin, ekskul, lomba, study trip) | **P1** | ✅ | ✅ | ✅ | ✅ |
+| BK | Bimbingan konseling | **P1** | ✅ | ✅ | ✅ | ✅ |
+| SAR | Sarpras, aset, helpdesk, perpustakaan | **P1** | ✅ | ✅ | ✅ | ✅ |
+| HUM | Humas, kemitraan, alumni & tracer | **P2** | ✅ | ✅ | ✅ | |
+| RPT | Laporan & dashboard eksekutif | **P0** | ✅ | ✅ | ✅ | ✅ |
+| NTF/SYS | Notifikasi & utilitas sistem | **P0** | ✅ | ✅ | ✅ | ✅ |
 
 > Catatan: Modul SAR memiliki fitur darurat P0 (`BE-SAR-01` booking fasilitas dan `BE-SAR-03` helpdesk perbaikan).
 

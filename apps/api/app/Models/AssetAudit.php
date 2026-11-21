@@ -12,9 +12,11 @@ class AssetAudit extends Model
     use HasUuids;
 
     protected $fillable = [
-        'audit_date',
-        'auditor_staff_id',
+        'school_id',
         'room_id',
+        'title',
+        'audit_date',
+        'auditor_id',
         'status',
         'notes',
     ];
@@ -25,7 +27,7 @@ class AssetAudit extends Model
 
     public function auditor(): BelongsTo
     {
-        return $this->belongsTo(Staff::class, 'auditor_staff_id');
+        return $this->belongsTo(User::class, 'auditor_id');
     }
 
     public function room(): BelongsTo

@@ -11,28 +11,35 @@ class Trip extends Model
 {
     use HasUuids;
 
+    protected $table = 'trips';
+
     protected $fillable = [
-        'name',
+        'school_id',
+        'title',
         'destination',
-        'departure_date',
+        'depart_date',
         'return_date',
+        'route',
+        'guide_file_id',
         'description',
-        'cost_per_student',
-        'max_participants',
-        'pic_teacher_id',
+        'cost_notes',
         'status',
     ];
 
     protected $casts = [
-        'departure_date' => 'date',
+        'depart_date' => 'date',
         'return_date' => 'date',
-        'cost_per_student' => 'decimal:2',
-        'max_participants' => 'integer',
+        'route' => 'array',
     ];
 
-    public function pic(): BelongsTo
+    protected $appends = [
+        'participants_count',
+        'consents_count',
+    ];
+
+    public function guideFile(): BelongsTo
     {
-        return $this->belongsTo(Teacher::class, 'pic_teacher_id');
+        return $this->belongsTo(File::class, 'guide_file_id');
     }
 
     public function participants(): HasMany
@@ -40,8 +47,15 @@ class Trip extends Model
         return $this->hasMany(TripParticipant::class, 'trip_id');
     }
 
-    public function consents(): HasMany
+    public function getParticipantsCountAttribute(): int
     {
-        return $this->hasMany(TripConsent::class, 'trip_id');
+        return (int) $this->participants()->count();
+    }
+
+    public function getConsentsCountAttribute(): int
+    {
+        return (int) $this->participants()->whereHas('consent', function ($q) {
+            $q->where('decision', 'setuju');
+        })->count();
     }
 }

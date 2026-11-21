@@ -12,10 +12,10 @@ class Loan extends Model
 
     protected $fillable = [
         'book_id',
-        'borrower_user_id',
+        'borrower_id',
         'loan_date',
         'due_date',
-        'return_date',
+        'returned_at',
         'status',
         'fine_amount',
         'fine_paid',
@@ -25,8 +25,8 @@ class Loan extends Model
     protected $casts = [
         'loan_date' => 'date',
         'due_date' => 'date',
-        'return_date' => 'date',
-        'fine_amount' => 'decimal:2',
+        'returned_at' => 'date',
+        'fine_amount' => 'integer',
         'fine_paid' => 'boolean',
     ];
 
@@ -37,6 +37,6 @@ class Loan extends Model
 
     public function borrower(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'borrower_user_id');
+        return $this->belongsTo(User::class, 'borrower_id');
     }
 }

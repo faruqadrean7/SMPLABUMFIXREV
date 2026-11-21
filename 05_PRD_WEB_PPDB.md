@@ -53,7 +53,7 @@ flowchart TD
 | `/ppdb/dashboard/*` | Area pendaftar | CSR (auth) |
 | `/ppdb/pengumuman` | Cek hasil | CSR |
 | `/verifikasi/{token}` | Verifikasi keaslian dokumen QR | SSR |
-| `/masuk` | Pintu login (arahkan ke admin/mobile/CBT) | Statis |
+| `/masuk` | Pintu login portal terpadu (Siswa, Guru, Ortu, Admin/Staf) & tautan unduh APK Mobile | Statis / CSR |
 
 ---
 
@@ -94,8 +94,10 @@ Alamat, peta (embed), telepon, email, jam layanan, tombol WhatsApp, tautan media
 ### WEB-VER-01: Verifikasi dokumen QR [P0]
 Halaman publik memverifikasi QR e-progress report/rapor: tampil nama (disamarkan sebagian), periode, status keabsahan; tidak menampilkan nilai.
 
-### WEB-AUTH-01: Pintu login portal [P0]
-Halaman memilih peran/arah: Admin, CBT siswa, unduh aplikasi mobile (tautan Play Store/App Store).
+### WEB-AUTH-01: Pintu login portal terpadu (/masuk) [P0]
+Halaman gerbang masuk terpadu civitas sekolah:
+- Form login akun tunggal yang mendeteksi peran pengguna otomatis (Siswa, Guru, Orang Tua, Admin TU, Kepala Sekolah) dan mengarahkan langsung ke dashboard web perannya masing-masing (`/admin/dashboard`, `/portal/siswa`, `/portal/ortu`).
+- Kartu informasi unduh Aplikasi Mobile Android Native (QR code scan & tautan unduh APK / Google Play Store) bagi pengguna smartphone (Siswa, Guru, Ortu).
 
 ### WEB-SEO-01: SEO & performa [P0]
 Metadata dinamis, sitemap.xml, robots.txt, schema.org (`EducationalOrganization`, `NewsArticle`), gambar dioptimalkan (next/image, WebP), kompresi, cache header. Target Lighthouse ≥ 90 semua kategori utama.
@@ -131,14 +133,43 @@ flowchart TD
 ```
 
 ### WEB-PPDB-01: Halaman informasi [P0]
-Jalur dan syarat (akordeon), kuota, jadwal (timeline), biaya, FAQ, alur pendaftaran (stepper visual), kontak panitia, tombol Daftar (aktif sesuai gelombang), statistik pendaftar (opsional, bisa disembunyikan).
+Jalur dan syarat (akordeon), kuota, jadwal (timeline), biaya, FAQ, alur pendaftaran (stepper visual), kontak panitia, tombol Daftar (aktif sesuai gelombang), widget cek pengumuman hasil mandiri publik, statistik pendaftar (opsional, bisa disembunyikan).
 
-### WEB-PPDB-02: Registrasi & login [P0]
-Registrasi: nama, email/WA, password; OTP; login; lupa password. Validasi NIK unik.
-AC: pesan error jelas (Bahasa Indonesia); OTP kirim ulang dengan jeda 60 detik.
+### WEB-PPDB-02: Registrasi & Login Calon Siswa [P0]
+Alur pendaftaran mandiri calon siswa berbasis akun:
+1. **Registrasi Akun Baru (`/ppdb/daftar`)**:
+   - Kolom: Nama Lengkap Calon Siswa, Email Aktif, Nomor WhatsApp/HP, Password (minimal 8 karakter), dan Konfirmasi Password.
+   - Pengecekan NIK unik (`POST /api/v1/ppdb/check-nik`) mencegah 1 anak memiliki 2 pendaftaran aktif.
+   - Mengirim permintaan registrasi ke `POST /api/v1/ppdb/register`.
+   - Mengirim kode OTP 6-digit (kedaluwarsa 15 menit, cooldown 60 detik).
+2. **Verifikasi OTP**:
+   - Input modal/halaman kode OTP 6-digit.
+   - Mengirim ke `POST /api/v1/ppdb/verify-otp`.
+   - Sukses → akun menjadi `active` dan menerbitkan token Sanctum (Bearer Token) serta profil pendaftar.
+3. **Portal Masuk Pendaftar (`/ppdb/masuk`)**:
+   - Mendukung **Multi-Identifier Login** (`POST /api/v1/ppdb/login`):
+     - Masuk dengan **Alamat Email**,
+     - Masuk dengan **Nomor WhatsApp / HP**,
+     - Masuk dengan **Nomor Registrasi PPDB** (misal: `REG-2026-0001`).
+   - Rate limiting: Maksimal 5 kali percobaan gagal per 15 menit untuk mitigasi brute force.
+   - Sukses → redirect otomatis ke `/ppdb/dashboard`.
 
-### WEB-PPDB-03: Dashboard pendaftar [P0]
-Kartu status (stepper status pendaftaran), progres kelengkapan (%), daftar berkas dengan status, pesan/catatan panitia, tombol aksi sesuai status.
+### WEB-PPDB-03: Dashboard Pendaftar [P0]
+Area personal calon siswa (`/ppdb/dashboard`):
+- **Kartu Ringkasan Status**:
+  - Nomor Registrasi resmi, Jalur Pilihan, Gelombang Aktif.
+  - Status badge: `draft` (Draf Belum Submit), `submitted` (Menunggu Verifikasi Berkas), `revision` (Perlu Revisi Berkas), `verified` (Berkas Valid / Siap Seleksi), `accepted` (Diterima), `waitlist` (Cadangan), `rejected` (Belum Diterima).
+- **Progres Kelengkapan Formulir (Stepper 5 Langkah)**:
+  - Langkah 1: Data Diri (Nama, NIK, NISN, TTL, Jenis Kelamin, Agama, Alamat).
+  - Langkah 2: Orang Tua / Wali (Nama Ayah/Ibu/Wali, Pekerjaan, Rentang Penghasilan, Kontak).
+  - Langkah 3: Asal Sekolah (Nama Sekolah, NPSN, Nilai Rapor / Ujian).
+  - Langkah 4: Pilihan Peminatan & Data Prestasi (bila jalur prestasi).
+  - Langkah 5: Unggah Dokumen Berkas Persyaratan (KK, Akta Kelahiran, Pas Foto, Rapor).
+- **Panel Berkas & Catatan Revisi**:
+  - Daftar dokumen yang diunggah beserta statusnya (`menunggu`, `valid`, `ditolak`).
+  - Jika berkas ditolak, menampilkan alasan penolakan dan form unggah ulang berkas pengganti.
+- **Cetak Bukti Pendaftaran**:
+  - Tombol unduh / cetak lembar Kartu Tanda Peserta PPDB dengan QR Code verifikasi.
 
 ### WEB-PPDB-04: Form bertahap [P0]
 | Langkah | Isi |
@@ -149,28 +180,29 @@ Kartu status (stepper status pendaftaran), progres kelengkapan (%), daftar berka
 | 4. Pilihan | Jalur, jurusan/peminatan, prestasi (bila jalur prestasi) |
 | 5. Berkas | Unggah KK, akta, ijazah/SKL, rapor, foto, sertifikat sesuai syarat |
 AC:
-- Draf otomatis tersimpan setiap pindah langkah dan tiap 30 detik.
+- Draf otomatis tersimpan setiap pindah langkah (`PATCH /api/v1/ppdb/applications/{id}/steps/{step}`).
 - Validasi sisi klien (Zod) dan pesan error dari server ditampilkan per field.
 - Tidak bisa submit jika berkas wajib belum lengkap.
-- Layar konfirmasi merangkum seluruh data sebelum submit final.
+- Layar konfirmasi merangkum seluruh data sebelum submit final (`POST /api/v1/ppdb/applications/{id}/submit`).
 
 ### WEB-PPDB-05: Upload berkas [P0]
-Drag-drop, pratinjau, validasi tipe/ukuran di klien, progress bar, ganti berkas, status per berkas (menunggu/valid/ditolak + alasan).
+Drag-drop, pratinjau, validasi tipe/ukuran di klien (PDF/JPG/PNG maks 2MB), progress bar, ganti berkas, status per berkas (menunggu/valid/ditolak + alasan).
+Endpoint: `POST /api/v1/ppdb/applications/{id}/documents`.
 
 ### WEB-PPDB-06: Cek status & revisi [P0]
-Status jelas dengan warna dan teks; bila revisi: berkas/kolom yang perlu diperbaiki disorot.
+Status jelas dengan warna dan teks; bila revisi: berkas/kolom yang perlu diperbaiki disorot dengan peringatan khusus.
 
 ### WEB-PPDB-07: Pengumuman hasil [P0]
-Form nomor pendaftaran + tanggal lahir → hasil (diterima/cadangan/tidak) dengan pesan dan langkah selanjutnya. Muncul hanya setelah waktu publikasi. Perlindungan rate limit + captcha.
+Form nomor pendaftaran + tanggal lahir → hasil (diterima/cadangan/tidak) dengan pesan dan langkah selanjutnya. Muncul hanya setelah waktu publikasi. Perlindungan rate limit + captcha. Endpoint: `POST /api/v1/public/ppdb/results/check`.
 
 ### WEB-PPDB-08: Daftar ulang [P0]
-Konfirmasi kesediaan, unggah berkas tambahan, pilih jadwal verifikasi (bila ada), status konfirmasi.
+Konfirmasi kesediaan, unggah berkas tambahan, pilih jadwal verifikasi (bila ada), status konfirmasi. Endpoint: `POST /api/v1/ppdb/applications/{id}/re-register`.
 
 ### WEB-PPDB-09: Cetak bukti & kartu [P1]
-Unduh PDF bukti pendaftaran (QR) dan bukti penerimaan.
+Unduh PDF bukti pendaftaran (QR) dan bukti penerimaan. Endpoint: `GET /api/v1/ppdb/applications/{id}/receipt`.
 
 ### WEB-PPDB-10: Notifikasi [P1]
-Email/WA otomatis: pendaftaran masuk, berkas ditolak, hasil seleksi, jadwal daftar ulang.
+Email/WA otomatis: pendaftaran masuk, kode OTP, berkas ditolak, hasil seleksi, jadwal daftar ulang.
 
 ---
 

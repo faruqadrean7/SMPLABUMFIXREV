@@ -24,6 +24,7 @@ class LeaveRequest extends Model
         'attachment_file_id',
         'status',
         'decided_by',
+        'decision_notes',
     ];
 
     protected function casts(): array

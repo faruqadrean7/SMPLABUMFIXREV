@@ -12,6 +12,7 @@ class ExamItemAnalysis extends Model
     use HasFactory, HasUuids;
 
     const CREATED_AT = 'calculated_at';
+
     const UPDATED_AT = null;
 
     protected $table = 'exam_item_analysis';

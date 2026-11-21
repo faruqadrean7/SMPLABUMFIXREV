@@ -12,20 +12,22 @@ class Facility extends Model
     use HasUuids;
 
     protected $fillable = [
-        'name',
-        'code',
-        'category',
+        'school_id',
         'room_id',
-        'capacity',
+        'code',
+        'name',
+        'location',
         'description',
-        'photo_file_id',
-        'is_bookable',
+        'facility_type',
+        'capacity',
+        'requires_approval',
         'is_active',
+        'status',
     ];
 
     protected $casts = [
         'capacity' => 'integer',
-        'is_bookable' => 'boolean',
+        'requires_approval' => 'boolean',
         'is_active' => 'boolean',
     ];
 
@@ -34,13 +36,13 @@ class Facility extends Model
         return $this->belongsTo(Room::class, 'room_id');
     }
 
-    public function photoFile(): BelongsTo
-    {
-        return $this->belongsTo(File::class, 'photo_file_id');
-    }
-
     public function bookings(): HasMany
     {
         return $this->hasMany(Booking::class, 'facility_id');
+    }
+
+    public function bookingItems(): HasMany
+    {
+        return $this->hasMany(BookingItem::class, 'facility_id');
     }
 }

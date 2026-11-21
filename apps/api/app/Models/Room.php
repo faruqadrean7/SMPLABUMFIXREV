@@ -12,12 +12,26 @@ class Room extends Model
 {
     use HasFactory, HasUuids, SoftDeletes;
 
+    public const ROOM_TYPES = [
+        'kelas',
+        'laboratorium',
+        'aula',
+        'perpustakaan',
+        'kantor',
+        'lapangan',
+        'lainnya',
+    ];
+
     protected $fillable = [
         'school_id',
         'code',
         'name',
         'room_type',
         'capacity',
+    ];
+
+    protected $casts = [
+        'capacity' => 'integer',
     ];
 
     public function schedules(): HasMany
@@ -28,5 +42,20 @@ class Room extends Model
     public function examRooms(): HasMany
     {
         return $this->hasMany(ExamRoom::class);
+    }
+
+    public function facilities(): HasMany
+    {
+        return $this->hasMany(Facility::class);
+    }
+
+    public function assets(): HasMany
+    {
+        return $this->hasMany(Asset::class);
+    }
+
+    public function labEquipment(): HasMany
+    {
+        return $this->hasMany(LabEquipment::class);
     }
 }

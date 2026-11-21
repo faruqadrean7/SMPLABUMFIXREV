@@ -15,9 +15,13 @@ class AssignmentSubmission extends Model
         'assignment_id',
         'student_id',
         'file_id',
+        'notes',
         'score',
+        'feedback',
         'submitted_at',
     ];
+
+    protected $appends = ['is_late', 'status', 'submission_timing'];
 
     protected function casts(): array
     {
@@ -25,6 +29,30 @@ class AssignmentSubmission extends Model
             'score' => 'decimal:2',
             'submitted_at' => 'datetime',
         ];
+    }
+
+    public function getIsLateAttribute(): bool
+    {
+        if (! $this->submitted_at) {
+            return false;
+        }
+
+        $dueAt = $this->relationLoaded('assignment') ? $this->assignment?->due_at : null;
+        if (! $dueAt) {
+            $dueAt = Assignment::where('id', $this->assignment_id)->value('due_at');
+        }
+
+        return $dueAt ? $this->submitted_at->isAfter($dueAt) : false;
+    }
+
+    public function getStatusAttribute(): string
+    {
+        return $this->score !== null ? 'dinilai' : 'menunggu_penilaian';
+    }
+
+    public function getSubmissionTimingAttribute(): string
+    {
+        return $this->getIsLateAttribute() ? 'terlambat' : 'tepat_waktu';
     }
 
     public function assignment(): BelongsTo

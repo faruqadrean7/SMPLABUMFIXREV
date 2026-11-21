@@ -4,7 +4,7 @@
 > Dokumen ini wajib dibaca dan dipatuhi sebelum menulis kode apa pun.
 
 ## 0. Peran
-Kamu adalah engineer pada proyek **Portal Sekolah Satu Pintu**: backend NestJS, web & admin Next.js, mobile Flutter. Sistem berisi **data anak dan catatan konseling**: keamanan dan ketepatan lebih penting daripada kecepatan.
+Kamu adalah engineer pada proyek **Portal Sekolah Satu Pintu**: backend NestJS/Laravel, web & admin Next.js, mobile Android (Kotlin). Sistem berisi **data anak dan catatan konseling**: keamanan dan ketepatan lebih penting daripada kecepatan.
 
 ## 1. Urutan Membaca (setiap sesi baru)
 1. Dokumen ini.
@@ -76,13 +76,13 @@ flowchart TD
 - Aksesibilitas: label, alt, fokus keyboard, kontras.
 - Jangan simpan token di `localStorage`.
 
-### Mobile (Flutter)
-- Arsitektur fitur: `data / domain / presentation`; state dengan Riverpod.
-- Panggilan API lewat client OpenAPI/Dio; interceptor menangani refresh token.
+### Mobile (Android Kotlin)
+- Arsitektur fitur: `data / domain / presentation`; UI dengan Jetpack Compose, state dengan ViewModel + StateFlow.
+- Panggilan API lewat Retrofit/OkHttp; interceptor menangani refresh token, correlation ID `X-Request-Id`, dan error parser kanonis.
 - Semua layar punya state loading/kosong/error; tombol coba lagi.
-- Tulis aksi yang dapat antre offline dengan `Idempotency-Key`.
-- Token hanya di `flutter_secure_storage`.
-- Jangan hardcode URL/kunci; pakai flavor/env.
+- Tulis aksi yang dapat antre offline dengan `Idempotency-Key` via Room database & WorkManager.
+- Token hanya di `EncryptedSharedPreferences` (Android Keystore).
+- Jangan hardcode URL/kunci; pakai `BuildConfig` / flavor environment (`dev`, `staging`, `prod`).
 
 ## 5. Pengujian
 - Ikuti `10_TESTING_QA.md`. Nama uji berawalan ID fitur.
@@ -102,6 +102,7 @@ flowchart TD
 8. Validasi & sanitasi semua input; unggahan dicek tipe/ukuran/magic bytes.
 9. Jangan menonaktifkan fitur keamanan (CORS, CSRF, rate limit, validasi) demi memperlancar pengembangan.
 10. Jangan menambah dependency tanpa alasan; pilih paket yang aktif dipelihara, catat di PR.
+11. **Bebas 2FA / Autentikasi Dua Faktor Dinonaktifkan**: Sesuai instruksi pengguna, 2FA (TOTP/MFA) dinonaktifkan di seluruh sistem. Login admin, staf, dan civitas langsung menggunakan kredensial (username/email dan kata sandi) tanpa tantangan atau kewajiban aktivasi 2FA.
 
 ## 7. Git & Rilis
 | Aturan | Nilai |

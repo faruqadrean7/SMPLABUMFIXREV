@@ -14,11 +14,10 @@ class TicketEvent extends Model
 
     protected $fillable = [
         'ticket_id',
-        'actor_user_id',
-        'action',
-        'old_status',
-        'new_status',
-        'comment',
+        'actor_id',
+        'event_type',
+        'note',
+        'file_id',
         'created_at',
     ];
 
@@ -33,6 +32,11 @@ class TicketEvent extends Model
 
     public function actor(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'actor_user_id');
+        return $this->belongsTo(User::class, 'actor_id');
+    }
+
+    public function file(): BelongsTo
+    {
+        return $this->belongsTo(File::class, 'file_id');
     }
 }

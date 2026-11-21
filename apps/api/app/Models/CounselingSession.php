@@ -3,38 +3,30 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CounselingSession extends Model
 {
-    use HasUuids;
+    use HasFactory, HasUuids;
+
+    protected $table = 'counseling_sessions';
 
     protected $fillable = [
         'case_id',
-        'session_number',
-        'date',
-        'start_time',
-        'end_time',
-        'place',
+        'session_date',
         'notes_enc',
-        'follow_up_plan',
-        'counselor_teacher_id',
+        'follow_up',
     ];
 
     protected $casts = [
-        'session_number' => 'integer',
-        'date' => 'date',
+        'session_date' => 'date',
         'notes_enc' => 'encrypted',
     ];
 
     public function case(): BelongsTo
     {
         return $this->belongsTo(CounselingCase::class, 'case_id');
-    }
-
-    public function counselor(): BelongsTo
-    {
-        return $this->belongsTo(Teacher::class, 'counselor_teacher_id');
     }
 }

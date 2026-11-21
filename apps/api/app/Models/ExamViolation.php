@@ -11,7 +11,7 @@ class ExamViolation extends Model
 {
     use HasFactory, HasUuids;
 
-    const UPDATED_AT = null;
+    public $timestamps = false;
 
     protected $table = 'exam_violations';
 

@@ -10,19 +10,36 @@ class NotificationLog extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
+    const UPDATED_AT = null;
 
     protected $fillable = [
-        'template_code',
+        'user_id',
+        'template_id',
         'channel',
         'recipient',
         'subject',
+        'body',
+        'payload',
         'status',
-        'error_message',
+        'retry_count',
+        'provider_ref',
+        'error',
         'sent_at',
     ];
 
     protected $casts = [
+        'payload' => 'array',
+        'retry_count' => 'integer',
         'sent_at' => 'datetime',
     ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function template(): BelongsTo
+    {
+        return $this->belongsTo(NotificationTemplate::class, 'template_id');
+    }
 }

@@ -12,17 +12,17 @@ class Ticket extends Model
     use HasUuids;
 
     protected $fillable = [
+        'school_id',
         'ticket_number',
-        'reporter_user_id',
-        'category',
-        'priority',
-        'status',
+        'title',
+        'reporter_id',
         'room_id',
         'asset_id',
-        'title',
+        'assignee_id',
         'description',
-        'assigned_staff_id',
-        'resolution_notes',
+        'priority',
+        'status',
+        'photo_file_id',
         'resolved_at',
     ];
 
@@ -32,7 +32,12 @@ class Ticket extends Model
 
     public function reporter(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'reporter_user_id');
+        return $this->belongsTo(User::class, 'reporter_id');
+    }
+
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assignee_id');
     }
 
     public function room(): BelongsTo
@@ -45,13 +50,13 @@ class Ticket extends Model
         return $this->belongsTo(Asset::class, 'asset_id');
     }
 
-    public function assignedStaff(): BelongsTo
+    public function photoFile(): BelongsTo
     {
-        return $this->belongsTo(Staff::class, 'assigned_staff_id');
+        return $this->belongsTo(File::class, 'photo_file_id');
     }
 
     public function events(): HasMany
     {
-        return $this->hasMany(TicketEvent::class, 'ticket_id');
+        return $this->hasMany(TicketEvent::class, 'ticket_id')->orderBy('created_at', 'asc');
     }
 }

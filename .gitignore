@@ -1,48 +1,54 @@
-# Environment files
-.env
-.env.backup
-.env.*
-!.env.example
-
-# OS generated files
 .DS_Store
 Thumbs.db
-
-# IDE & Editor files
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Node / NPM / Yarn
-node_modules/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnpm-debug.log*
 
-# Next.js / Frontend builds
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+vendor/
+
+# Next.js build outputs & caches (apps/portal & other Next apps)
 .next/
+**/.next/
+.vite/
+**/.vite/
 out/
+**/out/
 build/
 dist/
+.turbo/
+.vercel/
+*.tsbuildinfo
 
-# Flutter / Mobile
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-build/
-*.mode1v3
-*.mode2v3
-*.moved-aside
-*.pbxuser
-*.perspectivev3
+# PHP / Laravel artifacts
+.phpunit.result.cache
+.phpunit.cache/
+/apps/api/storage/*.key
+/apps/api/storage/logs/*.log
+/apps/api/public/storage
+/apps/api/database/database.sqlite
+documentations/
+documentations.zip
+**/seed-credentials.txt
 
-# Storage & Uploads
-/storage/*.key
-storage/pail
+# Test artifacts and temporary load test tokens
+test-results/
+**/test-results/
+playwright-report/
+**/playwright-report/
+/apps/api/storage/load_tokens.json
+/apps/api/tests/load/tokens.json
 
-# Docker local data volumes (jika dimount ke repo)
-postgres_data/
-redis_data/
-minio_data/
+
+# Paket ujian asli (soal + kunci) & manifest impor CBT — JANGAN di-commit (AGENTS.md §6.2/§6.6/§9)
+docs/mtk/
+/apps/api/storage/app/import/
+.claude/

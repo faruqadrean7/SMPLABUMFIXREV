@@ -1,0 +1,1027 @@
+{
+  "school": {
+    "id": "00000000-0000-0000-0000-000000000001"
+  },
+  "owner": {
+    "email": "guru.mtk@labschool.sch.id"
+  },
+  "bank": {
+    "name": "Matematika Kelas 9 — PAS Genap 2025/2026",
+    "subject_code": "MTK",
+    "grade_aliases": [
+      "Kelas IX"
+    ]
+  },
+  "exam": {
+    "title": "PAS Matematika Kelas 9 — Genap 2025/2026",
+    "exam_type": "SAS",
+    "duration_min": 90,
+    "passing_grade": 75,
+    "status": "draft",
+    "creator_email": "guru.mtk@labschool.sch.id"
+  },
+  "questions": [
+    {
+      "sort_order": 1,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 1 + 2 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "1 + 2 = 3",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "3"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "4"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "2"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 2,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 2 + 3 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "2 + 3 = 5",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "5"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "6"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "6"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 3,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 3 + 4 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "3 + 4 = 7",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "7"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "8"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "12"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 4,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 4 + 5 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "4 + 5 = 9",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "9"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "10"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "20"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 5,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 5 + 6 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "5 + 6 = 11",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "11"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "12"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "30"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 6,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 6 + 7 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "6 + 7 = 13",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "13"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "14"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "42"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 7,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 7 + 8 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "7 + 8 = 15",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "15"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "16"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "56"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 8,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 8 + 9 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "8 + 9 = 17",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "17"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "18"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "72"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 9,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 9 + 10 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "9 + 10 = 19",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "19"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "20"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "90"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 10,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 10 + 11 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "10 + 11 = 21",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "21"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "22"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "110"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 11,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 11 + 12 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "11 + 12 = 23",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "23"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "24"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "132"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 12,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 12 + 13 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "12 + 13 = 25",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "25"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "26"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "156"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 13,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 13 + 14 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "13 + 14 = 27",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "27"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "28"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "182"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 14,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 14 + 15 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "14 + 15 = 29",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "29"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "30"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "210"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 15,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 15 + 16 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "15 + 16 = 31",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "31"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "32"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "240"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 16,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 16 + 17 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "16 + 17 = 33",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "33"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "34"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "272"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 17,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 17 + 18 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "17 + 18 = 35",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "35"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "36"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "306"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 18,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 18 + 19 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "18 + 19 = 37",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "37"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "38"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "342"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 19,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 19 + 20 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "19 + 20 = 39",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "39"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "40"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "380"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 20,
+      "question_type": "pg",
+      "body": {
+        "content": "Hasil dari 20 + 21 adalah ..."
+      },
+      "weight": 3.0,
+      "cognitive_level": "MOTS",
+      "difficulty": 2,
+      "explanation": "20 + 21 = 41",
+      "options": [
+        {
+          "label": "A",
+          "body": {
+            "text": "41"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "B",
+          "body": {
+            "text": "42"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "420"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "D",
+          "body": {
+            "text": "1"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 21,
+      "question_type": "menjodohkan",
+      "body": {
+        "content": "Jodohkan lambang unsur dengan nama unsurnya."
+      },
+      "weight": 15.0,
+      "cognitive_level": "LOTS",
+      "difficulty": 1,
+      "options": [
+        {
+          "label": "H",
+          "body": {
+            "text": "Hidrogen"
+          },
+          "is_correct": true,
+          "match_key": "Hidrogen"
+        },
+        {
+          "label": "O",
+          "body": {
+            "text": "Oksigen"
+          },
+          "is_correct": true,
+          "match_key": "Oksigen"
+        },
+        {
+          "label": "C",
+          "body": {
+            "text": "Karbon"
+          },
+          "is_correct": true,
+          "match_key": "Karbon"
+        },
+        {
+          "label": "N",
+          "body": {
+            "text": "Nitrogen"
+          },
+          "is_correct": true,
+          "match_key": "Nitrogen"
+        },
+        {
+          "label": "Na",
+          "body": {
+            "text": "Natrium"
+          },
+          "is_correct": true,
+          "match_key": "Natrium"
+        }
+      ]
+    },
+    {
+      "sort_order": 22,
+      "question_type": "bs",
+      "body": {
+        "content": "Bilangan prima terkecil adalah 2."
+      },
+      "weight": 5.0,
+      "cognitive_level": "LOTS",
+      "difficulty": 1,
+      "options": [
+        {
+          "label": "B",
+          "body": {
+            "text": "Benar"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "S",
+          "body": {
+            "text": "Salah"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 23,
+      "question_type": "bs",
+      "body": {
+        "content": "Hasil dari 7 x 8 adalah 54."
+      },
+      "weight": 5.0,
+      "cognitive_level": "LOTS",
+      "difficulty": 1,
+      "options": [
+        {
+          "label": "B",
+          "body": {
+            "text": "Benar"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "S",
+          "body": {
+            "text": "Salah"
+          },
+          "is_correct": true
+        }
+      ]
+    },
+    {
+      "sort_order": 24,
+      "question_type": "bs",
+      "body": {
+        "content": "Segitiga sama sisi memiliki tiga sudut 60 derajat."
+      },
+      "weight": 5.0,
+      "cognitive_level": "LOTS",
+      "difficulty": 1,
+      "options": [
+        {
+          "label": "B",
+          "body": {
+            "text": "Benar"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "S",
+          "body": {
+            "text": "Salah"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 25,
+      "question_type": "bs",
+      "body": {
+        "content": "Nilai pi (π) kira-kira 3,14."
+      },
+      "weight": 5.0,
+      "cognitive_level": "LOTS",
+      "difficulty": 1,
+      "options": [
+        {
+          "label": "B",
+          "body": {
+            "text": "Benar"
+          },
+          "is_correct": true
+        },
+        {
+          "label": "S",
+          "body": {
+            "text": "Salah"
+          },
+          "is_correct": false
+        }
+      ]
+    },
+    {
+      "sort_order": 26,
+      "question_type": "bs",
+      "body": {
+        "content": "Akar kuadrat dari 81 adalah 8."
+      },
+      "weight": 5.0,
+      "cognitive_level": "LOTS",
+      "difficulty": 1,
+      "options": [
+        {
+          "label": "B",
+          "body": {
+            "text": "Benar"
+          },
+          "is_correct": false
+        },
+        {
+          "label": "S",
+          "body": {
+            "text": "Salah"
+          },
+          "is_correct": true
+        }
+      ]
+    }
+  ]
+}

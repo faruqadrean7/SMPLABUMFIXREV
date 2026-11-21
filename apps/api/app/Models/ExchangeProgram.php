@@ -13,13 +13,14 @@ class ExchangeProgram extends Model
 
     protected $fillable = [
         'partnership_id',
-        'title',
+        'name',
         'type',
         'destination_country',
-        'start_date',
-        'end_date',
+        'destination_institution',
         'quota',
         'description',
+        'start_date',
+        'end_date',
         'pic_teacher_id',
         'status',
     ];
@@ -28,6 +29,10 @@ class ExchangeProgram extends Model
         'start_date' => 'date',
         'end_date' => 'date',
         'quota' => 'integer',
+    ];
+
+    protected $appends = [
+        'participants_count',
     ];
 
     public function partnership(): BelongsTo
@@ -43,5 +48,10 @@ class ExchangeProgram extends Model
     public function participants(): HasMany
     {
         return $this->hasMany(ExchangeParticipant::class, 'program_id');
+    }
+
+    public function getParticipantsCountAttribute(): int
+    {
+        return $this->participants()->count();
     }
 }

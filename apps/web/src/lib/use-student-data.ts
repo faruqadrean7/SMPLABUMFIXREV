@@ -1,0 +1,592 @@
+'use client';
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from './api-client';
+import { ApiResponse } from '@/types/auth';
+import { useAuth } from '@/lib/auth-context';
+import { StudentPointsData, StudentExtracurricularsData } from '@/types/student';
+
+export type StudentProgramType = 'reguler' | 'tahfidz' | 'icp' | 'inklusi';
+
+export interface TahfidzProfileData {
+  target_juz?: number;
+  current_juz?: number;
+  current_surah?: string;
+  last_tasmi_date?: string;
+  last_tasmi_grade?: string;
+  tasmi_evaluator?: string;
+  mutabaah_today?: {
+    sholat_fardhu: number;
+    tilawah_pages: number;
+    dhuha: boolean;
+    tahajud: boolean;
+    updated_at?: string;
+  };
+}
+
+export interface IcpProfileData {
+  cambridge_candidate_id?: string;
+  checkpoint_readiness?: Record<string, { score: number; target?: number; status: string }>;
+  vocab_of_day?: {
+    word: string;
+    phonetic?: string;
+    definition: string;
+    subject?: string;
+  };
+  upcoming_events?: Array<{
+    title: string;
+    date: string;
+    type: string;
+  }>;
+}
+
+export interface InklusiProfileData {
+  gpk?: {
+    id?: string;
+    name: string;
+    contact_phone?: string;
+    room?: string;
+  };
+  ppi_milestones?: Array<{
+    id: string;
+    title: string;
+    is_completed: boolean;
+  }>;
+  daily_mood?: {
+    mood: 'happy' | 'calm' | 'tired' | 'anxious';
+    timestamp?: string;
+    note?: string;
+  };
+}
+
+export interface RegulerProfileData {
+  kktp_summary?: {
+    total_subjects: number;
+    tuntas_count: number;
+    remedial_count: number;
+    average_score: number;
+  };
+  p5_project?: {
+    title: string;
+    theme: string;
+    phase: string;
+    group_name: string;
+    deadline: string;
+  };
+  ekskul?: Array<{
+    name: string;
+    day: string;
+    time: string;
+  }>;
+}
+
+export type StudentProgramProfileData = TahfidzProfileData & IcpProfileData & InklusiProfileData & RegulerProfileData;
+
+export interface StudentDashboardData {
+  name: string;
+  nis: string;
+  nisn: string;
+  className: string;
+  programType?: StudentProgramType;
+  programBadge?: string;
+  programProfile?: StudentProgramProfileData | Record<string, any>;
+  photoFileId: string | null;
+  photoUrl: string | null;
+  todaySchedule: Array<{
+    id: string;
+    dayOfWeek: number;
+    dayName: string;
+    startTime: string;
+    endTime: string;
+    subjectName: string;
+    teacherName: string;
+    roomName: string;
+  }>;
+  upcomingExams: Array<{
+    id: string;
+    title: string;
+    subjectName: string;
+    durationMinutes: number;
+    totalQuestions: number;
+    startTime: string;
+    endTime: string;
+    status: string;
+  }>;
+  attendanceRate: number;
+  totalAchievements: number;
+}
+
+export interface StudentScheduleItem {
+  id: string;
+  dayOfWeek: number;
+  dayName: string;
+  startTime: string;
+  endTime: string;
+  subjectName: string;
+  teacherName: string;
+  roomName: string;
+}
+
+export interface StudentGradeItem {
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  teacherName: string;
+  finalScore: number;
+  letterGrade: string;
+  isPassed: boolean;
+}
+
+export interface StudentTaskItem {
+  id: string;
+  title: string;
+  subjectName: string;
+  dueDate: string;
+  dueTime: string;
+  status: 'aktif' | 'dikumpulkan' | 'dinilai';
+  description: string;
+  teacherName: string;
+  maxScore: number;
+  score: number | null;
+  teacherFeedback: string | null;
+  submission: {
+    id: string;
+    file_name: string;
+    submitted_at: string;
+    notes: string | null;
+  } | null;
+}
+
+export interface StudentExamItem {
+  id: string;
+  title: string;
+  subjectName: string;
+  durationMinutes: number;
+  totalQuestions: number;
+  startTime: string;
+  endTime: string;
+  status: string;
+  roomName?: string;
+  kktp?: number;
+  tokenRequired?: string;
+  score?: number;
+}
+
+export interface CounselingRequestItem {
+  id: string;
+  topic: string;
+  category: string;
+  requestDate?: string;
+  preferredSchedule?: string;
+  counselorName?: string;
+  status: 'menunggu' | 'dijadwalkan' | 'terjadwal' | 'selesai' | 'ditolak';
+  notes: string | null;
+  scheduledTime?: string | null;
+  roomName?: string;
+  room?: string;
+  createdAt?: string;
+  preferredDate?: string;
+  preferredTime?: string;
+}
+
+export interface CreateCounselingPayload {
+  topic?: string;
+  reason?: string;
+  preferred_date?: string;
+  preferred_time?: string;
+  category?: string;
+  is_urgent?: boolean;
+  counselor_name?: string;
+  preferred_schedule?: string;
+  notes?: string;
+}
+
+export interface SubmitTaskPayload {
+  taskId: string;
+  notes?: string;
+  drive_link?: string;
+  file_name?: string;
+}
+
+export function useStudentDashboard() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
+  return useQuery({
+    queryKey: ['student-dashboard', userKey],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentDashboardData>>('/me/student-dashboard');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 2,
+    enabled: !!user,
+  });
+}
+
+export function useStudentSchedule() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
+  return useQuery({
+    queryKey: ['student-schedule', userKey],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentScheduleItem[]>>('/me/schedule');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 5,
+    enabled: !!user,
+  });
+}
+
+export function useStudentGrades() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
+  return useQuery({
+    queryKey: ['student-grades', userKey],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentGradeItem[]>>('/me/grades');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 5,
+    enabled: !!user,
+  });
+}
+
+export function useStudentTasks() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
+  return useQuery({
+    queryKey: ['student-tasks', userKey],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentTaskItem[]>>('/me/tasks');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 2,
+    enabled: !!user,
+  });
+}
+
+export function useSubmitTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ taskId, ...payload }: SubmitTaskPayload) => {
+      const res = await apiClient.post(`/me/tasks/${taskId}/submit`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+    },
+  });
+}
+
+export function useStudentExams() {
+  const { user } = useAuth();
+  const userKey = user?.id || user?.username || 'me';
+  return useQuery({
+    queryKey: ['student-exams', userKey],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentExamItem[]>>('/me/exams');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 2,
+    enabled: !!user,
+  });
+}
+
+export function useCounselingRequests() {
+  return useQuery({
+    queryKey: ['counseling-requests'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<CounselingRequestItem[]>>('/me/counseling-requests');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useCreateCounselingRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: CreateCounselingPayload) => {
+      const res = await apiClient.post('/me/counseling-requests', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['counseling-requests'] });
+    },
+  });
+}
+
+export interface SchoolAnnouncementItem {
+  id: string;
+  title: string;
+  body: string;
+  content?: string;
+  priority?: string;
+  is_pinned?: boolean;
+  publish_at?: string;
+  published_at?: string;
+  created_at?: string;
+}
+
+export function useSchoolAnnouncements() {
+  return useQuery({
+    queryKey: ['school-announcements'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<SchoolAnnouncementItem[]>>('/announcements', {
+        params: { published_only: true, per_page: 5 },
+      });
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export interface TeachingMaterialItem {
+  id: string;
+  title: string;
+  description: string;
+  material_type: string;
+  version: number;
+  subject?: { name: string; code?: string };
+  file?: { url?: string; object_key?: string };
+}
+
+export function useTeachingMaterials() {
+  return useQuery({
+    queryKey: ['teaching-materials'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<TeachingMaterialItem[]>>('/teaching-materials', {
+        params: { per_page: 20 },
+      });
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useSubmitDailyMood() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { mood: 'happy' | 'calm' | 'tired' | 'anxious'; note?: string }) => {
+      const res = await apiClient.post<ApiResponse<any>>('/me/program/mood', payload);
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+    },
+  });
+}
+
+export function useSubmitMutabaah() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      sholat_fardhu: number;
+      tilawah_pages: number;
+      dhuha?: boolean;
+      tahajud?: boolean;
+    }) => {
+      const res = await apiClient.post<ApiResponse<any>>('/me/program/mutabaah', payload);
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+    },
+  });
+}
+
+// =========================================================================
+// PROGRAM KHUSUS: MATERI, TARGET, & TUGAS (BE-PROG-01 / FE-PROG-01)
+// =========================================================================
+
+export interface ProgramMaterialItem {
+  id: string;
+  program_type: 'tahfidz' | 'icp' | 'inklusi' | 'reguler' | string;
+  title: string;
+  description?: string | null;
+  material_type: string;
+  file_id?: string | null;
+  external_url?: string | null;
+  meta?: Record<string, any> | null;
+  created_at: string;
+  creator?: {
+    id: string;
+    username: string;
+  } | null;
+  file?: {
+    id: string;
+    original_name?: string;
+    url?: string;
+    size_bytes?: number;
+  } | null;
+}
+
+export interface ProgramTargetItem {
+  id: string;
+  student_id: string;
+  program_type: 'tahfidz' | 'icp' | 'inklusi' | 'reguler' | string;
+  title: string;
+  description?: string | null;
+  domain?: string | null;
+  target_value?: string | null;
+  current_value?: string | null;
+  period?: string | null;
+  status: 'aktif' | 'tercapai' | 'batal' | string;
+  meta?: Record<string, any> | null;
+  created_at: string;
+  setter?: {
+    id: string;
+    username: string;
+  } | null;
+}
+
+export interface ProgramTaskSubmissionItem {
+  id: string;
+  task_id: string;
+  student_id: string;
+  file_id?: string | null;
+  link?: string | null;
+  notes?: string | null;
+  status: 'dikumpulkan' | 'dinilai' | 'perlu_revisi' | string;
+  score?: number | null;
+  feedback?: string | null;
+  submitted_at: string;
+  file?: {
+    id: string;
+    original_name?: string;
+    url?: string;
+  } | null;
+}
+
+export interface ProgramTaskItem {
+  id: string;
+  program_type: 'tahfidz' | 'icp' | 'inklusi' | 'reguler' | string;
+  title: string;
+  instructions?: string | null;
+  due_at?: string | null;
+  file_id?: string | null;
+  meta?: Record<string, any> | null;
+  created_at: string;
+  creator?: {
+    id: string;
+    username: string;
+  } | null;
+  file?: {
+    id: string;
+    original_name?: string;
+    url?: string;
+  } | null;
+  submissions?: ProgramTaskSubmissionItem[];
+}
+
+export function useProgramMaterials(params?: { q?: string; material_type?: string; per_page?: number }) {
+  return useQuery({
+    queryKey: ['program-materials', params],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<ProgramMaterialItem[]>>('/me/program/materials', {
+        params,
+      });
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+export function useProgramTargets(params?: { status?: string; domain?: string; per_page?: number }) {
+  return useQuery({
+    queryKey: ['program-targets', params],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<ProgramTargetItem[]>>('/me/program/targets', {
+        params,
+      });
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+export function useProgramTasks(params?: { status?: string; per_page?: number }) {
+  return useQuery({
+    queryKey: ['program-tasks', params],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<ProgramTaskItem[]>>('/me/program/tasks', {
+        params,
+      });
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+export function useSubmitProgramTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      taskId,
+      payload,
+      idempotencyKey,
+    }: {
+      taskId: string;
+      payload: { file_id?: string; link?: string; notes?: string };
+      idempotencyKey?: string;
+    }) => {
+      const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : undefined;
+      const res = await apiClient.post<ApiResponse<ProgramTaskSubmissionItem>>(
+        `/me/program/tasks/${taskId}/submit`,
+        payload,
+        { headers }
+      );
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+    },
+  });
+}
+
+export function useStudentPoints() {
+  return useQuery({
+    queryKey: ['student-points'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentPointsData>>('/me/points');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useStudentExtracurriculars() {
+  return useQuery({
+    queryKey: ['student-extracurriculars'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<StudentExtracurricularsData>>('/me/extracurriculars');
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useRegisterExtracurricular() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (extracurricularId: string) => {
+      const res = await apiClient.post<ApiResponse<any>>('/me/extracurriculars/register', {
+        extracurricular_id: extracurricularId,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student-extracurriculars'] });
+    },
+  });
+}
+
+
+
+
+
+

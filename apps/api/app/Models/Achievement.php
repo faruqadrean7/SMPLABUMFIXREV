@@ -10,21 +10,30 @@ class Achievement extends Model
 {
     use HasUuids;
 
+    protected $table = 'achievements';
+
     protected $fillable = [
+        'school_id',
         'student_id',
         'competition_id',
         'title',
-        'level',
-        'rank',
+        'rank_level',
+        'achieved_at',
         'certificate_file_id',
+        'photo_file_id',
         'points_awarded',
+        'verification_status',
         'verified_by',
         'verified_at',
+        'rejection_reason',
+        'student_point_id',
+        'notes',
     ];
 
     protected $casts = [
-        'points_awarded' => 'integer',
+        'achieved_at' => 'date',
         'verified_at' => 'datetime',
+        'points_awarded' => 'integer',
     ];
 
     public function student(): BelongsTo
@@ -42,8 +51,18 @@ class Achievement extends Model
         return $this->belongsTo(File::class, 'certificate_file_id');
     }
 
-    public function verifier(): BelongsTo
+    public function photoFile(): BelongsTo
+    {
+        return $this->belongsTo(File::class, 'photo_file_id');
+    }
+
+    public function verifiedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function studentPoint(): BelongsTo
+    {
+        return $this->belongsTo(StudentPoint::class, 'student_point_id');
     }
 }

@@ -5,25 +5,29 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Booking extends Model
 {
     use HasUuids;
 
     protected $fillable = [
+        'school_id',
         'facility_id',
-        'booked_by_user_id',
+        'requested_by',
+        'start_at',
+        'end_at',
         'purpose',
-        'start_time',
-        'end_time',
+        'attendees_count',
         'status',
-        'approved_by_user_id',
-        'rejection_reason',
+        'decided_by',
+        'decision_notes',
     ];
 
     protected $casts = [
-        'start_time' => 'datetime',
-        'end_time' => 'datetime',
+        'start_at' => 'datetime',
+        'end_at' => 'datetime',
+        'attendees_count' => 'integer',
     ];
 
     public function facility(): BelongsTo
@@ -31,13 +35,18 @@ class Booking extends Model
         return $this->belongsTo(Facility::class, 'facility_id');
     }
 
-    public function booker(): BelongsTo
+    public function requester(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'booked_by_user_id');
+        return $this->belongsTo(User::class, 'requested_by');
     }
 
-    public function approver(): BelongsTo
+    public function decider(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'approved_by_user_id');
+        return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(BookingItem::class, 'booking_id');
     }
 }

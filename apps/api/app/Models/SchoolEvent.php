@@ -4,39 +4,36 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SchoolEvent extends Model
 {
     use HasUuids;
 
+    public const CATEGORIES = ['ujian', 'libur', 'event'];
+
+    public const VISIBILITIES = ['publik', 'internal'];
+
     protected $table = 'events';
 
     protected $fillable = [
+        'school_id',
         'title',
-        'slug',
-        'description',
-        'start_datetime',
-        'end_datetime',
-        'location',
-        'is_public',
-        'banner_file_id',
-        'created_by',
+        'category',
+        'visibility',
+        'start_at',
+        'end_at',
     ];
 
     protected $casts = [
-        'start_datetime' => 'datetime',
-        'end_datetime' => 'datetime',
-        'is_public' => 'boolean',
+        'start_at' => 'datetime',
+        'end_at' => 'datetime',
     ];
 
-    public function banner(): BelongsTo
+    /**
+     * Scope a query to only include events visible to the public.
+     */
+    public function scopePublicView($query)
     {
-        return $this->belongsTo(File::class, 'banner_file_id');
-    }
-
-    public function creator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'created_by');
+        return $query->where('visibility', 'publik');
     }
 }

@@ -10,6 +10,27 @@ class Post extends Model
 {
     use HasUuids;
 
+    public const STATUS_DRAFT = 'draft';
+
+    public const STATUS_PUBLISHED = 'terbit';
+
+    public const STATUS_ARCHIVED = 'arsip';
+
+    public const STATUSES = [
+        self::STATUS_DRAFT,
+        self::STATUS_PUBLISHED,
+        self::STATUS_ARCHIVED,
+    ];
+
+    public const VISIBILITY_PUBLIC = 'publik';
+
+    public const VISIBILITY_INTERNAL = 'internal';
+
+    public const VISIBILITIES = [
+        self::VISIBILITY_PUBLIC,
+        self::VISIBILITY_INTERNAL,
+    ];
+
     protected $fillable = [
         'school_id',
         'category_id',
@@ -42,5 +63,13 @@ class Post extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'author_id');
+    }
+
+    public function scopePublicView($query)
+    {
+        return $query->where('status', self::STATUS_PUBLISHED)
+            ->where('visibility', self::VISIBILITY_PUBLIC)
+            ->whereNotNull('published_at')
+            ->where('published_at', '<=', now());
     }
 }

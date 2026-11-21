@@ -10,10 +10,15 @@ class SiteSetting extends Model
     use HasUuids;
 
     protected $fillable = [
-        'key',
-        'value',
-        'group',
-        'type',
-        'description',
+        'school_id',
+        'setting_key',
+        'setting_value',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'setting_value' => 'array',
+        ];
+    }
 }

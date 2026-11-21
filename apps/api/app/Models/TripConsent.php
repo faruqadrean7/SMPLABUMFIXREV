@@ -10,40 +10,27 @@ class TripConsent extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
+    protected $table = 'trip_consents';
 
     protected $fillable = [
-        'trip_id',
-        'student_id',
+        'trip_participant_id',
         'guardian_id',
-        'is_consented',
-        'consent_at',
+        'decision',
+        'decided_at',
         'notes',
-        'signature_file_id',
     ];
 
     protected $casts = [
-        'is_consented' => 'boolean',
-        'consent_at' => 'datetime',
+        'decided_at' => 'datetime',
     ];
 
-    public function trip(): BelongsTo
+    public function participant(): BelongsTo
     {
-        return $this->belongsTo(Trip::class, 'trip_id');
-    }
-
-    public function student(): BelongsTo
-    {
-        return $this->belongsTo(Student::class, 'student_id');
+        return $this->belongsTo(TripParticipant::class, 'trip_participant_id');
     }
 
     public function guardian(): BelongsTo
     {
         return $this->belongsTo(Guardian::class, 'guardian_id');
-    }
-
-    public function signatureFile(): BelongsTo
-    {
-        return $this->belongsTo(File::class, 'signature_file_id');
     }
 }

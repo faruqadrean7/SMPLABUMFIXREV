@@ -12,9 +12,11 @@ class TracerSurvey extends Model
     use HasUuids;
 
     protected $fillable = [
+        'school_id',
         'title',
+        'description',
+        'questions',
         'target_graduation_year',
-        'questions_schema',
         'start_date',
         'end_date',
         'is_active',
@@ -23,10 +25,14 @@ class TracerSurvey extends Model
 
     protected $casts = [
         'target_graduation_year' => 'integer',
-        'questions_schema' => 'array',
+        'questions' => 'array',
         'start_date' => 'date',
         'end_date' => 'date',
         'is_active' => 'boolean',
+    ];
+
+    protected $appends = [
+        'responses_count',
     ];
 
     public function creator(): BelongsTo
@@ -37,5 +43,10 @@ class TracerSurvey extends Model
     public function responses(): HasMany
     {
         return $this->hasMany(TracerResponse::class, 'survey_id');
+    }
+
+    public function getResponsesCountAttribute(): int
+    {
+        return $this->responses()->count();
     }
 }

@@ -10,23 +10,25 @@ class LabLoan extends Model
 {
     use HasUuids;
 
+    protected $table = 'lab_loans';
+
     protected $fillable = [
         'equipment_id',
-        'borrower_user_id',
-        'qty',
+        'borrower_id',
         'loan_date',
         'due_date',
-        'return_date',
+        'quantity',
+        'returned_at',
         'status',
         'purpose',
         'notes',
     ];
 
     protected $casts = [
-        'qty' => 'integer',
+        'quantity' => 'integer',
         'loan_date' => 'date',
         'due_date' => 'date',
-        'return_date' => 'date',
+        'returned_at' => 'date',
     ];
 
     public function equipment(): BelongsTo
@@ -36,6 +38,6 @@ class LabLoan extends Model
 
     public function borrower(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'borrower_user_id');
+        return $this->belongsTo(User::class, 'borrower_id');
     }
 }

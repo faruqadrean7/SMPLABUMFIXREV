@@ -20,6 +20,7 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/storage/app/seed-credentials.txt
 /vendor
 _ide_helper.php
 Homestead.json

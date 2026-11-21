@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
+use App\Traits\HasNikBlindIndex;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Student extends Model
 {
-    use Auditable, HasFactory, HasUuids, SoftDeletes;
+    use Auditable, HasFactory, HasNikBlindIndex, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'school_id',
@@ -22,6 +23,7 @@ class Student extends Model
         'nis',
         'nisn',
         'nik_enc',
+        'nik_hash',
         'full_name',
         'gender',
         'birth_place',
@@ -30,6 +32,7 @@ class Student extends Model
         'address',
         'photo_file_id',
         'status',
+        'program_type',
         'entry_date',
         'graduated_at',
     ];
@@ -66,6 +69,11 @@ class Student extends Model
         return $this->belongsToMany(SchoolClass::class, 'class_students', 'student_id', 'class_id')
             ->withPivot(['joined_at', 'left_at'])
             ->withTimestamps();
+    }
+
+    public function programProfile(): HasOne
+    {
+        return $this->hasOne(StudentProgramProfile::class);
     }
 
     public function statusHistory(): HasMany
@@ -121,5 +129,10 @@ class Student extends Model
     public function alumni(): HasOne
     {
         return $this->hasOne(Alumni::class);
+    }
+
+    public function getNameAttribute(): string
+    {
+        return $this->full_name ?? '';
     }
 }

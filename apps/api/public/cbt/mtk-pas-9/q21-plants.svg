@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 250" font-family="Arial, sans-serif" font-size="14">
+  <rect width="470" height="250" fill="#ffffff"/>
+  <!-- info table -->
+  <g>
+    <rect x="12" y="14" width="200" height="72" fill="#f7f8fa" stroke="#bcc3cc"/>
+    <line x1="12" y1="38" x2="212" y2="38" stroke="#bcc3cc"/>
+    <line x1="12" y1="62" x2="212" y2="62" stroke="#bcc3cc"/>
+    <line x1="140" y1="14" x2="140" y2="86" stroke="#bcc3cc"/>
+    <text x="22" y="31" fill="#333" font-weight="bold">Outdoor Plants</text>
+    <text x="22" y="55" fill="#333">Modal height</text><text x="150" y="55" fill="#333">39 cm</text>
+    <text x="22" y="79" fill="#333">Minimum height</text><text x="150" y="79" fill="#333">17 cm</text>
+  </g>
+  <text x="300" y="31" fill="#333">Range = 26 cm</text>
+  <!-- stem-and-leaf -->
+  <text x="130" y="116" text-anchor="middle" font-weight="bold" fill="#333">Indoor Plants</text>
+  <text x="340" y="116" text-anchor="middle" font-weight="bold" fill="#333">Outdoor Plants</text>
+  <line x1="238" y1="126" x2="238" y2="238" stroke="#333" stroke-width="1.4"/>
+  <line x1="262" y1="126" x2="262" y2="238" stroke="#333" stroke-width="1.4"/>
+  <g text-anchor="middle" fill="#333">
+    <text x="250" y="146">0</text><text x="250" y="168">1</text><text x="250" y="190">2</text>
+    <text x="250" y="212">3</text><text x="250" y="234">4</text>
+  </g>
+  <!-- indoor (right-to-left) -->
+  <g text-anchor="end" fill="#333" letter-spacing="4">
+    <text x="234" y="146">9 8 7</text>
+    <text x="234" y="168">9 9 5 4</text>
+    <text x="234" y="190">9 8 6</text>
+    <text x="234" y="212">0</text>
+    <text x="234" y="234"> </text>
+  </g>
+  <!-- outdoor with unknowns a,b,c,d -->
+  <g fill="#333" letter-spacing="4">
+    <text x="268" y="146"> </text>
+    <text x="268" y="168"><tspan fill="#c0392b" font-style="italic">a</tspan></text>
+    <text x="268" y="190">3 7 7</text>
+    <text x="268" y="212">4 5 8 9 <tspan fill="#c0392b" font-style="italic">b c</tspan></text>
+    <text x="268" y="234">1 <tspan fill="#c0392b" font-style="italic">d</tspan></text>
+  </g>
+  <text x="250" y="250" text-anchor="middle" fill="#777" font-size="10">Key: 1 | 7 = 17 cm</text>
+</svg>

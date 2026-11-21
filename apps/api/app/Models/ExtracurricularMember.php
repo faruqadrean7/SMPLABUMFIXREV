@@ -10,12 +10,14 @@ class ExtracurricularMember extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
+    protected $table = 'extracurricular_members';
 
     protected $fillable = [
         'extracurricular_id',
         'student_id',
         'role',
+        'status',
+        'final_grade',
         'joined_at',
     ];
 

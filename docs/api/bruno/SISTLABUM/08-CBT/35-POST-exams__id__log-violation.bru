@@ -1,0 +1,54 @@
+meta {
+  name: Exam Session - Log Violation
+  type: http
+  seq: 35
+}
+
+post {
+  url: {{baseUrl}}/exams/{id}/log-violation
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "violation_type": "blur",
+    "meta": {
+        "count": 1
+    }
+  }
+}
+
+tests {
+  test("never returns 500 internal server error", function() {
+    expect(res.getStatus()).to.not.equal(500);
+  });
+
+  test("status code adheres to API contract", function() {
+    expect([200, 201, 204, 400, 401, 403, 404, 410, 422, 429]).to.include(res.getStatus());
+  });
+
+  test("response body adheres to standard API envelope", function() {
+    const status = res.getStatus();
+    const body = res.getBody();
+    if (status >= 200 && status < 300) {
+      if (status !== 204 && body && typeof body === "object") {
+        expect(body).to.be.an("object");
+      }
+    } else if (status >= 400) {
+      if (body && typeof body === "object") {
+        const hasError = body.hasOwnProperty("error") || body.hasOwnProperty("errors") || body.hasOwnProperty("message");
+        expect(hasError).to.be.true;
+      }
+    }
+  });
+}

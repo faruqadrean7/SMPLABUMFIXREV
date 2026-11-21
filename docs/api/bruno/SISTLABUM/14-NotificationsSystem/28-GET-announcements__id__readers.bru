@@ -1,0 +1,44 @@
+meta {
+  name: Announcement - Readers
+  type: http
+  seq: 28
+}
+
+get {
+  url: {{baseUrl}}/announcements/{id}/readers
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+headers {
+  Accept: application/json
+}
+
+tests {
+  test("never returns 500 internal server error", function() {
+    expect(res.getStatus()).to.not.equal(500);
+  });
+
+  test("status code adheres to API contract", function() {
+    expect([200, 204, 304, 400, 401, 403, 404, 410, 422, 429]).to.include(res.getStatus());
+  });
+
+  test("response body adheres to standard API envelope", function() {
+    const status = res.getStatus();
+    const body = res.getBody();
+    if (status >= 200 && status < 300) {
+      if (status !== 204 && body && typeof body === "object") {
+        expect(body).to.be.an("object");
+      }
+    } else if (status >= 400) {
+      if (body && typeof body === "object") {
+        const hasError = body.hasOwnProperty("error") || body.hasOwnProperty("errors") || body.hasOwnProperty("message");
+        expect(hasError).to.be.true;
+      }
+    }
+  });
+}

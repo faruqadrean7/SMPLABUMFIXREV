@@ -13,6 +13,27 @@ class Exam extends Model
 {
     use Auditable, HasFactory, HasUuids;
 
+    public const STATUS_DRAFT = 'draft';
+
+    public const STATUS_SCHEDULED = 'dijadwalkan';
+
+    public const STATUS_IN_PROGRESS = 'berlangsung';
+
+    public const STATUS_FINISHED = 'selesai';
+
+    public const STATUS_CANCELLED = 'dibatalkan';
+
+    public const STATUS_ARCHIVED = 'arsip';
+
+    public const STATUSES = [
+        self::STATUS_DRAFT,
+        self::STATUS_SCHEDULED,
+        self::STATUS_IN_PROGRESS,
+        self::STATUS_FINISHED,
+        self::STATUS_CANCELLED,
+        self::STATUS_ARCHIVED,
+    ];
+
     protected $fillable = [
         'school_id',
         'subject_id',
@@ -29,6 +50,12 @@ class Exam extends Model
         'package_mode',
         'show_result_mode',
         'status',
+        'max_remedial_score',
+        'sync_node_token',
+    ];
+
+    protected $hidden = [
+        'sync_node_token',
     ];
 
     protected function casts(): array
@@ -37,6 +64,7 @@ class Exam extends Model
             'start_at' => 'datetime',
             'end_at' => 'datetime',
             'passing_grade' => 'decimal:2',
+            'max_remedial_score' => 'decimal:2',
             'shuffle_questions' => 'boolean',
             'shuffle_options' => 'boolean',
         ];

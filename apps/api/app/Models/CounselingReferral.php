@@ -3,36 +3,30 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CounselingReferral extends Model
 {
-    use HasUuids;
+    use HasFactory, HasUuids;
 
-    public $timestamps = false;
+    protected $table = 'counseling_referrals';
 
     protected $fillable = [
-        'case_id',
-        'referred_to',
-        'specialist_name',
+        'student_id',
+        'referred_by',
         'reason',
-        'referral_date',
-        'report_file_id',
         'status',
     ];
 
-    protected $casts = [
-        'referral_date' => 'date',
-    ];
-
-    public function case(): BelongsTo
+    public function student(): BelongsTo
     {
-        return $this->belongsTo(CounselingCase::class, 'case_id');
+        return $this->belongsTo(Student::class, 'student_id');
     }
 
-    public function reportFile(): BelongsTo
+    public function referrer(): BelongsTo
     {
-        return $this->belongsTo(File::class, 'report_file_id');
+        return $this->belongsTo(User::class, 'referred_by');
     }
 }

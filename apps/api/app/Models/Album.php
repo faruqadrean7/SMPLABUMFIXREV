@@ -12,26 +12,14 @@ class Album extends Model
     use HasUuids;
 
     protected $fillable = [
+        'school_id',
         'title',
-        'slug',
-        'description',
         'cover_file_id',
-        'is_published',
-        'created_by',
-    ];
-
-    protected $casts = [
-        'is_published' => 'boolean',
     ];
 
     public function cover(): BelongsTo
     {
         return $this->belongsTo(File::class, 'cover_file_id');
-    }
-
-    public function creator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function items(): HasMany

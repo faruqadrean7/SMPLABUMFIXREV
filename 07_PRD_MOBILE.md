@@ -1,6 +1,6 @@
 # 07. PRD Aplikasi Mobile
 
-Platform: Flutter 3.x (Android dulu, iOS menyusul), Riverpod, Dio, Firebase Messaging. Satu aplikasi, tiga role: **Orang Tua, Guru, Siswa**. Kepala sekolah (ringkasan + ACC) sebagai P2.
+Platform: Android Native (Kotlin 2.x, Android 8.0+ / API 26+), Jetpack Compose, Retrofit + OkHttp, Coroutines & StateFlow, Room, Hilt, Firebase Cloud Messaging. Satu aplikasi, tiga role: **Orang Tua, Guru, Siswa**. Kepala sekolah (ringkasan + ACC) sebagai P2.
 Format ID: `MOB-{MODUL}-{NN}`. Role-nya: `ORT` (ortu), `GRU` (guru), `SIS` (siswa), `CBT`, `UMM` (umum).
 
 ## 1. Prinsip
@@ -13,16 +13,16 @@ Format ID: `MOB-{MODUL}-{NN}`. Role-nya: `ORT` (ortu), `GRU` (guru), `SIS` (sisw
 ## 2. Arsitektur Aplikasi
 ```mermaid
 flowchart TD
-  UI[Presentation: Screen + Widget] --> C[Controller Riverpod]
-  C --> R[Repository]
-  R --> N[Remote: Dio + OpenAPI client]
-  R --> L[Local: Drift/Hive cache + queue]
-  N --> API[(Backend API)]
-  FCM[FCM] --> H[Notification handler → deep link router]
+  UI[Presentation: Jetpack Compose Screen + Component] --> VM[ViewModel: StateFlow / UI State]
+  VM --> R[Repository: Interface & Implementation]
+  R --> N[Remote DataSource: Retrofit + OkHttp]
+  R --> L[Local DataSource: Room DB + WorkManager Queue]
+  N --> API[(Backend API SISTLABUM)]
+  FCM[FCM] --> H[FCM Service → PendingIntent / Deep Link Router]
 ```
-- Router: `go_router` dengan guard auth/role.
-- Penyimpanan token: `flutter_secure_storage`; cache data: Drift (SQLite) untuk jadwal, nilai, presensi.
-- Antrean offline: tabel `pending_actions` dengan retry otomatis dan idempotency key.
+- Router: Navigation Compose (`androidx.navigation.compose`) dengan guard auth/role.
+- Penyimpanan token: `EncryptedSharedPreferences` (Android Keystore); cache data: Room (SQLite) untuk jadwal, nilai, presensi.
+- Antrean offline: tabel Room `pending_actions` dengan retry otomatis (`WorkManager`) dan idempotency key.
 - Konfigurasi flavor: `dev`, `staging`, `prod`.
 - Force update: cek versi minimum dari `/app/config`.
 
@@ -244,13 +244,13 @@ Tema (light, dark P2) dengan token warna/typografi dari brand sekolah; komponen:
 | Startup | Cold start < 3 s di perangkat menengah |
 | Ukuran APK | < 40 MB |
 | Crash-free | ≥ 99,5% sesi |
-| Kompatibilitas | Android 8+, iOS 14+ |
+| Kompatibilitas | Android 8.0+ (API 26+) |
 | Keamanan | Token di secure storage, TLS, certificate pinning (P1), root/jailbreak warning untuk CBT (P1) |
 | Aksesibilitas | Teks mengikuti ukuran sistem, kontras AA |
 | Analytics | Crash (Crashlytics), event dasar tanpa data pribadi |
 
 ## 12. Rilis
-- Distribusi: Play Store (internal testing → closed → production), TestFlight untuk iOS.
+- Distribusi: Google Play Store (Internal Testing → Closed Testing → Production) & Distribusi Internal APK Sekolah.
 - Versioning semver; `minSupportedVersion` dari server.
 - Signing key & keystore disimpan aman di luar repo.
 
@@ -273,3 +273,4 @@ Tema (light, dark P2) dengan token warna/typografi dari brand sekolah; komponen:
 ## Changelog
 - 1.0: Draf awal.
 - 1.1: Pembaruan ketergantungan backend merujuk modul nilai `BE-GRD-*` dan fitur anomali ujian `BE-CBT-12`.
+- 1.2: Penyesuaian platform mobile menjadi Android Native (Kotlin 2.x + Jetpack Compose) sesuai fokus target pengguna Android sekolah tanpa merubah fitur.

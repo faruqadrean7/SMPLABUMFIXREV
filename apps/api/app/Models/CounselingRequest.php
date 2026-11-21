@@ -12,17 +12,21 @@ class CounselingRequest extends Model
 
     protected $fillable = [
         'student_id',
-        'requested_date',
+        'requested_by',
+        'requester_role',
+        'topic',
+        'preferred_date',
         'preferred_time',
         'preferred_counselor_id',
-        'topic',
         'status',
         'scheduled_at',
+        'counselor_id',
+        'notes',
         'rejection_reason',
     ];
 
     protected $casts = [
-        'requested_date' => 'date',
+        'preferred_date' => 'date',
         'scheduled_at' => 'datetime',
     ];
 
@@ -31,8 +35,18 @@ class CounselingRequest extends Model
         return $this->belongsTo(Student::class, 'student_id');
     }
 
+    public function requester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'requested_by');
+    }
+
     public function preferredCounselor(): BelongsTo
     {
-        return $this->belongsTo(Teacher::class, 'preferred_counselor_id');
+        return $this->belongsTo(User::class, 'preferred_counselor_id');
+    }
+
+    public function counselor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'counselor_id');
     }
 }

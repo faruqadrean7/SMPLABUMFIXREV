@@ -35,18 +35,18 @@ Website publik, PPDB, sistem admin, API backend, mobile (ortu/guru/siswa), CBT, 
 ## 4. Pengguna (Role)
 | Kode role | Nama | Platform utama |
 |---|---|---|
-| `super_admin` | Super Admin | Admin |
-| `admin_tu` | Admin Tata Usaha | Admin |
-| `principal` | Kepala Sekolah | Admin, Mobile |
-| `teacher` | Guru | Admin, Mobile |
-| `homeroom` | Wali Kelas (guru + penugasan kelas) | Admin, Mobile |
-| `counselor` | Guru BK | Admin, Mobile |
-| `facility_staff` | Staf Sarpras | Admin |
-| `ppdb_committee` | Panitia PPDB | Admin |
-| `librarian` | Pustakawan | Admin |
-| `student` | Siswa | Mobile, Web CBT |
-| `guardian` | Orang Tua/Wali | Mobile |
-| `guest` | Tamu/publik/calon siswa | Web |
+| `super_admin` | Super Admin | Web Portal (Admin) |
+| `admin_tu` | Admin Tata Usaha | Web Portal (Admin) |
+| `principal` | Kepala Sekolah | Web Portal (Admin), Mobile Android |
+| `teacher` | Guru | Web Portal, Mobile Android |
+| `homeroom` | Wali Kelas (guru + penugasan kelas) | Web Portal, Mobile Android |
+| `counselor` | Guru BK | Web Portal, Mobile Android |
+| `facility_staff` | Staf Sarpras | Web Portal (Admin) |
+| `ppdb_committee` | Panitia PPDB | Web Portal (Admin) |
+| `librarian` | Pustakawan | Web Portal (Admin) |
+| `student` | Siswa | Web Portal (CBT/LMS/Rapor), Mobile Android |
+| `guardian` | Orang Tua/Wali | Web Portal (Pantau/Rapor), Mobile Android |
+| `guest` | Tamu/publik/calon siswa | Web Portal (Publik & PPDB) |
 
 Satu user bisa punya lebih dari satu role (contoh: guru sekaligus wali kelas).
 

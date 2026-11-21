@@ -10,18 +10,16 @@ class CompetitionEntry extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
+    protected $table = 'competition_entries';
 
     protected $fillable = [
         'competition_id',
         'student_id',
         'coach_teacher_id',
         'status',
-        'registered_at',
-    ];
-
-    protected $casts = [
-        'registered_at' => 'datetime',
+        'result',
+        'achievement_id',
+        'notes',
     ];
 
     public function competition(): BelongsTo
@@ -37,5 +35,10 @@ class CompetitionEntry extends Model
     public function coach(): BelongsTo
     {
         return $this->belongsTo(Teacher::class, 'coach_teacher_id');
+    }
+
+    public function achievement(): BelongsTo
+    {
+        return $this->belongsTo(Achievement::class, 'achievement_id');
     }
 }

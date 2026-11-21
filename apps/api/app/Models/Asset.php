@@ -12,26 +12,21 @@ class Asset extends Model
     use HasUuids;
 
     protected $fillable = [
+        'school_id',
+        'room_id',
         'asset_code',
         'name',
         'category',
         'brand',
         'model',
         'serial_number',
-        'room_id',
-        'pic_staff_id',
-        'condition',
-        'procurement_date',
-        'procurement_cost',
-        'source_of_fund',
-        'status',
-        'qr_code',
+        'asset_condition',
+        'acquired_at',
         'notes',
     ];
 
     protected $casts = [
-        'procurement_date' => 'date',
-        'procurement_cost' => 'decimal:2',
+        'acquired_at' => 'date',
     ];
 
     public function room(): BelongsTo
@@ -39,18 +34,13 @@ class Asset extends Model
         return $this->belongsTo(Room::class, 'room_id');
     }
 
-    public function picStaff(): BelongsTo
+    public function auditItems(): HasMany
     {
-        return $this->belongsTo(Staff::class, 'pic_staff_id');
+        return $this->hasMany(AssetAuditItem::class, 'asset_id');
     }
 
     public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class, 'asset_id');
-    }
-
-    public function auditItems(): HasMany
-    {
-        return $this->hasMany(AssetAuditItem::class, 'asset_id');
     }
 }

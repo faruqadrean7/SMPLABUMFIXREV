@@ -10,30 +10,25 @@ class ExtracurricularJournal extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
+    protected $table = 'extracurricular_journals';
 
     protected $fillable = [
         'extracurricular_id',
-        'date',
-        'activity_name',
-        'material_summary',
-        'attendance_count',
+        'session_date',
+        'start_time',
+        'end_time',
+        'activity',
+        'attendance',
         'notes',
-        'created_by',
     ];
 
     protected $casts = [
-        'date' => 'date',
-        'attendance_count' => 'integer',
+        'session_date' => 'date',
+        'attendance' => 'array',
     ];
 
     public function extracurricular(): BelongsTo
     {
         return $this->belongsTo(Extracurricular::class, 'extracurricular_id');
-    }
-
-    public function creator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'created_by');
     }
 }

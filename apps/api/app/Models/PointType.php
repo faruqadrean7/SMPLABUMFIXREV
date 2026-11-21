@@ -21,6 +21,10 @@ class PointType extends Model
         'severity',
     ];
 
+    protected $casts = [
+        'points' => 'integer',
+    ];
+
     public function studentPoints(): HasMany
     {
         return $this->hasMany(StudentPoint::class);

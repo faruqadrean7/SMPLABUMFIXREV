@@ -1,0 +1,788 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Academic\SubmitAssignmentRequest;
+use App\Models\Achievement;
+use App\Models\Assignment;
+use App\Models\AssignmentSubmission;
+use App\Models\Attendance;
+use App\Models\ClassStudent;
+use App\Models\CounselingRequest;
+use App\Models\Exam;
+use App\Models\ExamParticipant;
+use App\Models\ExamSession;
+use App\Models\Extracurricular;
+use App\Models\ExtracurricularMember;
+use App\Models\Grade;
+use App\Models\PointType;
+use App\Models\Schedule;
+use App\Models\Student;
+use App\Models\StudentPoint;
+use App\Models\StudentProgramProfile;
+use App\Services\AuditLogService;
+use App\Services\LmsService;
+use App\Traits\ApiResponse;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class MeStudentController extends Controller
+{
+    use ApiResponse;
+
+    protected function getStudent(Request $request): ?Student
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+
+        return $user->student;
+    }
+
+    /**
+     * Resolusi program belajar efektif siswa.
+     * Prioritas: student.program_type -> class.program_type -> 'reguler'.
+     */
+    protected function resolveProgramType(Student $student): string
+    {
+        $student->loadMissing('classes');
+
+        return $student->program_type ?? $student->classes->first()?->program_type ?? 'reguler';
+    }
+
+    /**
+     * GET /api/v1/me/student-dashboard
+     * Ringkasan beranda siswa aktif.
+     */
+    public function dashboard(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $student->loadMissing(['classes.academicYear', 'programProfile']);
+        $currentClass = $student->classes->first();
+
+        // Resolusi program belajar (prioritas: student.program_type -> class.program_type -> 'reguler')
+        $programType = $this->resolveProgramType($student);
+        $programBadges = [
+            'tahfidz' => "Siswa Program Tahfidz Al-Qur'an",
+            'icp' => 'International Class Program (Cambridge)',
+            'inklusi' => 'Siswa Program Inklusi',
+            'reguler' => 'Siswa Program Reguler',
+        ];
+        $programBadge = $programBadges[$programType] ?? 'Siswa Program Reguler';
+        $programProfile = $student->programProfile?->meta_data ?? [];
+
+        // Presensi
+        $totalAtt = Attendance::where('student_id', $student->id)->count();
+        $presentAtt = Attendance::where('student_id', $student->id)->where('status', 'hadir')->count();
+        $attendanceRate = $totalAtt > 0 ? round(($presentAtt / $totalAtt) * 100, 1) : 100.0;
+
+        // Jadwal hari ini (dayOfWeek: 1 = Senin, 7 = Minggu)
+        $todayDayOfWeek = now()->dayOfWeekIso;
+        $todaySchedules = [];
+        if ($currentClass) {
+            $schedules = Schedule::with(['subject', 'teacher', 'room', 'timeSlot'])
+                ->where('class_id', $currentClass->id)
+                ->where('day_of_week', $todayDayOfWeek)
+                ->get();
+
+            $todaySchedules = $schedules->map(fn (Schedule $s) => [
+                'id' => $s->id,
+                'dayOfWeek' => $s->day_of_week,
+                'dayName' => $this->getDayName($s->day_of_week),
+                'startTime' => $s->timeSlot?->start_time ? substr($s->timeSlot->start_time, 0, 5) : '07:00',
+                'endTime' => $s->timeSlot?->end_time ? substr($s->timeSlot->end_time, 0, 5) : '08:20',
+                'subjectName' => $s->subject?->name ?? 'Mata Pelajaran',
+                'teacherName' => $s->teacher?->full_name ?? 'Guru Pengampu',
+                'roomName' => $s->room?->name ?? ($currentClass->name ?? 'Ruang Kelas'),
+            ])->values()->all();
+        }
+
+        // Ujian CBT mendatang
+        $exams = ExamParticipant::with('exam.subject')
+            ->where('student_id', $student->id)
+            ->limit(5)
+            ->get()
+            ->map(fn (ExamParticipant $p) => [
+                'id' => $p->exam_id,
+                'title' => $p->exam?->title ?? 'Ujian CBT',
+                'subjectName' => $p->exam?->subject?->name ?? 'Mata Pelajaran',
+                'durationMinutes' => $p->exam?->duration_min ?? 60,
+                'totalQuestions' => 30,
+                'startTime' => $p->exam?->start_at?->toISOString() ?? now()->toISOString(),
+                'endTime' => $p->exam?->end_at?->toISOString() ?? now()->addHours(1)->toISOString(),
+                'status' => $p->exam?->status ?? 'scheduled',
+            ])->values()->all();
+
+        // Total prestasi
+        $achievementsCount = Achievement::where('student_id', $student->id)->count();
+
+        return $this->successResponse([
+            'name' => $student->full_name,
+            'nis' => $student->nis ?? '',
+            'nisn' => $student->nisn ?? '',
+            'className' => $currentClass?->name ?? 'Belum ada kelas',
+            'programType' => $programType,
+            'programBadge' => $programBadge,
+            'programProfile' => $programProfile,
+            'photoFileId' => $student->photo_file_id,
+            'photoUrl' => $student->photoFile?->url,
+            'todaySchedule' => $todaySchedules,
+            'upcomingExams' => $exams,
+            'attendanceRate' => $attendanceRate,
+            'totalAchievements' => $achievementsCount,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/me/program/mood
+     * Check-in kondisi perasaan / sensori harian (khususnya untuk siswa program Inklusi).
+     */
+    public function submitDailyMood(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        if ($this->resolveProgramType($student) !== 'inklusi') {
+            return $this->errorResponse('Fitur check-in mood hanya untuk siswa program Inklusi.', 'FORBIDDEN', 403);
+        }
+
+        $validated = $request->validate([
+            'mood' => ['required', 'string', 'in:happy,calm,tired,anxious'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $profile = StudentProgramProfile::firstOrNew(['student_id' => $student->id]);
+        if (! $profile->exists) {
+            $profile->program_type = 'inklusi';
+        }
+
+        $meta = $profile->meta_data ?? [];
+        $meta['daily_mood'] = [
+            'mood' => $validated['mood'],
+            'note' => $validated['note'] ?? null,
+            'timestamp' => now()->toISOString(),
+        ];
+        $profile->meta_data = $meta;
+        $profile->save();
+
+        app(AuditLogService::class)->record(
+            action: 'portal.program.mood.checkin',
+            entity: 'StudentProgramProfile',
+            entityId: $profile->id,
+            newValues: $meta['daily_mood'],
+            request: $request,
+            isAuthoritative: true
+        );
+
+        return $this->successResponse($meta['daily_mood'], 200, ['message' => 'Mood harian berhasil dicatat.']);
+    }
+
+    /**
+     * POST /api/v1/me/program/mutabaah
+     * Simpan catatan ibadah harian / mutabaah yaumiyah (khususnya untuk siswa program Tahfidz).
+     */
+    public function submitMutabaah(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        if ($this->resolveProgramType($student) !== 'tahfidz') {
+            return $this->errorResponse('Fitur mutabaah yaumiyah hanya untuk siswa program Tahfidz.', 'FORBIDDEN', 403);
+        }
+
+        $validated = $request->validate([
+            'sholat_fardhu' => ['required', 'integer', 'min:0', 'max:5'],
+            'tilawah_pages' => ['required', 'integer', 'min:0', 'max:100'],
+            'dhuha' => ['required', 'boolean'],
+            'tahajud' => ['required', 'boolean'],
+        ]);
+
+        $profile = StudentProgramProfile::firstOrNew(['student_id' => $student->id]);
+        if (! $profile->exists) {
+            $profile->program_type = 'tahfidz';
+        }
+
+        $meta = $profile->meta_data ?? [];
+        $meta['mutabaah_today'] = [
+            'sholat_fardhu' => (int) $validated['sholat_fardhu'],
+            'tilawah_pages' => (int) $validated['tilawah_pages'],
+            'dhuha' => (bool) $validated['dhuha'],
+            'tahajud' => (bool) $validated['tahajud'],
+            'updated_at' => now()->toISOString(),
+        ];
+        $profile->meta_data = $meta;
+        $profile->save();
+
+        app(AuditLogService::class)->record(
+            action: 'portal.program.mutabaah.update',
+            entity: 'StudentProgramProfile',
+            entityId: $profile->id,
+            newValues: $meta['mutabaah_today'],
+            request: $request,
+            isAuthoritative: true
+        );
+
+        return $this->successResponse($meta['mutabaah_today'], 200, ['message' => 'Checklist mutabaah berhasil disimpan.']);
+    }
+
+    /**
+     * GET /api/v1/me/schedule
+     * Jadwal pelajaran mingguan siswa aktif.
+     */
+    public function schedule(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $currentClass = $student->classes()->first();
+        if (! $currentClass) {
+            return $this->successResponse([]);
+        }
+
+        $schedules = Schedule::with(['subject', 'teacher', 'room', 'timeSlot'])
+            ->where('class_id', $currentClass->id)
+            ->orderBy('day_of_week')
+            ->get();
+
+        $data = $schedules->map(fn (Schedule $s) => [
+            'id' => $s->id,
+            'dayOfWeek' => $s->day_of_week,
+            'dayName' => $this->getDayName($s->day_of_week),
+            'startTime' => $s->timeSlot?->start_time ? substr($s->timeSlot->start_time, 0, 5) : '07:00',
+            'endTime' => $s->timeSlot?->end_time ? substr($s->timeSlot->end_time, 0, 5) : '08:20',
+            'subjectName' => $s->subject?->name ?? 'Mata Pelajaran',
+            'teacherName' => $s->teacher?->full_name ?? 'Guru Pengampu',
+            'roomName' => $s->room?->name ?? ($currentClass->name ?? 'Ruang Kelas'),
+        ]);
+
+        return $this->successResponse($data);
+    }
+
+    /**
+     * GET /api/v1/me/grades
+     * Nilai pembelajaran siswa aktif.
+     */
+    public function grades(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $grades = Grade::with(['component.subject'])
+            ->where('student_id', $student->id)
+            ->get()
+            ->groupBy(fn ($g) => $g->component?->subject_id ?? 'unknown');
+
+        $result = [];
+        foreach ($grades as $subjectId => $items) {
+            $first = $items->first();
+            $subject = $first?->component?->subject;
+            $avgScore = round($items->avg('value') ?? 0, 1);
+
+            $result[] = [
+                'subjectId' => (string) $subjectId,
+                'subjectName' => $subject?->name ?? 'Mata Pelajaran',
+                'subjectCode' => $subject?->code ?? '',
+                'teacherName' => 'Guru Pengampu',
+                'finalScore' => $avgScore,
+                'letterGrade' => $avgScore >= 85 ? 'A' : ($avgScore >= 75 ? 'B' : 'C'),
+                'isPassed' => $avgScore >= 75,
+            ];
+        }
+
+        return $this->successResponse($result);
+    }
+
+    /**
+     * GET /api/v1/me/exams
+     * Jadwal ujian CBT siswa.
+     */
+    public function exams(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $participants = ExamParticipant::with(['exam.subject', 'exam.questions', 'examRoom.room'])
+            ->where('student_id', $student->id)
+            ->get();
+
+        $examIds = $participants->pluck('exam_id')->filter()->unique();
+        $sessions = ExamSession::where('student_id', $student->id)
+            ->whereIn('exam_id', $examIds)
+            ->get()
+            ->keyBy('exam_id');
+
+        $data = $participants->map(function (ExamParticipant $p) use ($sessions) {
+            $exam = $p->exam;
+            $session = $sessions->get($p->exam_id);
+
+            if ($session && $session->status === 'selesai') {
+                $status = 'selesai';
+            } elseif ($session && $session->status === 'mengerjakan') {
+                $status = 'aktif';
+            } elseif ($exam?->status === Exam::STATUS_IN_PROGRESS || $exam?->status === 'aktif' || $exam?->status === 'berlangsung') {
+                $status = 'aktif';
+            } elseif ($exam?->status === Exam::STATUS_SCHEDULED || $exam?->status === 'terjadwal' || $exam?->status === 'dijadwalkan') {
+                $status = 'terjadwal';
+            } elseif ($exam?->status === Exam::STATUS_FINISHED) {
+                $status = 'selesai';
+            } else {
+                $status = $exam?->status ?? 'aktif';
+            }
+
+            return [
+                'id' => $p->exam_id,
+                'title' => $exam?->title ?? 'Ujian CBT',
+                'subjectName' => $exam?->subject?->name ?? 'Mata Pelajaran',
+                'durationMinutes' => $exam?->duration_min ?? 60,
+                'totalQuestions' => $exam?->questions?->count() ?: 30,
+                'startTime' => $exam?->start_at?->toISOString() ?? now()->toISOString(),
+                'endTime' => $exam?->end_at?->toISOString() ?? now()->addHours(1)->toISOString(),
+                'status' => $status,
+                'roomName' => $p->examRoom?->room?->name ?? 'Lab Komputer 1',
+                'kktp' => (float) ($exam?->passing_grade ?? 75),
+                'tokenRequired' => $p->examRoom?->token ?? 'LAB-CBT',
+                'score' => $session?->score !== null ? (float) $session->score : null,
+            ];
+        });
+
+        return $this->successResponse($data);
+    }
+
+    /**
+     * GET /api/v1/me/tasks
+     * Daftar tugas KBM siswa beserta status pengumpulan.
+     */
+    public function tasks(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $studentClassIds = ClassStudent::where('student_id', $student->id)->pluck('class_id');
+        $assignments = Assignment::with(['subject', 'teacher', 'file'])
+            ->whereIn('class_id', $studentClassIds)
+            ->orderBy('due_at', 'desc')
+            ->get();
+
+        $assignmentIds = $assignments->pluck('id');
+        $submissions = AssignmentSubmission::with('file')
+            ->where('student_id', $student->id)
+            ->whereIn('assignment_id', $assignmentIds)
+            ->get()
+            ->keyBy('assignment_id');
+
+        $result = $assignments->map(function (Assignment $a) use ($submissions) {
+            $sub = $submissions->get($a->id);
+            $status = 'aktif';
+            if ($sub) {
+                $status = $sub->score !== null ? 'dinilai' : 'dikumpulkan';
+            }
+
+            $dueDate = $a->due_at?->format('Y-m-d') ?? '';
+            $dueTime = $a->due_at?->format('H:i') ?? '';
+
+            return [
+                'id' => $a->id,
+                'title' => $a->title,
+                'subjectName' => $a->subject?->name ?? 'Mata Pelajaran',
+                'dueDate' => $dueDate,
+                'dueTime' => $dueTime,
+                'status' => $status,
+                'description' => $a->description ?? '',
+                'teacherName' => $a->teacher?->full_name ?? 'Guru Pengampu',
+                'maxScore' => (float) ($a->max_score ?? 100),
+                'score' => $sub?->score !== null ? (float) $sub->score : null,
+                'teacherFeedback' => $sub?->feedback,
+                'submission' => $sub ? [
+                    'id' => $sub->id,
+                    'file_name' => $sub->file?->object_key ? basename($sub->file->object_key) : 'Berkas Terlampir',
+                    'submitted_at' => $sub->submitted_at?->toISOString() ?? $sub->created_at?->toISOString(),
+                    'notes' => $sub->notes,
+                ] : null,
+            ];
+        });
+
+        return $this->successResponse($result);
+    }
+
+    /**
+     * POST /api/v1/me/tasks/{id}/submit
+     * Siswa mengumpulkan tugas KBM.
+     */
+    public function submitTask(string $id, SubmitAssignmentRequest $request, LmsService $service): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $submission = $service->submitAssignment($id, $request->validated(), $request);
+
+        return $this->successResponse([
+            'success' => true,
+            'message' => 'Tugas berhasil dikumpulkan.',
+            'submission' => $submission,
+        ], 201);
+    }
+
+    /**
+     * GET /api/v1/me/counseling-requests
+     * Daftar permohonan konseling siswa yang login.
+     */
+    public function counselingRequests(Request $request): JsonResponse
+    {
+        $student = $this->resolveCounselingSubject($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $counselings = CounselingRequest::with(['counselor', 'preferredCounselor'])
+            ->where('student_id', $student->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $data = $counselings->map(function (CounselingRequest $c) {
+            $prefSchedule = '';
+            if ($c->preferred_date) {
+                $prefSchedule = $c->preferred_date->format('Y-m-d');
+            }
+            if ($c->preferred_time) {
+                $prefSchedule = trim($prefSchedule.' '.$c->preferred_time);
+            }
+
+            return [
+                'id' => $c->id,
+                'topic' => $c->topic,
+                'category' => 'Pengembangan Diri',
+                'requestDate' => $c->created_at?->format('Y-m-d') ?? now()->toDateString(),
+                'preferredSchedule' => $prefSchedule ?: 'Fleksibel',
+                'counselorName' => $c->counselor?->name ?? ($c->preferredCounselor?->name ?? 'Guru BK'),
+                'status' => match ($c->status) {
+                    'pending' => 'menunggu',
+                    'scheduled' => 'dijadwalkan',
+                    'completed' => 'selesai',
+                    'rejected', 'cancelled' => 'ditolak',
+                    default => 'menunggu',
+                },
+                'notes' => $c->notes,
+                'scheduledTime' => $c->scheduled_at?->toISOString(),
+                'roomName' => 'Ruang BK',
+            ];
+        });
+
+        return $this->successResponse($data);
+    }
+
+    /**
+     * POST /api/v1/me/counseling-requests
+     * Pengajuan permohonan konseling mandiri siswa.
+     */
+    public function storeCounselingRequest(Request $request): JsonResponse
+    {
+        $student = $this->resolveCounselingSubject($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        // Support both camelCase and snake_case
+        if ($request->has('preferredDate') && ! $request->has('preferred_date')) {
+            $request->merge(['preferred_date' => $request->input('preferredDate')]);
+        }
+        if ($request->has('preferredTime') && ! $request->has('preferred_time')) {
+            $request->merge(['preferred_time' => $request->input('preferredTime')]);
+        }
+
+        // Support notes or topic as fallback for reason
+        if (empty($request->input('reason'))) {
+            if ($request->filled('notes')) {
+                $request->merge(['reason' => $request->input('notes')]);
+            } elseif ($request->filled('topic')) {
+                $request->merge(['reason' => $request->input('topic')]);
+            }
+        }
+
+        // If preferred_date is non-date text (e.g. "Tanggal fleksibel"), sanitize to avoid validation rejection
+        $prefDateInput = $request->input('preferred_date');
+        if ($prefDateInput && ! strtotime($prefDateInput)) {
+            $request->merge(['preferred_date' => null]);
+            if (! $request->input('preferred_time')) {
+                $request->merge(['preferred_time' => (string) $prefDateInput]);
+            }
+        }
+
+        $validated = $request->validate([
+            'topic' => 'nullable|string|max:200',
+            'reason' => 'required|string|max:1000',
+            'preferred_date' => 'nullable|date',
+            'preferred_time' => 'nullable|string|max:100',
+            'is_urgent' => 'nullable|boolean',
+        ]);
+
+        $topic = (isset($validated['topic']) && trim($validated['topic']) !== '')
+            ? trim($validated['topic'])
+            : mb_substr($validated['reason'], 0, 200);
+
+        $counseling = CounselingRequest::create([
+            'student_id' => $student->id,
+            'requested_by' => $request->user()->id,
+            'requester_role' => ($request->user()->student ? 'student' : 'guardian'),
+            'topic' => $topic,
+            'notes' => $validated['reason'] ?? null,
+            'preferred_date' => $validated['preferred_date'] ?? null,
+            'preferred_time' => $validated['preferred_time'] ?? null,
+            'status' => 'pending',
+        ]);
+
+        $counselingData = $counseling->toArray();
+        $counselingData['category'] = $request->input('category', 'Pengembangan Diri');
+        $counselingData['requestDate'] = $counseling->created_at?->format('Y-m-d') ?? now()->toDateString();
+        $prefDateStr = '';
+        if ($counseling->preferred_date) {
+            $prefDateStr = is_string($counseling->preferred_date) ? substr($counseling->preferred_date, 0, 10) : $counseling->preferred_date->format('Y-m-d');
+        }
+        $counselingData['preferredSchedule'] = trim($prefDateStr.' '.($counseling->preferred_time ?? ''));
+        $counselingData['counselorName'] = 'Guru BK';
+        $counselingData['notes'] = $counseling->notes;
+
+        return $this->successResponse($counselingData, 201);
+    }
+
+    private function getDayName(int $dayOfWeek): string
+    {
+        return match ($dayOfWeek) {
+            1 => 'Senin',
+            2 => 'Selasa',
+            3 => 'Rabu',
+            4 => 'Kamis',
+            5 => 'Jumat',
+            6 => 'Sabtu',
+            default => 'Minggu',
+        };
+    }
+
+    /**
+     * Resolve subjek konseling: siswa sendiri, atau anak milik wali (ortu).
+     * Wali hanya dapat mengakses anak yang benar-benar miliknya (anti-IDOR),
+     * opsional difilter student_id; default anak pertama.
+     */
+    protected function resolveCounselingSubject(Request $request): ?Student
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+        if ($user->student) {
+            return $user->student;
+        }
+        $guardian = $user->guardian;
+        if ($guardian) {
+            $childId = $request->input('student_id');
+            if ($childId) {
+                return $guardian->students()->where('students.id', $childId)->first();
+            }
+
+            return $guardian->students()->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * GET /api/v1/me/points
+     * Rekapitulasi poin karakter, kedisiplinan, dan prestasi siswa aktif.
+     */
+    public function points(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $studentPoints = StudentPoint::with(['pointType', 'recorder'])
+            ->where('student_id', $student->id)
+            ->orderBy('point_date', 'desc')
+            ->get();
+
+        $achievements = Achievement::where('student_id', $student->id)
+            ->orderBy('achieved_at', 'desc')
+            ->get();
+
+        $items = collect();
+
+        foreach ($achievements as $ach) {
+            $dateStr = $ach->achieved_at ? $ach->achieved_at->format('d M Y') : $ach->created_at->format('d M Y');
+            $items->push([
+                'id' => 'ach-' . $ach->id,
+                'student_id' => $student->id,
+                'kind' => 'prestasi',
+                'title' => $ach->title,
+                'category' => $ach->rank_level ?: 'Prestasi & Kompetisi',
+                'point_date' => $dateStr,
+                'points' => (int) ($ach->points_awarded ?: 25),
+                'note' => $ach->notes ?: 'Diverifikasi oleh tim kesiswaan SMP Labschool UM.',
+                'recorder_name' => 'Tim Kesiswaan',
+            ]);
+        }
+
+        foreach ($studentPoints as $sp) {
+            $isViolation = ($sp->pointType?->kind === 'pelanggaran');
+            $dateStr = $sp->point_date ? $sp->point_date->format('d M Y') : $sp->created_at->format('d M Y');
+            $items->push([
+                'id' => 'pt-' . $sp->id,
+                'student_id' => $student->id,
+                'kind' => $isViolation ? 'pelanggaran' : 'prestasi',
+                'title' => $sp->pointType?->name ?: ($isViolation ? 'Pelanggaran Kedisiplinan' : 'Apresiasi Karakter'),
+                'category' => ucfirst($sp->pointType?->severity ?: 'Disiplin'),
+                'point_date' => $dateStr,
+                'points' => (int) ($sp->pointType?->points ?: 0),
+                'note' => $sp->notes ?: 'Tercatat dalam buku pembiasaan siswa.',
+                'recorder_name' => $sp->recorder?->name ?: 'Guru Piket / Kesiswaan',
+            ]);
+        }
+
+        $totalPrestasi = $items->where('kind', 'prestasi')->sum('points');
+        $totalPelanggaran = $items->where('kind', 'pelanggaran')->sum('points');
+        $balancePoints = $totalPrestasi - $totalPelanggaran;
+
+        $statusDisiplin = match (true) {
+            $totalPelanggaran >= 75 => 'SP3 - Konferensi Kasus',
+            $totalPelanggaran >= 50 => 'SP2 - Peringatan 2',
+            $totalPelanggaran >= 25 => 'SP1 - Peringatan 1',
+            default => 'AMAN',
+        };
+
+        return $this->successResponse([
+            'totalPrestasi' => $totalPrestasi,
+            'totalPelanggaran' => $totalPelanggaran,
+            'balancePoints' => $balancePoints,
+            'statusDisiplin' => $statusDisiplin,
+            'achievementsCount' => $achievements->count(),
+            'items' => $items->values()->all(),
+        ]);
+    }
+
+    /**
+     * GET /api/v1/me/extracurriculars
+     * Daftar kegiatan ekstrakurikuler yang diikuti serta katalog ekstrakurikuler sekolah.
+     */
+    public function extracurriculars(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $memberships = ExtracurricularMember::with(['extracurricular.coach'])
+            ->where('student_id', $student->id)
+            ->get();
+
+        $joinedIds = $memberships->pluck('extracurricular_id')->all();
+
+        $myExtracurriculars = $memberships->map(function (ExtracurricularMember $m) {
+            $ekskul = $m->extracurricular;
+            $sched = trim(($ekskul?->schedule_day ?? '') . ($ekskul?->schedule_time ? ', ' . $ekskul->schedule_time : ''));
+
+            return [
+                'id' => $m->extracurricular_id,
+                'memberId' => $m->id,
+                'name' => $ekskul?->name ?? 'Ekstrakurikuler',
+                'coach' => $ekskul?->coach?->full_name ?? 'Pembina Ekstrakurikuler',
+                'schedule' => $sched ?: 'Jadwal diumumkan pembina',
+                'room' => 'Ruang Kegiatan / Lapangan',
+                'role' => ucfirst($m->role ?: 'Anggota Reguler'),
+                'attendance_rate' => '100%',
+                'badgeColor' => 'bg-blue-50 text-blue-900 border-blue-200',
+                'finalGrade' => $m->final_grade,
+            ];
+        })->values()->all();
+
+        $availableQuery = Extracurricular::with('coach')
+            ->where('is_active', true);
+        if (! empty($joinedIds)) {
+            $availableQuery->whereNotIn('id', $joinedIds);
+        }
+        $available = $availableQuery->get();
+
+        $availableExtracurriculars = $available->map(function (Extracurricular $e) {
+            $memberCount = $e->members()->count();
+            $remainingQuota = max(0, ($e->quota ?? 30) - $memberCount);
+            $sched = trim(($e->schedule_day ?? '') . ($e->schedule_time ? ', ' . $e->schedule_time : ''));
+
+            return [
+                'id' => $e->id,
+                'name' => $e->name,
+                'coach' => $e->coach?->full_name ?? 'Pembina Ekstrakurikuler',
+                'schedule' => $sched ?: 'Sesuai Pengumuman',
+                'quota' => 'Sisa '.$remainingQuota.' Kuota',
+                'category' => $e->category ?: 'Pilihan',
+                'description' => $e->description ?: '',
+            ];
+        })->values()->all();
+
+        return $this->successResponse([
+            'myExtracurriculars' => $myExtracurriculars,
+            'availableExtracurriculars' => $availableExtracurriculars,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/me/extracurriculars/register
+     * Siswa mendaftar ke ekstrakurikuler pilihan.
+     */
+    public function registerExtracurricular(Request $request): JsonResponse
+    {
+        $student = $this->getStudent($request);
+        if (! $student) {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $validated = $request->validate([
+            'extracurricular_id' => 'required|uuid|exists:extracurriculars,id',
+        ]);
+
+        $ekskul = Extracurricular::findOrFail($validated['extracurricular_id']);
+
+        $existing = ExtracurricularMember::where('extracurricular_id', $ekskul->id)
+            ->where('student_id', $student->id)
+            ->first();
+
+        if ($existing) {
+            return $this->errorResponse('Anda sudah terdaftar pada ekstrakurikuler ini.', 'ALREADY_REGISTERED', 422);
+        }
+
+        $currentCount = $ekskul->members()->count();
+        if ($currentCount >= ($ekskul->quota ?? 30)) {
+            return $this->errorResponse('Mohon maaf, kuota peserta untuk ekstrakurikuler ini telah penuh.', 'QUOTA_FULL', 422);
+        }
+
+        $member = ExtracurricularMember::create([
+            'extracurricular_id' => $ekskul->id,
+            'student_id' => $student->id,
+            'role' => 'anggota',
+            'status' => 'aktif',
+            'joined_at' => now()->toDateString(),
+        ]);
+
+        return $this->successResponse([
+            'message' => 'Berhasil mendaftar ekstrakurikuler '.$ekskul->name,
+            'member' => $member,
+        ], 201);
+    }
+}

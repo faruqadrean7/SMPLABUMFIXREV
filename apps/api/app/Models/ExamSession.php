@@ -13,6 +13,21 @@ class ExamSession extends Model
 {
     use Auditable, HasFactory, HasUuids;
 
+    public const STATUS_NOT_STARTED = 'belum';
+
+    public const STATUS_IN_PROGRESS = 'mengerjakan';
+
+    public const STATUS_FINISHED = 'selesai';
+
+    public const STATUS_LOCKED = 'terkunci';
+
+    public const STATUSES = [
+        self::STATUS_NOT_STARTED,
+        self::STATUS_IN_PROGRESS,
+        self::STATUS_FINISHED,
+        self::STATUS_LOCKED,
+    ];
+
     protected $table = 'exam_sessions';
 
     protected $fillable = [
@@ -20,22 +35,33 @@ class ExamSession extends Model
         'student_id',
         'status',
         'started_at',
+        'ends_at',
         'deadline_at',
         'submitted_at',
         'extra_minutes',
         'seed',
         'score',
         'locked_reason',
+        'last_heartbeat_at',
+        'ip_address',
+        'user_agent',
+        'device_fingerprint',
+        'blur_count',
+        'violation_count',
     ];
 
     protected function casts(): array
     {
         return [
             'started_at' => 'datetime',
+            'ends_at' => 'datetime',
             'deadline_at' => 'datetime',
             'submitted_at' => 'datetime',
+            'last_heartbeat_at' => 'datetime',
             'score' => 'decimal:2',
             'extra_minutes' => 'integer',
+            'blur_count' => 'integer',
+            'violation_count' => 'integer',
         ];
     }
 

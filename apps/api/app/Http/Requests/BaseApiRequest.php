@@ -6,7 +6,7 @@ use App\Traits\ApiResponse;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 
 abstract class BaseApiRequest extends FormRequest
 {
@@ -27,7 +27,8 @@ abstract class BaseApiRequest extends FormRequest
     protected function failedValidation(Validator $validator): void
     {
         $details = [];
-        foreach ($validator->errors()->toArray() as $field => $messages) {
+        $errors = $validator->errors()->toArray();
+        foreach ($errors as $field => $messages) {
             foreach ($messages as $message) {
                 $details[] = [
                     'field' => $field,
@@ -36,8 +37,19 @@ abstract class BaseApiRequest extends FormRequest
             }
         }
 
+        $requestId = request()->header('X-Request-Id', (string) Str::uuid());
+
         throw new HttpResponseException(
-            $this->errorResponse('Data tidak valid', 'VALIDATION_FAILED', 400, $details)
+            response()->json([
+                'error' => [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => 'Data tidak valid',
+                    'details' => $details,
+                    'requestId' => $requestId,
+                ],
+                'message' => 'Data tidak valid',
+                'errors' => $errors,
+            ], 400, ['X-Request-Id' => $requestId])
         );
     }
 }

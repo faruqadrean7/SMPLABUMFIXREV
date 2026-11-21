@@ -10,12 +10,10 @@ class AssetAuditItem extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
-
     protected $fillable = [
         'audit_id',
         'asset_id',
-        'condition_found',
+        'found_condition',
         'is_present',
         'notes',
     ];

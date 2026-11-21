@@ -1,15 +1,18 @@
-# 06. PRD Sistem Admin (Web Dashboard)
+# 06. PRD Web Portal & Dashboard Terpadu (Admin, Guru, Siswa, Orang Tua)
 
-Platform: Next.js/React + Tailwind + shadcn/ui + TanStack Query/Table. Pengguna: admin TU, kepala sekolah, guru/walas, BK, sarpras, panitia PPDB, pustakawan.
-Format ID: `ADM-{MODUL}-{NN}`. Setiap fitur admin memetakan ke fitur backend (`BE-*`).
+Platform: Next.js/React + Tailwind + shadcn/ui + TanStack Query/Table. Pengguna: Admin TU, Kepala Sekolah, Guru/Walas, BK, Sarpras, Panitia PPDB, Pustakawan, **Siswa**, dan **Orang Tua/Wali**.
+Format ID: `ADM-{MODUL}-{NN}` (Admin & Guru), `SIS-{MODUL}-{NN}` (Portal Siswa Web), `ORT-{MODUL}-{NN}` (Portal Ortu Web). Setiap fitur memetakan ke endpoint backend (`BE-*`).
 
-## 1. Prinsip UX
-1. Menu **mengikuti permission**: pengguna hanya melihat menu yang boleh diakses.
-2. Pekerjaan harian harus ≤ 3 klik (presensi, input nilai, buat tiket).
-3. Tabel data seragam: cari, filter, sort, paginasi, ekspor, aksi massal.
+## 1. Prinsip UX & Akses Multi-Role
+1. **Menu & Shell Mengikuti Role & Permission**: Pengguna hanya melihat fitur dan antarmuka sesuai wewenang otentikasi.
+   - Admin/Staf/Guru: Menggunakan Shell Dashboard Manajemen (`/admin/*`).
+   - Siswa: Menggunakan Shell Portal Siswa (`/portal/siswa/*`), dioptimalkan untuk pengerjaan CBT di komputer lab/laptop dan pengumpulan tugas LMS.
+   - Orang Tua: Menggunakan Shell Portal Orang Tua (`/portal/ortu/*`) dengan pemilih anak (multi-anak switcher) untuk memantau kehadiran dan e-rapor.
+2. Pekerjaan harian efisien: entri presensi & nilai cepat, akses CBT sekali klik dengan token.
+3. Tabel data seragam: cari, filter, sort, paginasi server-side, ekspor, aksi massal.
 4. Operasi berat (cetak massal, import) tampil sebagai **job** dengan progres dan notifikasi selesai.
 5. Aksi destruktif selalu minta konfirmasi; data penting memakai soft delete.
-6. Responsif sampai tablet (guru memakai tablet di kelas); mobile kecil bukan target.
+6. Responsif: Desktop dan laptop (target utama CBT lab dan administrasi), ramah tablet (guru di kelas).
 
 ## 2. Layout & Navigasi
 ```mermaid
@@ -299,35 +302,136 @@ Hari libur, jam pelajaran, ambang peringatan dini, batas edit jurnal, template r
 
 ---
 
-## 17. Matriks Hak Akses Ringkas (menu)
-| Menu | Admin | Kepsek | Guru | Walas | BK | Sarpras | Panitia |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Dashboard | ✅ | ✅ eksekutif | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Master data | ✅ | lihat | lihat kelas sendiri | lihat kelas sendiri | - | - | - |
-| PPDB | ✅ | lihat | - | - | - | - | ✅ |
-| Jadwal | ✅ | lihat | lihat | lihat | - | - | - |
-| Jurnal & presensi | konfigurasi | rekap | input | input + izin | lihat | - | - |
-| Nilai & karakter (GRD) | cetak/kunci | ACC | input | input + karakter | - | - | - |
-| CBT | review | live monitor | buat/atur | buat/atur | - | - | - |
-| Poin siswa | konfigurasi | rekap | input | input | lihat | - | - |
-| BK | sistem | laporan | rujuk | rujuk | ✅ | - | - |
-| Sarpras | disposisi | pantau | pinjam/lapor | pinjam/lapor | - | ✅ | - |
-| Buku tamu & aspirasi (GUEST) | ✅ | pantau | - | - | - | - | - |
-| Humas & kemitraan (HUM) | ✅ | pantau | - | - | - | - | - |
-| CMS | ✅ | lihat | - | - | - | - | - |
-| Pusat Laporan (RPT) | ✅ | ✅ | rekap mapel | rekap kelas | rekap kasus | rekap sarpras | rekap PPDB |
-| Pengaturan | ✅ | - | - | - | - | - | - |
+## 17. Portal Web Siswa (`SIS-*`)
 
-Sumber otoritatif tetap tabel permission di backend; matriks ini hanya acuan awal seed.
+Portal Siswa di Web dirancang untuk diakses via PC lab komputer sekolah atau laptop/Chromebook pribadi siswa (`/portal/siswa/*`), dengan fokus utama kenyamanan pengerjaan ujian digital (CBT layar lebar), pengumpulan tugas berkas besar (LMS), dan akses rapor berkala.
 
-## 18. Kriteria Penerimaan Umum
+### SIS-DASH-01: Dashboard Siswa Web [P0]
+- Ringkasan widget terpadu:
+  - Kartu selamat datang + status kehadiran hari ini (hadir/belum absen).
+  - Jadwal pelajaran hari ini (mapel aktif, ruang, jam, guru pengampu).
+  - Banner Ujian CBT aktif atau terjadwal hari ini (dengan tombol langsung ke `/portal/siswa/cbt`).
+  - Daftar tenggat tugas LMS yang belum diselesaikan.
+  - Pengumuman sekolah terbaru & pesan wali kelas.
+- Backend: `GET /dashboard/student`.
+
+### SIS-CBT-01: Web CBT Exam Workspace (Komputer Lab / Layar Lebar) [P0]
+- **Tampilan Khusus Ujian (Distraction-Free Mode)**:
+  - Header: Nama ujian, mata pelajaran, identitas siswa, indikator status koneksi (Online/Reconnecting), countdown timer sinkron waktu server, status simpan otomatis (*Semua jawaban tersimpan*).
+  - Area Soal (Kiri/Tengah): Teks soal rich-text (dukungan KaTeX formula matematika, audio listening, gambar resolusi tinggi, tabel perbandingan), 6 model soal:
+    1. Pilihan Ganda (Single Choice)
+    2. Pilihan Ganda Kompleks (Multi Choice Checkbox)
+    3. Benar / Salah (True / False Grid)
+    4. Menjodohkan (Matching Pair Drag/Select)
+    5. Isian Singkat (Short Answer Text)
+    6. Uraian / Esai (Rich Textarea)
+  - Panel Navigasi Butir Soal (Kanan): Grid nomor soal dengan 3 penanda warna status: *Belum Dijawab* (Abu-abu), *Sudah Terjawab* (Biru/Hijau), *Ragu-Ragu* (Kuning/Amber). Tombol checkbox *Ragu-ragu* di bawah soal.
+  - Navigasi Cepat: Tombol *Sebelumnya*, *Selanjutnya*, dan *Kumpulkan Ujian*.
+- **Mekanisme Keamanan Web (Anti-Cheat Web)**:
+  - Masuk ujian menggunakan Token Sesi Ruang (`POST /exams/{id}/start-session`).
+  - Autosave debounce 500ms idempotent ke `POST /exams/{id}/save-answer`.
+  - Deteksi perpindahan tab atau jendela (`document.visibilitychange`, `window.onblur`) dan tombol keluar fullscreen: memicu peringatan modal dan mencatat log pelanggaran ke `POST /exams/{id}/log-violation`.
+  - Pencegahan inspect element, disable klik kanan (`contextmenu`), dan shortcut copy-paste.
+  - Dialog konfirmasi berlapis sebelum *Submit* (`POST /exams/{id}/finish-session`) menampilkan ringkasan jumlah soal yang belum dijawab.
+- Backend: `POST /exams/{id}/start-session`, `GET /exams/{id}/session-questions`, `POST /exams/{id}/save-answer`, `POST /exams/{id}/log-violation`, `POST /exams/{id}/finish-session`.
+
+### SIS-ACD-01: Jadwal & Kalender Akademik Siswa [P0]
+- Tampilan kalender mingguan dan bulanan jadwal mata pelajaran kelas siswa, agenda ujian tengah/akhir semester, libur sekolah, dan kegiatan kurikuler.
+
+### SIS-ACD-02: Modul Ajar & Pengumpulan Tugas LMS [P1]
+- Daftar materi/modul pembelajaran per mata pelajaran (unduh slide, PDF bahan ajar, link video).
+- Daftar tugas sekolah dengan filter: *Aktif*, *Sudah Dikumpulkan*, *Dinilai*.
+- Formulir pengumpulan tugas: unggah berkas dokumen (PDF, Word, ZIP, foto) via presigned URL atau kirim tautan Google Docs/Drive; menampilkan catatan umpan balik dan nilai dari guru.
+
+### SIS-GRD-01: E-Progress Report & E-Rapor Siswa [P0]
+- Pratinjau capaian nilai bulanan dan nilai akhir semester per mata pelajaran.
+- Unduh dokumen resmi PDF E-Progress Report dan E-Rapor lengkap dengan barcode/QR verification yang telah disahkan Kepala Sekolah.
+
+### SIS-STD-01: Poin Pembiasaan & Ekskul Siswa [P1]
+- Buku catatan poin disiplin dan poin prestasi siswa secara transparan.
+- Informasi pendaftaran ekstrakurikuler sekolah dan jadwal pertemuan mingguan.
+
+### SIS-BK-01: Konseling Siswa & Bantuan Privat [P1]
+- Formulir permohonan janji temu konseling tatap muka dengan Guru BK (privat & terenkripsi).
+- Tautan pengaduan perundungan / whistleblowing anonim (mengarah ke modul GUEST publik).
+
+---
+
+## 18. Portal Web Orang Tua (`ORT-*`)
+
+Portal Orang Tua di Web (`/portal/ortu/*`) dirancang agar wali murid dapat memantau perkembangan akademik dan kehadiran anak secara komprehensif melalui komputer, laptop, maupun peramban web lainnya.
+
+### ORT-DASH-01: Multi-Anak Switcher & Dashboard Orang Tua Web [P0]
+- **Multi-Child Selector Card/Dropdown**: Jika akun orang tua terhubung ke lebih dari 1 siswa di sekolah (`student_guardians`), header menampilkan pemilih anak aktif dengan informasi foto, nama anak, NISN, dan kelas.
+- Ringkasan Terpadu Dashboard Anak:
+  - Kartu Status Kehadiran Hari Ini: Menampilkan jam tap gerbang datang, absensi di ruang kelas, atau status izin/sakit.
+  - Ringkasan Jadwal Pelajaran Hari Ini untuk anak yang dipilih.
+  - Pengumuman penting sekolah & agenda rapat wali murid terdekat.
+  - Notifikasi penting: pengingat penerbitan rapor baru atau konfirmasi surat izin.
+- Backend: `GET /dashboard/guardian/{studentId}`, `GET /guardians`.
+
+### ORT-ACD-01: Riwayat Presensi & Log Gerbang Anak [P0]
+- Kalender presensi bulanan lengkap dengan rekapitulasi persentase kehadiran: Hadir, Sakit, Izin, Alpa, Terlambat.
+- Rincian jam masuk gerbang sekolah harian.
+
+### ORT-ACD-02: Pengajuan Surat Izin & Sakit via Web [P0]
+- Formulir permohonan ketidakhadiran anak:
+  - Pilih tanggal mulai dan tanggal selesai ketidakhadiran.
+  - Jenis permohonan: *Sakit* atau *Izin Kepentingan Keluarga*.
+  - Catatan/keterangan alasan permohonan.
+  - Unggah lampiran bukti (foto surat dokter / surat izin bertanda tangan orang tua, format PDF/JPG/PNG).
+- Pelacakan status permohonan secara realtime (*Menunggu Konfirmasi Walas*, *Disetujui*, *Ditolak*).
+- Backend: `POST /leave-requests`, `GET /leave-requests`.
+
+### ORT-GRD-01: E-Progress Report & E-Rapor Semester Anak [P0]
+- Tampilan grafik radar/batang perkembangan kompetensi belajar anak per mata pelajaran.
+- Unduh berkas E-Progress Report bulanan dan E-Rapor semester berformat PDF resmi ber-QR Code keaslian dokumen.
+
+### ORT-STD-01: Buku Poin Sikap & Prestasi Anak [P1]
+- Pemantauan catatan poin perilaku positif (penghargaan/prestasi) dan pelanggaran disiplin anak.
+- Notifikasi peringatan dini jika akumulasi poin pelanggaran anak mendekati batas pemanggilan orang tua ke sekolah.
+
+### ORT-FIN-01: Informasi Administrasi & Biaya Sekolah (Informatif) [P1]
+- Halaman informasi transparan mengenai status pembayaran administrasi sekolah (SPP bulanan, uang kegiatan, study trip) yang tercatat di Tata Usaha.
+- Bersifat catatan informatif tanpa modul payment gateway perbankan.
+
+### ORT-BK-01: Janji Temu Konseling Wali Murid [P1]
+- Formulir pengajuan konsultasi atau diskusi pendampingan anak bersama Guru BK atau Wali Kelas.
+
+---
+
+## 19. Matriks Hak Akses Ringkas (Web Portal Multi-Role)
+| Menu / Modul | Admin | Kepsek | Guru | Walas | BK | Sarpras | Panitia | Siswa | Ortu |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Dashboard | ✅ | ✅ eksekutif | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (`/portal/siswa`) | ✅ (`/portal/ortu`) |
+| Master data | ✅ | lihat | lihat kelas | lihat kelas | - | - | - | - | - |
+| PPDB | ✅ | lihat | - | - | - | - | ✅ | - | - |
+| Jadwal | ✅ | lihat | lihat | lihat | - | - | - | lihat sendiri | lihat anak |
+| Jurnal & presensi | konfig | rekap | input | input+izin | lihat | - | - | riwayat hadir | riwayat + ajukan izin |
+| Nilai & rapor (GRD) | cetak/kunci | ACC | input | input+karakter | - | - | - | lihat + unduh | lihat + unduh |
+| CBT Exam | review | live monitor | buat/atur | buat/atur | - | - | - | ✅ kerjakan ujian | - |
+| LMS / Tugas | konfig | pantau | buat tugas | buat tugas | - | - | - | kumpul tugas | pantau tugas |
+| Poin siswa (STD) | konfig | rekap | input | input | lihat | - | - | lihat poin | lihat poin anak |
+| BK | sistem | laporan | rujuk | rujuk | ✅ | - | - | ajukan konseling | ajukan konseling |
+| Sarpras | disposisi | pantau | pinjam/lapor | pinjam/lapor | - | ✅ | - | - | - |
+| Buku tamu / aspirasi | ✅ | pantau | - | - | - | - | - | lapor aspirasi | lapor aspirasi |
+| Biaya/Admin (FIN) | kelola TU | pantau | - | - | - | - | - | - | catatan informatif |
+| Pusat Laporan (RPT) | ✅ | ✅ | rekap mapel | rekap kelas | rekap kasus | rekap sarpras | rekap PPDB | - | - |
+| Pengaturan | ✅ | - | - | - | - | - | - | - | - |
+
+Sumber otoritatif tetap tabel permission di backend; matriks ini sebagai acuan routing shell dan visibilitas komponen UI web.
+
+## 20. Kriteria Penerimaan Umum Web Portal
 - Menu dan tombol hanya tampil sesuai permission; akses langsung via URL tanpa izin → halaman 403.
-- Semua tabel mendukung paginasi server-side (tidak memuat semua data).
-- Form menampilkan error validasi dari server pada field terkait.
-- Operasi > 5 detik berjalan sebagai job dengan progres.
-- Input nilai 40 siswa × 5 komponen dapat diselesaikan tanpa pindah halaman.
-- Uji E2E untuk alur kritis: verifikasi PPDB, input nilai → progress report → ACC, buat ujian → monitor.
+- Shell Web memisahkan konteks manajemen (`/admin/*`), siswa (`/portal/siswa/*`), dan orang tua (`/portal/ortu/*`).
+- Ujian CBT Web di Lab Komputer bebas distorsi, fullscreen, autosave otomatis, dan mendeteksi perpindahan tab secara akurat.
+- Orang tua dengan multi-anak dapat beralih konteks anak seketika tanpa kehilangan sesi login.
+- Semua tabel mendukung paginasi server-side (tidak memuat semua data sekaligus).
+- Form menampilkan error validasi dari server pada field terkait (Zod + React Hook Form).
+- Operasi berat (> 5 detik) berjalan sebagai background job dengan notifikasi.
+- Uji E2E untuk alur kritis: verifikasi PPDB, input nilai → progress report → ACC, pengerjaan ujian CBT siswa → submit.
 
 ## Changelog
 - 1.0: Draf awal.
 - 1.1: Pemisahan modul GRD dari ACD (ADM-GRD-01..04), pemisahan modul GUEST dari HUM (ADM-GUEST-01..03 dengan audit tanda tangan tamu), penyelarasan modul RPT, dan pembaruan matriks menu hak akses.
+- 1.2: Perluasan menjadi Web Portal Terpadu Multi-Role: penambahan Portal Web Siswa (`SIS-*`, termasuk Web CBT Exam Workspace di lab/laptop), Portal Web Orang Tua (`ORT-*`, termasuk multi-anak switcher dan perizinan), serta pembaruan matriks akses 9 peran pengguna.

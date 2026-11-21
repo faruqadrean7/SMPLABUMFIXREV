@@ -11,9 +11,9 @@ class PostCategory extends Model
     use HasUuids;
 
     protected $fillable = [
+        'school_id',
         'name',
         'slug',
-        'description',
     ];
 
     public function posts(): HasMany

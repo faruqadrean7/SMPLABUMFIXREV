@@ -29,6 +29,11 @@ class TeachingAssignment extends Model
         return $this->belongsTo(SchoolClass::class, 'class_id');
     }
 
+    public function schoolClass(): BelongsTo
+    {
+        return $this->belongsTo(SchoolClass::class, 'class_id');
+    }
+
     public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class);

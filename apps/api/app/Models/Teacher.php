@@ -24,6 +24,19 @@ class Teacher extends Model
         'photo_file_id',
     ];
 
+    protected $appends = [
+        'total_teaching_hours',
+    ];
+
+    public function getTotalTeachingHoursAttribute(): int
+    {
+        if ($this->relationLoaded('teachingAssignments')) {
+            return (int) $this->teachingAssignments->sum('hours_per_week');
+        }
+
+        return (int) $this->teachingAssignments()->sum('hours_per_week');
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -52,5 +65,10 @@ class Teacher extends Model
     public function journals(): HasMany
     {
         return $this->hasMany(Journal::class);
+    }
+
+    public function salarySlips(): HasMany
+    {
+        return $this->hasMany(TeacherSalarySlip::class)->orderBy('period_year', 'desc')->orderBy('period_month', 'desc');
     }
 }

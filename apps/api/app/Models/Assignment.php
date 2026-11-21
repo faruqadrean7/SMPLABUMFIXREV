@@ -17,13 +17,18 @@ class Assignment extends Model
         'subject_id',
         'teacher_id',
         'title',
+        'description',
+        'file_id',
         'due_at',
+        'max_score',
+        'grade_component_id',
     ];
 
     protected function casts(): array
     {
         return [
             'due_at' => 'datetime',
+            'max_score' => 'decimal:2',
         ];
     }
 
@@ -40,6 +45,16 @@ class Assignment extends Model
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class);
+    }
+
+    public function file(): BelongsTo
+    {
+        return $this->belongsTo(File::class);
+    }
+
+    public function gradeComponent(): BelongsTo
+    {
+        return $this->belongsTo(GradeComponent::class);
     }
 
     public function submissions(): HasMany

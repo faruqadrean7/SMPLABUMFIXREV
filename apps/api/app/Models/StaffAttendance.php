@@ -20,7 +20,9 @@ class StaffAttendance extends Model
         'check_out',
         'lat',
         'lng',
+        'photo_file_id',
         'status',
+        'notes',
     ];
 
     protected function casts(): array
@@ -37,5 +39,10 @@ class StaffAttendance extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function photoFile(): BelongsTo
+    {
+        return $this->belongsTo(File::class, 'photo_file_id');
     }
 }

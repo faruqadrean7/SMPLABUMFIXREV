@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 300" font-family="Arial, sans-serif" font-size="13">
+  <rect width="360" height="300" fill="#ffffff"/>
+  <!-- axes: origin O at (60,250) -->
+  <g stroke="#333" stroke-width="1.6">
+    <line x1="60" y1="270" x2="60" y2="30"/>
+    <line x1="40" y1="250" x2="330" y2="250"/>
+    <polygon points="60,30 56,40 64,40" fill="#333"/>
+    <polygon points="330,250 322,246 322,254" fill="#333"/>
+  </g>
+  <!-- A on y-axis (top), B on x-axis (right); M midpoint AB; P midpoint MB -->
+  <!-- A=(60,60) B=(300,250) ; M=(180,155) ; P=(240,202.5) -->
+  <line x1="60" y1="60" x2="300" y2="250" stroke="#2c3e50" stroke-width="2"/>
+  <line x1="60" y1="60" x2="60" y2="250" stroke="#999" stroke-width="1" stroke-dasharray="3 3"/>
+  <g fill="#c0392b">
+    <circle cx="60" cy="60" r="3.4"/><circle cx="180" cy="155" r="3.4"/>
+    <circle cx="240" cy="202" r="3.4"/><circle cx="300" cy="250" r="3.4"/>
+  </g>
+  <!-- tick marks indicating equal segments -->
+  <g stroke="#c0392b" stroke-width="1.5">
+    <line x1="116" y1="103" x2="124" y2="112"/><line x1="214" y1="174" x2="206" y2="183"/>
+  </g>
+  <text x="40" y="64" fill="#333">A</text>
+  <text x="186" y="150" fill="#333">M</text>
+  <text x="214" y="196" fill="#333">P = (60, 11)</text>
+  <text x="300" y="268" fill="#333">B</text>
+  <text x="46" y="266" fill="#333">O</text>
+  <text x="322" y="266" fill="#333">x</text>
+  <text x="44" y="34" fill="#333">y</text>
+</svg>

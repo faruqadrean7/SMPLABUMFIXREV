@@ -11,23 +11,20 @@ class Bulletin extends Model
     use HasUuids;
 
     protected $fillable = [
-        'edition',
+        'school_id',
         'title',
-        'publish_date',
-        'pdf_file_id',
+        'file_id',
         'cover_file_id',
-        'description',
-        'is_published',
     ];
 
-    protected $casts = [
-        'publish_date' => 'date',
-        'is_published' => 'boolean',
-    ];
-
-    public function pdfFile(): BelongsTo
+    public function file(): BelongsTo
     {
-        return $this->belongsTo(File::class, 'pdf_file_id');
+        return $this->belongsTo(File::class, 'file_id');
+    }
+
+    public function cover(): BelongsTo
+    {
+        return $this->belongsTo(File::class, 'cover_file_id');
     }
 
     public function coverFile(): BelongsTo

@@ -10,6 +10,7 @@
         "laravel/framework": "^13.17",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
+        "phpoffice/phpword": "^1.4",
         "predis/predis": "^3.6"
     },
     "require-dev": {
@@ -26,7 +27,10 @@
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        }
+        },
+        "classmap": [
+            "database/seeders"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

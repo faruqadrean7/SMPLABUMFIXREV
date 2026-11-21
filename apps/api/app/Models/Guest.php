@@ -10,31 +10,65 @@ class Guest extends Model
 {
     use HasUuids;
 
+    protected $table = 'guests';
+
     protected $fillable = [
-        'name',
+        'school_id',
+        'target_user_id',
+        'full_name',
         'institution',
         'phone',
-        'email',
         'purpose',
-        'person_to_meet_user_id',
-        'check_in_at',
-        'check_out_at',
+        'photo_file_id',
         'signature_file_id',
-        'notes',
+        'signature_hash',
+        'check_in',
+        'check_out',
     ];
 
     protected $casts = [
-        'check_in_at' => 'datetime',
-        'check_out_at' => 'datetime',
+        'check_in' => 'datetime',
+        'check_out' => 'datetime',
     ];
+
+    public function targetUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'target_user_id');
+    }
 
     public function personToMeet(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'person_to_meet_user_id');
+        return $this->targetUser();
+    }
+
+    public function photoFile(): BelongsTo
+    {
+        return $this->belongsTo(File::class, 'photo_file_id');
     }
 
     public function signatureFile(): BelongsTo
     {
         return $this->belongsTo(File::class, 'signature_file_id');
+    }
+
+    // Compatibility accessors
+    public function getNameAttribute(): string
+    {
+        return (string) $this->full_name;
+    }
+
+    public function setNameAttribute($value): void
+    {
+        $this->attributes['full_name'] = $value;
+    }
+
+    public function getCheckInAtAttribute()
+    {
+        return $this->check_in;
+    }
+
+    public function getCheckOutAtAttribute()
+    {
+        return $this->check_out;
     }
 }

@@ -10,8 +10,6 @@ class TracerResponse extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
-
     protected $fillable = [
         'survey_id',
         'alumni_id',

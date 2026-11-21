@@ -9,18 +9,17 @@ class PointThreshold extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
+    protected $table = 'point_thresholds';
 
     protected $fillable = [
+        'school_id',
         'min_points',
-        'action_required',
+        'action',
         'notify_roles',
-        'is_active',
     ];
 
     protected $casts = [
         'min_points' => 'integer',
         'notify_roles' => 'array',
-        'is_active' => 'boolean',
     ];
 }

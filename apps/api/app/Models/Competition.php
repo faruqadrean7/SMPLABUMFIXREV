@@ -4,38 +4,30 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Competition extends Model
 {
     use HasUuids;
 
+    protected $table = 'competitions';
+
     protected $fillable = [
+        'school_id',
         'name',
         'organizer',
         'level',
         'category',
-        'field',
+        'held_at',
         'registration_deadline',
-        'start_date',
-        'end_date',
-        'location',
-        'url',
         'status',
-        'created_by',
+        'description',
     ];
 
     protected $casts = [
+        'held_at' => 'date',
         'registration_deadline' => 'date',
-        'start_date' => 'date',
-        'end_date' => 'date',
     ];
-
-    public function creator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'created_by');
-    }
 
     public function entries(): HasMany
     {

@@ -10,14 +10,13 @@ class ExchangeParticipant extends Model
 {
     use HasUuids;
 
-    public $timestamps = false;
-
     protected $fillable = [
         'program_id',
         'student_id',
         'status',
         'passport_number',
         'notes',
+        'evaluation_notes',
     ];
 
     public function program(): BelongsTo

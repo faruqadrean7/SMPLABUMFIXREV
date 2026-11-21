@@ -12,11 +12,13 @@ class ComplaintEvent extends Model
 
     public $timestamps = false;
 
+    protected $table = 'complaint_events';
+
     protected $fillable = [
         'complaint_id',
-        'actor_user_id',
-        'action',
-        'notes',
+        'actor_id',
+        'event_type',
+        'response_text',
         'created_at',
     ];
 
@@ -31,6 +33,27 @@ class ComplaintEvent extends Model
 
     public function actor(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'actor_user_id');
+        return $this->belongsTo(User::class, 'actor_id');
+    }
+
+    // Compatibility accessors
+    public function getNotesAttribute(): string
+    {
+        return (string) $this->response_text;
+    }
+
+    public function setNotesAttribute($value): void
+    {
+        $this->attributes['response_text'] = $value;
+    }
+
+    public function getActionAttribute(): string
+    {
+        return (string) $this->event_type;
+    }
+
+    public function setActionAttribute($value): void
+    {
+        $this->attributes['event_type'] = $value;
     }
 }

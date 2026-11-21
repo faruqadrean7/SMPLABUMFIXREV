@@ -16,6 +16,7 @@ class LearningMaterial extends Model
         'subject_id',
         'teacher_id',
         'title',
+        'description',
         'file_id',
     ];
 

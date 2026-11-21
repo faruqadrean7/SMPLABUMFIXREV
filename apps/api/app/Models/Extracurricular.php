@@ -11,26 +11,33 @@ class Extracurricular extends Model
 {
     use HasUuids;
 
+    protected $table = 'extracurriculars';
+
     protected $fillable = [
+        'school_id',
+        'coach_id',
         'name',
-        'code',
         'category',
         'description',
-        'coach_teacher_id',
+        'quota',
         'schedule_day',
         'schedule_time',
-        'max_members',
         'is_active',
     ];
 
     protected $casts = [
-        'max_members' => 'integer',
+        'quota' => 'integer',
         'is_active' => 'boolean',
+    ];
+
+    protected $appends = [
+        'active_members_count',
+        'available_quota',
     ];
 
     public function coach(): BelongsTo
     {
-        return $this->belongsTo(Teacher::class, 'coach_teacher_id');
+        return $this->belongsTo(Teacher::class, 'coach_id');
     }
 
     public function members(): HasMany
@@ -41,5 +48,20 @@ class Extracurricular extends Model
     public function journals(): HasMany
     {
         return $this->hasMany(ExtracurricularJournal::class, 'extracurricular_id');
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(ActivityDocument::class, 'extracurricular_id');
+    }
+
+    public function getActiveMembersCountAttribute(): int
+    {
+        return (int) $this->members()->where('status', 'aktif')->count();
+    }
+
+    public function getAvailableQuotaAttribute(): int
+    {
+        return max(0, $this->quota - $this->active_members_count);
     }
 }
