@@ -55,6 +55,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:master.student.write');
     Route::post('/students/{id}/status', [StudentController::class, 'changeStatus'])
         ->middleware('permission:master.student.write');
+    Route::post('/students/{id}/account', [StudentController::class, 'provisionAccount'])
+        ->middleware('permission:master.student.write');
 
     // Scoped listing & detail (Service enforces data scoping & IDOR)
     Route::get('/students', [StudentController::class, 'index']);
@@ -74,6 +76,7 @@ Route::middleware(['auth:sanctum', 'permission:master.teacher.manage'])->group(f
     Route::put('/teachers/{id}', [TeacherController::class, 'update']);
     Route::delete('/teachers/{id}', [TeacherController::class, 'destroy']);
     Route::get('/teachers/{id}/teaching-recap', [TeacherController::class, 'teachingRecap']);
+    Route::post('/teachers/{id}/account', [TeacherController::class, 'provisionAccount']);
 
     // Teacher Salary Slips (Admin TU / Keuangan)
     Route::get('/teachers/{id}/salary-slips', [TeacherController::class, 'listSalarySlips']);

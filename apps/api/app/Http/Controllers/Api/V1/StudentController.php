@@ -132,6 +132,41 @@ class StudentController extends Controller
      * BE-MST-02: Update Student
      * PUT /api/v1/students/{id}
      */
+    /**
+     * Aktifkan / setel ulang akun login portal siswa.
+     * POST /api/v1/students/{id}/account
+     */
+    public function provisionAccount(Request $request, string $id): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'username' => ['nullable', 'string', 'max:50'],
+                'password' => ['nullable', 'string', 'min:6'],
+                'email' => ['nullable', 'email', 'max:100'],
+            ]);
+
+            $student = $this->studentService->createOrResetAccount($id, $validated, $request);
+
+            return $this->successResponse([
+                'message' => 'Akun login portal siswa berhasil diaktifkan / diperbarui.',
+                'student' => $student,
+                'user' => [
+                    'id' => $student->user?->id,
+                    'username' => $student->user?->username,
+                    'email' => $student->user?->email,
+                ],
+            ], 200);
+        } catch (ModelNotFoundException) {
+            return $this->errorResponse('Data siswa tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorResponse('Gagal membuat akun login siswa', 'INTERNAL_ERROR', 500);
+        }
+    }
+
     public function update(UpdateStudentRequest $request, string $id): JsonResponse
     {
         try {

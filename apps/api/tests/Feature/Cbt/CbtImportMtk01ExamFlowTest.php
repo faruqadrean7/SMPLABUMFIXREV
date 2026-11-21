@@ -55,7 +55,10 @@ class CbtImportMtk01ExamFlowTest extends TestCase
             ]);
         }
 
-        Artisan::call('cbt:import-package', ['manifest' => 'import/mtk-pas-9-genap-2526.json', '--fresh' => true]);
+        Artisan::call('cbt:import-package', [
+            'manifest' => base_path('tests/fixtures/cbt/mtk-pas-9-genap-2526.fixture.json'),
+            '--fresh' => true,
+        ]);
     }
 
     public function test_imported_exam_can_be_taken_end_to_end_and_autograded_without_key_leak(): void

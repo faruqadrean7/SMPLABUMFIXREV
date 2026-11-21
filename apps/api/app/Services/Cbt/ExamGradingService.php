@@ -15,6 +15,7 @@ use App\Models\GradeComponent;
 use App\Models\GradePeriod;
 use App\Models\Question;
 use App\Models\User;
+use App\Services\Concerns\GuardsExamOwnership;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ExamGradingService
 {
+    use GuardsExamOwnership;
+
     /**
      * BE-CBT-05: Jalankan koreksi otomatis untuk soal-soal objektif (PG, PG Kompleks, BS, Menjodohkan, Isian).
      */
@@ -872,23 +875,9 @@ class ExamGradingService
      */
     protected function authorizeTeacherOrAdmin(Exam $exam, ?User $user): void
     {
-        if (! $user) {
-            throw new HttpException(401, 'Unauthenticated');
-        }
-
-        if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
-            return;
-        }
-
-        if ($user->hasPermission('cbt.exam.manage')) {
-            return;
-        }
-
-        if ($exam->created_by === $user->id) {
-            return;
-        }
-
-        throw new HttpException(403, 'Anda tidak memiliki hak akses penilaian untuk ujian ini.');
+        // Aturan tunggal ada di trait: izin cbt.exam.manage TIDAK melewati
+        // batas kepemilikan, karena izin itu juga dipegang guru.
+        $this->assertCanManage($exam, $user);
     }
 
     protected function logAudit(
