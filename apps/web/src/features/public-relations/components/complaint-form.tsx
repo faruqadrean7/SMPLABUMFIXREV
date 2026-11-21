@@ -19,6 +19,9 @@ import {
   RefreshCw,
   PhoneCall,
   UserCheck,
+  Camera,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { publicRelationsApi } from '../public-relations-api';
 import { useAuth } from '@/providers/auth-provider';
@@ -53,6 +56,20 @@ const complaintSchema = z.object({
 });
 
 export type ComplaintFormData = z.infer<typeof complaintSchema>;
+
+/** BE-GUEST-04: satu lampiran foto beserta status unggahnya */
+interface ComplaintAttachment {
+  key: string;
+  file: File;
+  previewUrl: string;
+  status: 'pending' | 'uploading' | 'done' | 'error';
+  fileId?: string;
+  error?: string;
+}
+
+const MAX_ATTACHMENTS = 3;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 
 interface CategoryOption {
   id: 'bullying' | 'fasilitas' | 'akademik' | 'pelayanan' | 'pungli' | 'lainnya';
@@ -112,6 +129,8 @@ export function ComplaintForm({
     is_anonymous: boolean;
   } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [attachments, setAttachments] = useState<ComplaintAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const {
     register,
@@ -133,6 +152,97 @@ export function ComplaintForm({
   const selectedCategory = watch('category');
   const isAnonymous = watch('is_anonymous');
   const contentValue = watch('content') || '';
+
+  // =========================================================================
+  // LAMPIRAN FOTO (BE-GUEST-04): presign -> upload -> confirm
+  // =========================================================================
+  const addAttachments = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const room = MAX_ATTACHMENTS - attachments.length;
+    if (room <= 0) {
+      toast.error(`Maksimal ${MAX_ATTACHMENTS} foto per laporan`);
+      return;
+    }
+
+    const incoming = Array.from(files);
+    if (incoming.length > room) {
+      toast.error(`Hanya ${room} foto lagi yang bisa ditambahkan`);
+    }
+
+    const accepted: ComplaintAttachment[] = [];
+    for (const file of incoming.slice(0, room)) {
+      if (!ALLOWED_MIME.includes(file.type)) {
+        toast.error(`${file.name}: format harus JPG, PNG, atau WebP`);
+        continue;
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        toast.error(`${file.name}: ukuran melebihi 5 MB`);
+        continue;
+      }
+      accepted.push({
+        key: `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: 'pending',
+      });
+    }
+
+    if (accepted.length > 0) {
+      setAttachments((prev) => [...prev, ...accepted]);
+    }
+  };
+
+  const removeAttachment = (key: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.key === key);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.key !== key);
+    });
+  };
+
+  /** Unggah semua lampiran yang belum selesai, kembalikan daftar file_id. */
+  const uploadAttachments = async (): Promise<string[]> => {
+    const fileIds: string[] = [];
+
+    for (const item of attachments) {
+      if (item.status === 'done' && item.fileId) {
+        fileIds.push(item.fileId);
+        continue;
+      }
+
+      setAttachments((prev) =>
+        prev.map((a) => (a.key === item.key ? { ...a, status: 'uploading', error: undefined } : a))
+      );
+
+      try {
+        const presign = await publicRelationsApi.presignComplaintAttachment({
+          filename: item.file.name,
+          mime_type: item.file.type,
+          size_bytes: item.file.size,
+        });
+
+        const token = presign.data.token;
+        await publicRelationsApi.uploadComplaintAttachment(presign.data.upload_url, item.file);
+        const confirmed = await publicRelationsApi.confirmComplaintAttachment(token);
+        const fileId = confirmed.data.file_id;
+
+        fileIds.push(fileId);
+        setAttachments((prev) =>
+          prev.map((a) => (a.key === item.key ? { ...a, status: 'done', fileId } : a))
+        );
+      } catch (err: any) {
+        const msg =
+          err?.response?.data?.message || err?.message || 'Gagal mengunggah foto';
+        setAttachments((prev) =>
+          prev.map((a) => (a.key === item.key ? { ...a, status: 'error', error: msg } : a))
+        );
+        throw new Error(`${item.file.name}: ${msg}`);
+      }
+    }
+
+    return fileIds;
+  };
 
   const onSubmit = async (data: ComplaintFormData) => {
     // 1. Anti-spam honeypot detection (FE-REPORT-02)
@@ -160,10 +270,26 @@ export function ComplaintForm({
     setSubmitError(null);
 
     try {
+      // Unggah lampiran lebih dulu; kalau gagal, laporan tidak dikirim.
+      let attachmentIds: string[] = [];
+      if (attachments.length > 0) {
+        try {
+          attachmentIds = await uploadAttachments();
+        } catch (uploadErr: any) {
+          setSubmitError(
+            uploadErr?.message ||
+              'Gagal mengunggah lampiran foto. Hapus foto yang gagal lalu coba lagi.'
+          );
+          toast.error('Lampiran gagal diunggah');
+          return;
+        }
+      }
+
       const response = await publicRelationsApi.submitComplaintPublic({
         category: data.category,
         content: data.content,
         is_anonymous: Boolean(data.is_anonymous),
+        ...(attachmentIds.length > 0 ? { attachment_file_ids: attachmentIds } : {}),
       });
 
       if (response && response.data) {
@@ -203,6 +329,8 @@ export function ComplaintForm({
   const handleResetForm = () => {
     setSubmittedTicket(null);
     setSubmitError(null);
+    attachments.forEach((a) => URL.revokeObjectURL(a.previewUrl));
+    setAttachments([]);
     reset({
       category: 'bullying',
       content: '',
@@ -468,6 +596,100 @@ export function ComplaintForm({
               ) : (
                 <p className="text-xs text-slate-400">
                   Hindari mencantumkan kata sandi atau informasi rahasia perbankan. Ceritakan kronologi seobjektif mungkin.
+                </p>
+              )}
+            </div>
+
+            {/* 2b. LAMPIRAN FOTO (BE-GUEST-04) */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-800">
+                Bukti Foto <span className="text-slate-400 font-normal">(opsional)</span>
+              </label>
+              <p className="text-xs text-slate-500">
+                Maksimal {MAX_ATTACHMENTS} foto, format JPG/PNG/WebP, 5 MB per foto. Metadata
+                lokasi (EXIF) dihapus otomatis saat diunggah.
+              </p>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  addAttachments(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+
+              {attachments.length > 0 && (
+                <div className="grid grid-cols-3 gap-2.5 pt-1">
+                  {attachments.map((item) => (
+                    <div
+                      key={item.key}
+                      className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.previewUrl}
+                        alt={item.file.name}
+                        className="w-full h-24 object-cover"
+                      />
+
+                      {item.status === 'uploading' && (
+                        <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center">
+                          <Loader2 className="w-5 h-5 text-white animate-spin" />
+                        </div>
+                      )}
+
+                      {item.status === 'error' && (
+                        <div
+                          className="absolute inset-0 bg-red-900/60 flex items-center justify-center p-1"
+                          title={item.error}
+                        >
+                          <span className="text-[10px] font-semibold text-white text-center leading-tight">
+                            Gagal
+                          </span>
+                        </div>
+                      )}
+
+                      {item.status === 'done' && (
+                        <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-emerald-600/90 text-[10px] font-semibold text-white">
+                          Siap
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(item.key)}
+                        aria-label={`Hapus ${item.file.name}`}
+                        className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {attachments.length < MAX_ATTACHMENTS && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-dashed border-slate-300 text-sm text-slate-600 hover:border-pub-navy hover:text-pub-navy hover:bg-slate-50 transition-colors"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Tambah Foto</span>
+                  <span className="text-xs text-slate-400">
+                    ({attachments.length}/{MAX_ATTACHMENTS})
+                  </span>
+                </button>
+              )}
+
+              {attachments.some((a) => a.status === 'error') && (
+                <p className="text-xs text-red-600 font-medium">
+                  Ada foto yang gagal diunggah. Hapus foto itu lalu tambahkan ulang sebelum
+                  mengirim laporan.
                 </p>
               )}
             </div>
