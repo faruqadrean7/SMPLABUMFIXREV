@@ -39,6 +39,9 @@ export default function StudentTugasPage() {
   const [driveLink, setDriveLink] = useState<string>('');
   const [studentNote, setStudentNote] = useState<string>('');
   const [isSuccessSubmit, setIsSuccessSubmit] = useState(false);
+  // Confetti celebrates ONLY a confirmed server submit — never the offline/failure fallback,
+  // so a student is not misled into thinking failed work reached the server.
+  const [showConfetti, setShowConfetti] = useState(false);
 
   // Detail feedback modal state
   const [feedbackTask, setFeedbackTask] = useState<StudentTaskItem | null>(null);
@@ -91,11 +94,13 @@ export default function StudentTugasPage() {
         file_name: uploadedFileName || 'Dokumen_Tugas_Siswa.pdf',
       });
       setIsSuccessSubmit(true);
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 2400);
       setTimeout(() => {
         setSelectedTask(null);
       }, 1200);
     } catch {
-      // Local fallback
+      // Local fallback — no confetti: the submit did not reach the server.
       selectedTask.status = 'dikumpulkan';
       selectedTask.submission = {
         file_name: uploadedFileName || 'Dokumen_Tugas_Siswa.pdf',
@@ -103,6 +108,7 @@ export default function StudentTugasPage() {
         drive_link: driveLink || undefined,
       };
       setIsSuccessSubmit(true);
+      setShowConfetti(false);
       setTimeout(() => {
         setSelectedTask(null);
       }, 1200);
@@ -112,7 +118,7 @@ export default function StudentTugasPage() {
 
   return (
     <div className="space-y-5 text-slate-900">
-      <Confetti show={isSuccessSubmit} />
+      <Confetti show={showConfetti} />
       {/* ─── HEADER CARD (COMPACT & PROPORTIONED) ─── */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
