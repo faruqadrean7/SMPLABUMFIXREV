@@ -20,7 +20,7 @@ import { useCounselingRequests, useCreateCounselingRequest } from '@/lib/use-stu
 import { toast } from 'sonner';
 import { CounselingListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ErrorState } from '@/components/ui/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 
 export default function StudentKonselingPage() {
   const [localList, setLocalList] = useState<StudentCounselingItem[]>([]);
@@ -233,11 +233,7 @@ export default function StudentKonselingPage() {
               {isLoading && <CounselingListSkeleton />}
 
               {isError && (
-                <ErrorState
-                  title="Gagal Memuat Riwayat Konseling"
-                  message="Terjadi kendala saat mengambil riwayat permohonan konseling dari server. Silakan coba kembali."
-                  onRetry={() => refetch()}
-                />
+                <StudentError message="Terjadi kendala saat mengambil riwayat permohonan konseling dari server. Silakan coba kembali." onRetry={() => refetch()} />
               )}
 
               {!isLoading && !isError && displayList.length === 0 && (
