@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Globe, Award, ArrowLeft } from 'lucide-react';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { ErrorState } from '@/components/ui/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 import {
   ProgramMaterialsCard,
   ProgramTargetsCard,
@@ -26,11 +26,7 @@ export default function StudentCambridgePage() {
   if (isError) {
     return (
       <div className="py-12">
-        <ErrorState
-          title="Gagal Memuat Portofolio Cambridge"
-          message="Terjadi kendala saat mengambil data portofolio Cambridge dari server. Silakan coba kembali."
-          onRetry={() => refetch()}
-        />
+        <StudentError message="Terjadi kendala saat mengambil data portofolio Cambridge dari server. Silakan coba kembali." onRetry={() => refetch()} />
       </div>
     );
   }

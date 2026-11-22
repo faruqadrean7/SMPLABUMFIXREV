@@ -29,6 +29,8 @@ import { StudentSessionQuestionItem, QuestionType } from '@/types/cbt';
 import { useAuth } from '@/providers/auth-provider';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { toast } from '@/components/ui/toast';
+import { Confetti } from '@/features/portal/mascot/confetti';
+import { Labi } from '@/features/portal/mascot/labi';
 
 export default function StudentCbtPlayerPage() {
   const params = useParams();
@@ -858,9 +860,10 @@ export default function StudentCbtPlayerPage() {
   if (isFinished) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+        <Confetti show />
         <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl text-center space-y-5">
-          <div className="h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-            <CheckCircle2 className="h-8 w-8" />
+          <div className="mx-auto">
+            <Labi expression="cheer" size={96} />
           </div>
           <div>
             <h2 className="text-xl font-bold text-slate-900">Ujian Berhasil Dikumpulkan! 📋</h2>

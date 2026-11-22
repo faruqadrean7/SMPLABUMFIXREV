@@ -26,7 +26,7 @@ import { useStudentExams, useStudentDashboard } from '@/lib/use-student-data';
 import { cbtApi } from '@/features/cbt/cbt-api';
 import { ExamListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ErrorState } from '@/components/ui/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 import { toast } from '@/components/ui/toast';
 
 export default function StudentCBTListPage() {
@@ -426,9 +426,8 @@ export default function StudentCBTListPage() {
               {isLoading && <ExamListSkeleton count={2} />}
 
               {isError && (
-                <ErrorState
-                  title="Gagal Memuat Jadwal Ujian CBT"
-                  message="Terjadi kendala saat mengambil data sesi ujian dari server. Silakan coba kembali."
+                <StudentError
+                  message="Gagal memuat jadwal ujian CBT. Coba lagi ya."
                   onRetry={() => refetch()}
                 />
               )}

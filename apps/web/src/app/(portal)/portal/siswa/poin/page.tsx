@@ -20,7 +20,7 @@ import {
   useRegisterExtracurricular,
 } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { ErrorState } from '@/components/shared/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 import { EmptyState } from '@/components/shared/empty-state';
 
 export default function StudentPoinPage() {
@@ -217,7 +217,7 @@ export default function StudentPoinPage() {
                 <LoadingSpinner label="Memuat riwayat poin..." size="md" />
               </div>
             ) : isPointsError ? (
-              <ErrorState
+              <StudentError
                 message="Gagal memuat catatan poin karakter."
                 onRetry={() => refetchPoints()}
               />
@@ -312,7 +312,7 @@ export default function StudentPoinPage() {
                 <LoadingSpinner label="Memuat kegiatan ekstrakurikuler..." size="md" />
               </div>
             ) : isEkskulError ? (
-              <ErrorState
+              <StudentError
                 message="Gagal memuat data ekstrakurikuler."
                 onRetry={() => refetchEkskul()}
               />
