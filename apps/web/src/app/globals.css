@@ -43,3 +43,32 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.7);
 }
+
+/* ============================================================
+   Portal Siswa — mascot & fun animations (scoped to .portal-siswa)
+   All motion is disabled under prefers-reduced-motion.
+   ============================================================ */
+@keyframes labi-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes labi-wave { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-24deg); } }
+@keyframes labi-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+@keyframes labi-float { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-12px) rotate(3deg); } }
+
+.portal-siswa .labi-anim { transform-origin: center bottom; }
+.portal-siswa .labi-anim--wave { animation: labi-bob 2.6s ease-in-out infinite; }
+.portal-siswa .labi-anim--wave .labi-arm { transform-origin: 72px 112px; animation: labi-wave 1.4s ease-in-out infinite; }
+.portal-siswa .labi-anim--happy { animation: labi-float 3s ease-in-out infinite; }
+.portal-siswa .labi-anim--cheer { animation: labi-float 2.4s ease-in-out infinite; }
+.portal-siswa .labi-anim--study { animation: labi-bob 3.4s ease-in-out infinite; }
+.portal-siswa .labi-anim--sleepy { animation: labi-float 4s ease-in-out infinite; }
+.portal-siswa .labi-eyes { animation: labi-blink 4s infinite; transform-origin: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-siswa .labi-anim,
+  .portal-siswa .labi-anim--wave,
+  .portal-siswa .labi-anim--wave .labi-arm,
+  .portal-siswa .labi-anim--happy,
+  .portal-siswa .labi-anim--cheer,
+  .portal-siswa .labi-anim--study,
+  .portal-siswa .labi-anim--sleepy,
+  .portal-siswa .labi-eyes { animation: none !important; }
+}
