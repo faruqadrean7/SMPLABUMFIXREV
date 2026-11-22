@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
+import { GraduationCap, Star, Trophy, BookOpen } from 'lucide-react';
 import { useStudentGrades } from '@/lib/use-student-data';
-import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { ErrorState } from '@/components/shared/error-state';
-import { EmptyState } from '@/components/shared/empty-state';
+import { StudentLoading, StudentEmpty, StudentError } from '@/features/portal/mascot/student-states';
+import { StudentPageHeader, StatTile, SectionCard } from '@/features/portal/mascot/student-ui';
 
 export default function SiswaNilaiPage() {
   const { data: grades = [], isLoading, isError, refetch } = useStudentGrades();
@@ -12,21 +12,27 @@ export default function SiswaNilaiPage() {
   const avg = graded.length ? Math.round(graded.reduce((a, g) => a + (g.finalScore || 0), 0) / graded.length) : null;
   const tuntas = graded.filter((g) => g.isPassed).length;
 
-  if (isLoading) return <div className="py-20"><LoadingSpinner label="Memuat nilai..." size="lg" /></div>;
-  if (isError) return <div className="py-16"><ErrorState message="Gagal memuat nilai. Coba lagi." onRetry={() => refetch()} /></div>;
+  if (isLoading) return <StudentLoading label="Memuat nilai kamu..." />;
+  if (isError) return <StudentError message="Gagal memuat nilai. Coba lagi ya." onRetry={() => refetch()} />;
 
   return (
     <div className="flex flex-col gap-3.5 text-slate-900">
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-        <h1 className="text-lg font-extrabold tracking-tight">Nilai Akademik</h1>
-        <p className="text-xs text-slate-600 mt-0.5">
-          Rata-rata: <strong>{avg !== null ? avg : '-'}</strong> &middot; {tuntas}/{graded.length} mapel tuntas
-        </p>
+      <StudentPageHeader
+        title="Nilai Kamu"
+        subtitle="Pantau capaian belajarmu semester ini"
+        icon={GraduationCap}
+        expression="study"
+      />
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatTile icon={Star} label="Rata-rata nilai" value={avg !== null ? avg : '-'} tone="sky" />
+        <StatTile icon={Trophy} label="Mapel tuntas" value={`${tuntas}/${graded.length}`} tone="mint" />
+        <StatTile icon={BookOpen} label="Total mapel" value={grades.length} tone="grape" />
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs">
+      <SectionCard title="Rincian nilai per mata pelajaran">
         {graded.length === 0 ? (
-          <EmptyState title="Nilai belum tersedia" description="Guru belum menginput nilai untuk periode berjalan." />
+          <StudentEmpty title="Nilai belum tersedia" hint="Guru belum menginput nilai untuk periode berjalan." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -58,7 +64,7 @@ export default function SiswaNilaiPage() {
             </table>
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }

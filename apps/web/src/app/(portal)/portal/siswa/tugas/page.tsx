@@ -21,7 +21,7 @@ import { StudentTaskItem } from '@/types/student';
 import { useStudentTasks, useSubmitTask, useTeachingMaterials } from '@/lib/use-student-data';
 import { TaskListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ErrorState } from '@/components/ui/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 import { toast } from '@/components/ui/toast';
 import { Confetti } from '@/features/portal/mascot/confetti';
 
@@ -213,9 +213,8 @@ export default function StudentTugasPage() {
             {isLoading && <TaskListSkeleton count={4} />}
 
             {isError && (
-              <ErrorState
-                title="Gagal Memuat Daftar Tugas"
-                message="Terjadi kendala saat mengambil data penugasan dari server. Silakan coba kembali."
+              <StudentError
+                message="Gagal memuat daftar tugas. Coba lagi ya."
                 onRetry={() => refetch()}
               />
             )}
@@ -324,9 +323,8 @@ export default function StudentTugasPage() {
           {isMaterialsLoading && <TaskListSkeleton count={3} />}
 
           {isMaterialsError && (
-            <ErrorState
-              title="Gagal Memuat Modul Ajar"
-              message="Terjadi kendala saat mengambil materi pembelajaran dari server."
+            <StudentError
+              message="Gagal memuat modul ajar. Coba lagi ya."
               onRetry={() => refetchMaterials()}
             />
           )}
