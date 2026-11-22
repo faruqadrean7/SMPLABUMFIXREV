@@ -72,3 +72,41 @@
   .portal-siswa .labi-anim--sleepy,
   .portal-siswa .labi-eyes { animation: none !important; }
 }
+
+/* ============================================================
+   Portal Siswa — fun theme tokens & helpers (scoped)
+   ============================================================ */
+.portal-siswa {
+  --siswa-sky: #38bdf8;
+  --siswa-indigo: #6366f1;
+  --siswa-sun: #fbbf24;
+  --siswa-mint: #34d399;
+  --siswa-coral: #fb7185;
+  --siswa-grape: #a78bfa;
+}
+.portal-siswa .siswa-bg {
+  background:
+    radial-gradient(1200px 400px at 10% -10%, #e0f2fe 0%, transparent 60%),
+    radial-gradient(1000px 400px at 100% 0%, #f3e8ff 0%, transparent 55%),
+    linear-gradient(160deg, #eff6ff 0%, #f5f3ff 50%, #ecfdf5 100%);
+}
+.portal-siswa .siswa-hero {
+  background: linear-gradient(120deg, var(--siswa-sky), var(--siswa-indigo));
+}
+
+/* Colorful stat tiles (consumed by StatTile in Task 4) */
+.portal-siswa .tile-coral { background: linear-gradient(135deg, #fb7185, #f43f5e); }
+.portal-siswa .tile-sun   { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+.portal-siswa .tile-mint  { background: linear-gradient(135deg, #34d399, #10b981); }
+.portal-siswa .tile-grape { background: linear-gradient(135deg, #a78bfa, #7c3aed); }
+.portal-siswa .tile-sky   { background: linear-gradient(135deg, #38bdf8, #0ea5e9); }
+
+/* Playful card + gentle hover lift (disabled under reduced motion) */
+.portal-siswa .siswa-card { border-radius: 1.25rem; }
+.portal-siswa .siswa-lift { transition: transform .2s ease, box-shadow .2s ease; }
+.portal-siswa .siswa-lift:hover { transform: translateY(-4px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-siswa .siswa-lift { transition: none; }
+  .portal-siswa .siswa-lift:hover { transform: none; }
+}
