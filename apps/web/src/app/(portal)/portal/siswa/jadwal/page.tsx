@@ -21,7 +21,7 @@ import { StudentScheduleItem } from '@/lib/use-student-data';
 import { useStudentSchedule } from '@/lib/use-student-data';
 import { ScheduleListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ErrorState } from '@/components/ui/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 
 export default function StudentJadwalPage() {
   const [activeMainTab, setActiveMainTab] = useState<'jadwal' | 'kalender'>('jadwal');
@@ -398,9 +398,8 @@ export default function StudentJadwalPage() {
                 {isLoading ? (
                   <ScheduleListSkeleton />
                 ) : isError ? (
-                  <ErrorState
-                    title="Gagal Memuat Jadwal Pelajaran"
-                    message="Tidak dapat mengambil jadwal pelajaran dari server. Silakan coba kembali."
+                  <StudentError
+                    message="Gagal memuat jadwal pelajaran. Coba lagi ya."
                     onRetry={() => refetch()}
                   />
                 ) : dailySchedules.length === 0 ? (

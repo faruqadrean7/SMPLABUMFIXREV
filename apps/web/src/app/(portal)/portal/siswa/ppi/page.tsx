@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Target, CheckCircle2, Phone, ArrowLeft } from 'lucide-react';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { ErrorState } from '@/components/ui/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 import {
   ProgramMaterialsCard,
   ProgramTargetsCard,
@@ -26,11 +26,7 @@ export default function StudentPpiPage() {
   if (isError) {
     return (
       <div className="py-12">
-        <ErrorState
-          title="Gagal Memuat Target PPI"
-          message="Terjadi kendala saat mengambil data target PPI dari server. Silakan coba kembali."
-          onRetry={() => refetch()}
-        />
+        <StudentError message="Terjadi kendala saat mengambil data target PPI dari server. Silakan coba kembali." onRetry={() => refetch()} />
       </div>
     );
   }

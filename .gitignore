@@ -52,3 +52,6 @@ playwright-report/
 docs/mtk/
 /apps/api/storage/app/import/
 .claude/
+
+# Superpowers scratch (brainstorm mockups, plan ledgers)
+.superpowers/

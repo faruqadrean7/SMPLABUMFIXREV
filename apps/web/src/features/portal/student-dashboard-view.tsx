@@ -6,8 +6,10 @@ import { CalendarCheck, Award, CheckSquare, MonitorPlay, Clock, ArrowRight, Book
 import { useAuth } from '@/lib/auth-context';
 import { useStudentDashboard, useStudentTasks, useSchoolAnnouncements } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { ErrorState } from '@/components/shared/error-state';
 import { EmptyState } from '@/components/shared/empty-state';
+import { Labi } from './mascot/labi';
+import { StudentLoading, StudentError } from './mascot/student-states';
+import { StatTile } from './mascot/student-ui';
 import { TahfidzWidget } from './student-programs/tahfidz-widget';
 import { IcpWidget } from './student-programs/icp-widget';
 import { InklusiWidget } from './student-programs/inklusi-widget';
@@ -35,45 +37,41 @@ export function StudentDashboardView() {
   const todaySchedule = data?.todaySchedule ?? [];
   const upcomingExams = data?.upcomingExams ?? [];
   const activeTasks = tasks.filter((t) => t.status === 'aktif');
-  const initials = name.split(' ').filter(Boolean).map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || 'SW';
 
-  if (dash.isLoading) return <div className="py-20"><LoadingSpinner label="Memuat dashboard..." size="lg" /></div>;
-  if (dash.isError) return <div className="py-16"><ErrorState message="Gagal memuat dashboard siswa. Coba lagi." onRetry={() => dash.refetch()} /></div>;
+  if (dash.isLoading) return <StudentLoading label="Menyiapkan portal kamu..." />;
+  if (dash.isError) return <StudentError message="Gagal memuat dashboard siswa. Coba lagi ya." onRetry={() => dash.refetch()} />;
+
+  // Friendly contextual greeting built from existing counts (no new logic/data).
+  const greeting = activeTasks.length > 0 || upcomingExams.length > 0
+    ? `Hari ini ada ${activeTasks.length} tugas & ${upcomingExams.length} ujian. Semangat ya! 💪`
+    : 'Tidak ada tugas mendesak hari ini. Tetap semangat belajar! 🌟';
 
   return (
     <div className="flex flex-col gap-3.5 text-slate-900">
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between gap-3.5">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <div className="w-12 h-12 rounded-xl bg-blue-900 text-white font-extrabold flex items-center justify-center text-base shrink-0">{initials}</div>
-          <div className="min-w-0">
-            <h1 className="text-lg font-extrabold tracking-tight truncate">{name}</h1>
-            <p className="text-xs text-slate-600 mt-0.5">{className} &middot; NIS {data?.nis || '-'}</p>
+      {/* Playful hero greeting with Labi */}
+      <div className="siswa-hero siswa-card relative flex items-center gap-4 overflow-hidden p-5 text-white shadow-md">
+        <Labi expression="wave" size={76} className="shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-xl font-extrabold tracking-tight">Halo, {name.split(' ')[0]}! 🌞</h1>
+          <p className="mt-1 text-sm font-medium text-white/90">{className} &middot; NIS {data?.nis || '-'}</p>
+          <div className="mt-2 inline-block rounded-2xl border border-white/30 bg-white/20 px-3 py-1.5 text-sm font-semibold backdrop-blur">
+            {greeting}
           </div>
         </div>
         {data?.programBadge && (
-          <div className="shrink-0 hidden sm:block">
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                data.programType === 'tahfidz'
-                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
-                  : data.programType === 'icp'
-                  ? 'bg-blue-50 text-blue-900 border-blue-300'
-                  : data.programType === 'inklusi'
-                  ? 'bg-purple-50 text-purple-900 border-purple-300'
-                  : 'bg-slate-100 text-slate-800 border-slate-300'
-              }`}
-            >
+          <div className="ml-auto hidden shrink-0 self-start sm:block">
+            <span className="rounded-full border border-white/40 bg-white/20 px-3 py-1 text-xs font-bold text-white">
               {data.programBadge}
             </span>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        <MetricCard icon={<CalendarCheck className="w-3.5 h-3.5" />} label="Kehadiran" value={(data?.attendanceRate ?? 0) + '%'} sub="Semester berjalan" href="/siswa/jadwal" cta="Lihat jadwal" />
-        <MetricCard icon={<CheckSquare className="w-3.5 h-3.5" />} label="Tugas Aktif" value={String(activeTasks.length)} sub="Belum dikumpulkan" href="/siswa/tugas" cta="Kerjakan tugas" />
-        <MetricCard icon={<MonitorPlay className="w-3.5 h-3.5" />} label="Ujian Mendatang" value={String(upcomingExams.length)} sub="Terjadwal" href="/siswa/cbt" cta="Lihat ujian" />
-        <MetricCard icon={<Award className="w-3.5 h-3.5" />} label="Prestasi" value={String(data?.totalAchievements ?? 0)} sub="Poin prestasi" href="/siswa/poin" cta="Lihat poin" />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Link href="/siswa/jadwal"><StatTile icon={CalendarCheck} label="Kehadiran" value={(data?.attendanceRate ?? 0) + '%'} tone="mint" /></Link>
+        <Link href="/siswa/tugas"><StatTile icon={CheckSquare} label="Tugas aktif" value={activeTasks.length} tone="coral" /></Link>
+        <Link href="/siswa/cbt"><StatTile icon={MonitorPlay} label="Ujian mendatang" value={upcomingExams.length} tone="sun" /></Link>
+        <Link href="/siswa/poin"><StatTile icon={Award} label="Poin prestasi" value={data?.totalAchievements ?? 0} tone="grape" /></Link>
       </div>
 
       {/* Widget Khusus Program Belajar Siswa */}
@@ -165,27 +163,6 @@ export function StudentDashboardView() {
             )}
           </SectionCard>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({ icon, label, value, sub, href, cta }: { icon: React.ReactNode; label: string; value: string; sub: string; href: string; cta: string; }) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex flex-col justify-between">
-      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider truncate">{label}</span>
-        <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-900 border border-blue-200 flex items-center justify-center shrink-0">{icon}</div>
-      </div>
-      <div className="my-1.5">
-        <span className="text-3xl font-extrabold tracking-tight">{value}</span>
-        <p className="text-xs text-slate-500 font-medium mt-0.5 truncate">{sub}</p>
-      </div>
-      <div className="pt-2 border-t border-slate-100">
-        <Link href={href} className="text-xs font-bold text-slate-700 hover:text-blue-900 flex items-center justify-between group">
-          <span>{cta}</span>
-          <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-900 group-hover:translate-x-0.5 transition-all" />
-        </Link>
       </div>
     </div>
   );
