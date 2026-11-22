@@ -23,6 +23,7 @@ import { TaskListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { toast } from '@/components/ui/toast';
+import { Confetti } from '@/features/portal/mascot/confetti';
 
 export default function StudentTugasPage() {
   const [activeTab, setActiveTab] = useState<'tugas' | 'modul'>('tugas');
@@ -111,6 +112,7 @@ export default function StudentTugasPage() {
 
   return (
     <div className="space-y-5 text-slate-900">
+      <Confetti show={isSuccessSubmit} />
       {/* ─── HEADER CARD (COMPACT & PROPORTIONED) ─── */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
