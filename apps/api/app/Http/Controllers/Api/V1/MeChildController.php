@@ -58,6 +58,15 @@ class MeChildController extends Controller
             'avatar_url' => $student->photoFile?->url ?? null,
             'avatarUrl' => $student->photoFile?->url ?? null,
             'status' => $student->status ?? 'active',
+            // Wali kelas dipakai portal orang tua untuk menampilkan kontak guru.
+            'homeroom_teacher' => $currentClass?->homeroomTeacher
+                ? [
+                    'id' => $currentClass->homeroomTeacher->id,
+                    'name' => $currentClass->homeroomTeacher->full_name,
+                    'nip' => $currentClass->homeroomTeacher->nip,
+                    'phone' => $currentClass->homeroomTeacher->user?->phone,
+                ]
+                : null,
         ];
     }
 
@@ -75,7 +84,7 @@ class MeChildController extends Controller
         }
 
         $students = $guardian->students()
-            ->with(['classes.academicYear', 'photoFile'])
+            ->with(['classes.academicYear', 'classes.homeroomTeacher.user', 'photoFile'])
             ->get();
 
         $data = $students->map(fn (Student $s) => $this->formatChildSummary($s));
@@ -93,7 +102,7 @@ class MeChildController extends Controller
             return $err;
         }
 
-        $student = Student::with(['classes.academicYear', 'photoFile'])->find($child);
+        $student = Student::with(['classes.academicYear', 'classes.homeroomTeacher.user', 'photoFile'])->find($child);
         if (! $student) {
             return $this->errorResponse('Data anak tidak ditemukan.', 'NOT_FOUND', 404);
         }

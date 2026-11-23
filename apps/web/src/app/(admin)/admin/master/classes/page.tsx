@@ -133,7 +133,7 @@ export default function ClassesMasterPage() {
         <div>
           <div className="font-bold text-slate-900 text-xs">{item.name}</div>
           <div className="text-[11px] text-slate-500">
-            {item.gradeLevel?.name || 'Tingkat'} {item.major ? `• ${item.major.name}` : ''}
+            {(item.grade_level ?? item.gradeLevel)?.name || 'Tingkat'} {item.major ? `• ${item.major.name}` : ''}
           </div>
         </div>
       ),
@@ -143,7 +143,7 @@ export default function ClassesMasterPage() {
       header: 'Tahun Ajaran',
       render: (item) => (
         <span className="text-xs text-slate-700 font-medium">
-          {item.academicYear?.name || '-'}
+          {(item.academic_year ?? item.academicYear)?.name || '-'}
         </span>
       ),
     },
@@ -152,7 +152,7 @@ export default function ClassesMasterPage() {
       header: 'Wali Kelas',
       render: (item) => (
         <span className="text-xs text-slate-700">
-          {item.homeroomTeacher?.full_name || (
+          {(item.homeroom_teacher ?? item.homeroomTeacher)?.full_name || (
             <span className="text-slate-400 italic">Belum Ditentukan</span>
           )}
         </span>

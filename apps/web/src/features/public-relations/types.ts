@@ -95,7 +95,7 @@ export interface CreateComplaintPayload {
   content: string;
   is_anonymous: boolean;
   school_id?: string;
-  /** BE-GUEST-04: id file hasil presign+confirm (maks 3) */
+  /** BE-GUEST-04: id file hasil presign lalu konfirmasi unggahan (maks 3) */
   attachment_file_ids?: string[];
 }
 

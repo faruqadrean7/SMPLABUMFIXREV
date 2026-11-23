@@ -172,7 +172,7 @@ export function ClassRosterDialog({ isOpen, onClose, selectedClass }: ClassRoste
               <p className="text-xs text-slate-500">
                 Wali Kelas:{' '}
                 <span className="font-semibold text-slate-700">
-                  {selectedClass.homeroomTeacher?.full_name || 'Belum Ditentukan'}
+                  {(selectedClass.homeroom_teacher ?? selectedClass.homeroomTeacher)?.full_name || 'Belum Ditentukan'}
                 </span>
                 {' • '}
                 Sisa Kuota:{' '}
