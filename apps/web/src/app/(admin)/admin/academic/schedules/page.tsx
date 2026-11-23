@@ -191,9 +191,9 @@ export default function SchedulesPage() {
       header: 'Jam Pelajaran',
       render: (item: ScheduleItem) => (
         <div>
-          <div className="font-medium text-gray-900">{item.timeSlot?.name || 'Slot'}</div>
+          <div className="font-medium text-gray-900">{(item.time_slot ?? item.timeSlot)?.name || 'Slot'}</div>
           <div className="text-[11px] font-mono text-gray-500">
-            {item.timeSlot?.start_time} - {item.timeSlot?.end_time}
+            {(item.time_slot ?? item.timeSlot)?.start_time} - {(item.time_slot ?? item.timeSlot)?.end_time}
           </div>
         </div>
       ),

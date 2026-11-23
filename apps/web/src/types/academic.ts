@@ -74,6 +74,8 @@ export interface ScheduleItem {
   subject?: SubjectItem;
   teacher?: TeacherItem;
   room?: RoomItem | null;
+  // API mengirim snake_case; camelCase dipertahankan untuk kompatibilitas.
+  time_slot?: TimeSlotItem;
   timeSlot?: TimeSlotItem;
 }
 
