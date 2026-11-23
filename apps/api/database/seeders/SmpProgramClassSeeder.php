@@ -175,20 +175,58 @@ class SmpProgramClassSeeder extends Seeder
 
     private function seedTeachers($now): void
     {
+        $roleGuru = DB::table('roles')->where('code', 'teacher')->value('id');
+
         foreach (self::GURU_BARU as $name => [$nip, $position]) {
-            if (DB::table('teachers')->where('full_name', $name)->whereNull('deleted_at')->exists()) {
+            $guru = DB::table('teachers')->where('full_name', $name)->whereNull('deleted_at')->first();
+
+            if (! $guru) {
+                $teacherId = (string) Str::uuid7();
+                DB::table('teachers')->insert([
+                    'id' => $teacherId,
+                    'school_id' => self::SCHOOL_ID,
+                    'full_name' => $name,
+                    'nip' => $nip,
+                    'position' => $position,
+                    // status = jenis kepegawaian (tetap/kontrak/honorer), bukan aktif/nonaktif
+                    'status' => 'tetap',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                $guru = DB::table('teachers')->where('id', $teacherId)->first();
+            }
+
+            // Guru pembina program butuh akun login supaya bisa mengisi nilai mapelnya.
+            if ($guru->user_id) {
                 continue;
             }
 
-            DB::table('teachers')->insert([
-                'id' => (string) Str::uuid7(),
-                'school_id' => self::SCHOOL_ID,
-                'full_name' => $name,
-                'nip' => $nip,
-                'position' => $position,
-                // status = jenis kepegawaian (tetap/kontrak/honorer), bukan aktif/nonaktif
-                'status' => 'tetap',
-                'created_at' => $now,
+            $userId = DB::table('users')->where('username', $nip)->value('id');
+
+            if (! $userId) {
+                $userId = (string) Str::uuid7();
+                DB::table('users')->insert([
+                    'id' => $userId,
+                    'school_id' => self::SCHOOL_ID,
+                    'username' => $nip,
+                    'password_hash' => bcrypt('Password123!'),
+                    'status' => 'active',
+                    'must_change_password' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+
+            if ($roleGuru && ! DB::table('user_roles')->where('user_id', $userId)->where('role_id', $roleGuru)->exists()) {
+                // user_roles adalah tabel pivot tanpa kolom id.
+                DB::table('user_roles')->insert([
+                    'user_id' => $userId,
+                    'role_id' => $roleGuru,
+                ]);
+            }
+
+            DB::table('teachers')->where('id', $guru->id)->update([
+                'user_id' => $userId,
                 'updated_at' => $now,
             ]);
         }
