@@ -68,7 +68,7 @@ export function StudentDashboardView() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Link href="/siswa/jadwal"><StatTile icon={CalendarCheck} label="Kehadiran" value={(data?.attendanceRate ?? 0) + '%'} tone="mint" /></Link>
+        <Link href="/siswa/jadwal"><StatTile icon={CalendarCheck} label="Kehadiran" value={data?.attendanceRate == null ? '—' : data.attendanceRate + '%'} tone="mint" /></Link>
         <Link href="/siswa/tugas"><StatTile icon={CheckSquare} label="Tugas aktif" value={activeTasks.length} tone="coral" /></Link>
         <Link href="/siswa/cbt"><StatTile icon={MonitorPlay} label="Ujian mendatang" value={upcomingExams.length} tone="sun" /></Link>
         <Link href="/siswa/poin"><StatTile icon={Award} label="Poin prestasi" value={data?.totalAchievements ?? 0} tone="grape" /></Link>

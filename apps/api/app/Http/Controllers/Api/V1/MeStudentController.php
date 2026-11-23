@@ -21,6 +21,7 @@ use App\Models\Schedule;
 use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\StudentProgramProfile;
+use App\Models\TeachingAssignment;
 use App\Services\AuditLogService;
 use App\Services\LmsService;
 use App\Traits\ApiResponse;
@@ -80,7 +81,8 @@ class MeStudentController extends Controller
         // Presensi
         $totalAtt = Attendance::where('student_id', $student->id)->count();
         $presentAtt = Attendance::where('student_id', $student->id)->where('status', 'hadir')->count();
-        $attendanceRate = $totalAtt > 0 ? round(($presentAtt / $totalAtt) * 100, 1) : 100.0;
+        // Tanpa catatan presensi, tingkat kehadiran TIDAK BOLEH diklaim 100%.
+        $attendanceRate = $totalAtt > 0 ? round(($presentAtt / $totalAtt) * 100, 1) : null;
 
         // Jadwal hari ini (dayOfWeek: 1 = Senin, 7 = Minggu)
         $todayDayOfWeek = now()->dayOfWeekIso;
@@ -98,7 +100,7 @@ class MeStudentController extends Controller
                 'startTime' => $s->timeSlot?->start_time ? substr($s->timeSlot->start_time, 0, 5) : '07:00',
                 'endTime' => $s->timeSlot?->end_time ? substr($s->timeSlot->end_time, 0, 5) : '08:20',
                 'subjectName' => $s->subject?->name ?? 'Mata Pelajaran',
-                'teacherName' => $s->teacher?->full_name ?? 'Guru Pengampu',
+                'teacherName' => $s->teacher?->full_name ?? '-',
                 'roomName' => $s->room?->name ?? ($currentClass->name ?? 'Ruang Kelas'),
             ])->values()->all();
         }
@@ -113,7 +115,7 @@ class MeStudentController extends Controller
                 'title' => $p->exam?->title ?? 'Ujian CBT',
                 'subjectName' => $p->exam?->subject?->name ?? 'Mata Pelajaran',
                 'durationMinutes' => $p->exam?->duration_min ?? 60,
-                'totalQuestions' => 30,
+                'totalQuestions' => $p->exam?->questions()->count() ?? 0,
                 'startTime' => $p->exam?->start_at?->toISOString() ?? now()->toISOString(),
                 'endTime' => $p->exam?->end_at?->toISOString() ?? now()->addHours(1)->toISOString(),
                 'status' => $p->exam?->status ?? 'scheduled',
@@ -281,27 +283,67 @@ class MeStudentController extends Controller
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
+        $student->loadMissing('classes');
+        $classId = $student->classes->first()?->id;
+
         $grades = Grade::with(['component.subject'])
             ->where('student_id', $student->id)
             ->get()
             ->groupBy(fn ($g) => $g->component?->subject_id ?? 'unknown');
 
+        // Guru pengampu nyata per (kelas, mapel). Dulu selalu "Guru Pengampu".
+        $teacherBySubject = $classId
+            ? TeachingAssignment::with('teacher')
+                ->where('class_id', $classId)
+                ->get()
+                ->mapWithKeys(fn ($ta) => [$ta->subject_id => $ta->teacher?->full_name])
+            : collect();
+
+        $kktp = 75.0;
+
         $result = [];
         foreach ($grades as $subjectId => $items) {
             $first = $items->first();
             $subject = $first?->component?->subject;
-            $avgScore = round($items->avg('value') ?? 0, 1);
+
+            $byCode = [];
+            $weighted = 0.0;
+            $totalWeight = 0.0;
+            foreach ($items as $grade) {
+                $code = $grade->component?->code;
+                $weight = (float) ($grade->component?->weight ?? 0);
+                if ($code) {
+                    $byCode[$code] = (float) $grade->value;
+                }
+                if ($weight > 0) {
+                    $weighted += (float) $grade->value * $weight;
+                    $totalWeight += $weight;
+                }
+            }
+
+            $finalScore = $totalWeight > 0
+                ? round($weighted / $totalWeight, 1)
+                : round((float) ($items->avg('value') ?? 0), 1);
 
             $result[] = [
                 'subjectId' => (string) $subjectId,
                 'subjectName' => $subject?->name ?? 'Mata Pelajaran',
                 'subjectCode' => $subject?->code ?? '',
-                'teacherName' => 'Guru Pengampu',
-                'finalScore' => $avgScore,
-                'letterGrade' => $avgScore >= 85 ? 'A' : ($avgScore >= 75 ? 'B' : 'C'),
-                'isPassed' => $avgScore >= 75,
+                'teacherName' => $teacherBySubject[$subjectId] ?? '-',
+                // Rincian nyata per komponen (TGS/UTS/UAS/SIKAP).
+                'dailyAverage' => $byCode['TGS'] ?? null,
+                'midExam' => $byCode['UTS'] ?? null,
+                'finalExam' => $byCode['UAS'] ?? null,
+                'attitude' => $byCode['SIKAP'] ?? null,
+                'components' => $byCode,
+                'finalScore' => $finalScore,
+                'letterGrade' => $finalScore >= 85 ? 'A' : ($finalScore >= 75 ? 'B' : ($finalScore >= 65 ? 'C' : 'D')),
+                'passingGrade' => $kktp,
+                'isPassed' => $finalScore >= $kktp,
             ];
         }
+
+        usort($result, fn ($a, $b) => strcmp($a['subjectName'], $b['subjectName']));
 
         return $this->successResponse($result);
     }

@@ -130,7 +130,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
               <span className="text-slate-500 font-medium">Tingkat Hadir:</span>
               <span className="px-2 py-0.5 rounded-md font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] tracking-wide">
-                {studentDash?.attendanceRate ? `${studentDash.attendanceRate}% Hadir` : 'Hadir Aktif'}
+                {studentDash?.attendanceRate != null ? `${studentDash.attendanceRate}% Hadir` : 'Belum ada presensi'}
               </span>
             </div>
           </div>
