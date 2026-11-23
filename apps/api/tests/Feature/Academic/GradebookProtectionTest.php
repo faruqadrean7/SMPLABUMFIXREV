@@ -278,6 +278,70 @@ class GradebookProtectionTest extends TestCase
         $this->assertDatabaseHas('assignments', ['id' => $assignment->id]);
     }
 
+    // Pemilih periode: daftar periode untuk halaman penilaian tugas
+    public function test_daftar_periode_tersedia_untuk_guru(): void
+    {
+        $res = $this->actingAs($this->guru, 'sanctum')
+            ->getJson('/api/v1/me/teacher/periods')
+            ->assertOk();
+
+        $rows = $res->json('data');
+
+        $this->assertNotEmpty($rows, 'Daftar periode tidak boleh kosong.');
+        $this->assertArrayHasKey('month', $rows[0]);
+        $this->assertTrue(collect($rows)->contains(fn ($p) => $p['is_default'] === true), 'Harus ada satu periode default.');
+    }
+
+    // Pemilih periode: nilai tugas masuk ke periode yang dipilih guru
+    public function test_nilai_tugas_masuk_periode_yang_dipilih(): void
+    {
+        $periodeLain = GradePeriod::firstOrCreate(
+            ['semester_id' => $this->tgs->semester_id, 'month' => 9],
+            ['status' => 'open']
+        );
+        // Seeder demo bisa membuat periode ini terkunci; buka agar bisa diuji.
+        $periodeLain->update(['status' => 'open']);
+
+        $assignment = Assignment::create([
+            'class_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->teacher->id,
+            'title' => 'Tugas Periode Dipilih',
+            'due_at' => now()->addDays(3),
+            'max_score' => 100,
+            'grade_component_id' => $this->tgs->id,
+        ]);
+
+        $submission = AssignmentSubmission::create([
+            'assignment_id' => $assignment->id,
+            'student_id' => $this->siswa->id,
+            'submitted_at' => now(),
+        ]);
+
+        // Lewat endpoint portal guru (halaman penilaian tugas)
+        $this->actingAs($this->guru, 'sanctum')
+            ->postJson("/api/v1/me/teacher/submissions/{$submission->id}/grade", [
+                'score' => 84,
+                'feedback' => 'Uji periode',
+                'period_id' => $periodeLain->id,
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('grades', [
+            'student_id' => $this->siswa->id,
+            'component_id' => $this->tgs->id,
+            'period_id' => $periodeLain->id,
+        ]);
+
+        // Periode default (bulan 7) tidak ikut terisi oleh penilaian ini
+        $this->assertDatabaseMissing('grades', [
+            'student_id' => $this->siswa->id,
+            'component_id' => $this->tgs->id,
+            'period_id' => $this->periode->id,
+            'source' => 'assignment',
+        ]);
+    }
+
     // Komponen wajib saat membuat tugas
     public function test_membuat_tugas_tanpa_komponen_ditolak(): void
     {

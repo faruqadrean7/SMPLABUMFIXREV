@@ -10,6 +10,7 @@ import {
   StudentGradeRow, 
   GradebookPeriod, 
   GradebookPeriodOption,
+  TeacherPeriodOption,
   CBTQuestion, 
   CBTExam,
   AttendanceStatus 
@@ -87,10 +88,28 @@ export const lmsApi = {
   async gradeSubmission(
     assignmentId: string,
     submissionId: string,
-    payload: { score: number; feedback?: string }
+    payload: { score: number; feedback?: string; period_id?: string }
   ): Promise<AssignmentSubmission> {
     const response = await apiClient.post(`/me/teacher/submissions/${submissionId}/grade`, payload);
     return response.data?.data;
+  },
+
+  /** Daftar periode penilaian tahun ajaran aktif (pemilih periode saat menilai). */
+  async getTeacherPeriods(): Promise<TeacherPeriodOption[]> {
+    const response = await apiClient.get('/me/teacher/periods');
+    const rows = response.data?.data;
+    return Array.isArray(rows) ? rows : [];
+  },
+
+  /** Tautkan tugas lama (tanpa komponen) ke komponen buku nilai. */
+  async linkAssignmentGradeComponent(
+    assignmentId: string,
+    gradeComponentId: string
+  ): Promise<{ grade_component_name?: string }> {
+    const response = await apiClient.post(`/assignments/${assignmentId}/link-grade-component`, {
+      grade_component_id: gradeComponentId,
+    });
+    return response.data?.data ?? {};
   },
 
   // ─── 3. Jadwal & Jurnal Mengajar (BE-ACD-01, BE-ACD-02) ───

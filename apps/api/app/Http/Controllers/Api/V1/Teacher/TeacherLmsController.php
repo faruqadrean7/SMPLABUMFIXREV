@@ -310,6 +310,8 @@ class TeacherLmsController extends Controller
         $validated = $request->validate([
             'score' => "required|numeric|min:0|max:{$maxScore}",
             'feedback' => 'nullable|string',
+            // Periode tujuan nilai (opsional). Tanpa ini, dipakai bulan tenggat tugas.
+            'period_id' => 'nullable|uuid|exists:grade_periods,id',
         ]);
 
         // Delegasikan ke LmsService agar nilai ikut tersinkron ke buku nilai (grades)
@@ -321,6 +323,46 @@ class TeacherLmsController extends Controller
         }
 
         return $this->successResponse(['message' => 'Nilai dan feedback berhasil diberikan.']);
+    }
+
+    /**
+     * GET /api/v1/me/teacher/periods
+     * Daftar periode penilaian pada tahun ajaran aktif (untuk pemilih periode).
+     */
+    public function periods(Request $request): JsonResponse
+    {
+        $teacher = $this->getTeacher($request);
+        if (! $teacher) {
+            return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
+        }
+
+        $semester = \App\Models\Semester::where('is_active', true)->first()
+            ?? \App\Models\Semester::first();
+
+        if (! $semester) {
+            return $this->successResponse([]);
+        }
+
+        $periods = \App\Models\GradePeriod::where('semester_id', $semester->id)
+            ->orderBy('month')
+            ->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => 'Periode Bulan '.$p->month,
+                'month' => (int) $p->month,
+                'status' => $p->status,
+                'is_locked' => $p->status === 'locked',
+                // Periode terbuka paling awal = default yang dipakai bila guru tidak memilih.
+                'is_default' => false,
+            ])
+            ->values();
+
+        $default = $periods->firstWhere('status', 'open') ?? $periods->first();
+        if ($default) {
+            $periods = $periods->map(fn ($p) => array_merge($p, ['is_default' => $p['id'] === $default['id']]));
+        }
+
+        return $this->successResponse($periods);
     }
 
     /**

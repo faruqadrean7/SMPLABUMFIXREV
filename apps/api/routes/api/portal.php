@@ -96,6 +96,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/assignments/{id}', [TeacherLmsController::class, 'showAssignment']);
         Route::get('/assignments/{id}/submissions', [TeacherLmsController::class, 'submissions']);
         Route::post('/submissions/{id}/grade', [TeacherLmsController::class, 'gradeSubmission']);
+        // Pemilih periode penilaian (dipakai halaman penilaian tugas)
+        Route::get('/periods', [TeacherLmsController::class, 'periods']);
 
         // Sub-domain 5: Ujian & Bank Soal CBT
         Route::get('/exams', [TeacherExamController::class, 'exams']);
