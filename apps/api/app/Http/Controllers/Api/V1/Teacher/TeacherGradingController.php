@@ -116,13 +116,27 @@ class TeacherGradingController extends Controller
         // Sebelumnya endpoint ini mengembalikan skor karangan (85/A untuk semua siswa).
         $semester = Semester::where('is_active', true)->first() ?? Semester::first();
 
+        // Daftar SEMUA periode pada tahun ajaran aktif untuk pemilih periode di UI.
+        $periods = $semester
+            ? GradePeriod::where('semester_id', $semester->id)->orderBy('month')->get()
+            : collect();
+
+        $periodId = $request->query('period_id') ?? $request->query('periodId');
+
         $period = null;
-        if ($semester) {
-            $period = GradePeriod::where('semester_id', $semester->id)
-                ->where('status', 'open')
-                ->orderBy('month')
-                ->first()
-                ?? GradePeriod::where('semester_id', $semester->id)->orderBy('month')->first();
+        if ($periodId) {
+            if (! Str::isUuid($periodId)) {
+                return $this->errorResponse('Format ID periode tidak valid.', 'VALIDATION_ERROR', 422);
+            }
+
+            $period = $periods->firstWhere('id', $periodId);
+
+            if (! $period) {
+                return $this->errorResponse('Periode penilaian tidak ditemukan pada tahun ajaran aktif.', 'NOT_FOUND', 404);
+            }
+        } elseif ($periods->isNotEmpty()) {
+            // Tanpa pilihan eksplisit: pakai periode terbuka paling awal (perilaku lama).
+            $period = $periods->firstWhere('status', 'open') ?? $periods->first();
         }
 
         $components = GradeComponent::query()
@@ -180,6 +194,14 @@ class TeacherGradingController extends Controller
         $kategori = ['TGS' => 'formatif', 'UTS' => 'sumatif_tengah', 'UAS' => 'sumatif_akhir', 'SIKAP' => 'formatif'];
 
         return $this->successResponse([
+            'periods' => $periods->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => 'Periode Bulan '.$p->month,
+                'month' => (int) $p->month,
+                'status' => $p->status,
+                'is_locked' => $p->status === 'locked',
+                'is_selected' => $period && $p->id === $period->id,
+            ])->values(),
             'period' => [
                 'id' => $period?->id,
                 'class_id' => $classId,
@@ -310,17 +332,15 @@ class TeacherGradingController extends Controller
                             if (! Str::isUuid($componentId)) {
                                 continue;
                             }
-                            Grade::updateOrCreate(
-                                [
-                                    'student_id' => $studentId,
-                                    'component_id' => $componentId,
-                                    'period_id' => $period->id,
-                                ],
-                                [
-                                    'value' => (float) $scoreVal,
-                                    'source' => 'manual',
-                                    'entered_by' => $request->user()?->id,
-                                ]
+                            // Nilai manual tidak boleh menurunkan nilai otomatis yang
+                            // lebih tinggi (kebijakan nilai tertinggi menang).
+                            app(\App\Services\GradeRecorder::class)->recordManual(
+                                studentId: $studentId,
+                                componentId: $componentId,
+                                periodId: $period->id,
+                                value: (float) $scoreVal,
+                                changedBy: $request->user()?->id,
+                                note: 'Input manual portal guru',
                             );
                         }
                     }

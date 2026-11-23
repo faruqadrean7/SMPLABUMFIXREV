@@ -677,6 +677,12 @@ class LmsService
             throw new HttpException(403, 'Hanya guru penugasan yang dapat menilai hasil tugas ini.');
         }
 
+        // Komponen nilai wajib: tanpa komponen, nilai tugas tidak punya tujuan
+        // di buku nilai. Data lama tanpa komponen harus ditautkan lebih dulu.
+        if (! $assignment->grade_component_id) {
+            throw new HttpException(422, 'Tugas ini belum ditautkan ke komponen nilai. Tautkan komponen terlebih dahulu sebelum menilai.');
+        }
+
         $submission = AssignmentSubmission::where('assignment_id', $assignment->id)->findOrFail($submissionId);
 
         return DB::transaction(function () use ($submission, $assignment, $data, $currentUser, $request) {
@@ -722,18 +728,15 @@ class LmsService
                     // Jaga skala 0-100 walau guru mengisi skor melebihi nilai maksimal tugas.
                     $nilai = max(0.0, min(100.0, $nilai));
 
-                    Grade::updateOrCreate(
-                        [
-                            'student_id' => $submission->student_id,
-                            'component_id' => $assignment->grade_component_id,
-                            'period_id' => $period->id,
-                        ],
-                        [
-                            'value' => $nilai,
-                            // 'assignment' agar bisa dibedakan dari input manual guru.
-                            'source' => 'assignment',
-                            'entered_by' => $currentUser->id,
-                        ]
+                    // Nilai otomatis: dipakai hanya bila lebih tinggi dari nilai manual.
+                    app(GradeRecorder::class)->recordAuto(
+                        studentId: $submission->student_id,
+                        componentId: $assignment->grade_component_id,
+                        periodId: $period->id,
+                        value: $nilai,
+                        changeSource: GradeRecorder::SOURCE_ASSIGNMENT,
+                        changedBy: $currentUser->id,
+                        note: 'Nilai tugas: '.$assignment->title,
                     );
                 }
             }

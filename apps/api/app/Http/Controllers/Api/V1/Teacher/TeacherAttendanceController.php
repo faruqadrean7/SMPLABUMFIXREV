@@ -59,10 +59,15 @@ class TeacherAttendanceController extends Controller
             return $this->errorResponse('Kelas dan mata pelajaran wajib diisi.', 'VALIDATION_ERROR', 422);
         }
 
-        foreach (['class_id' => $classId, 'subject_id' => $subjectId, 'schedule_id' => $scheduleId] as $field => $value) {
+        foreach (['class_id' => $classId, 'subject_id' => $subjectId] as $field => $value) {
             if (is_string($value) && trim($value) !== '' && ! Str::isUuid($value)) {
                 return $this->errorResponse("Format {$field} tidak valid (harus UUID).", 'VALIDATION_ERROR', 422);
             }
+        }
+
+        if (is_string($scheduleId) && trim($scheduleId) !== '' && ! Str::isUuid($scheduleId)
+            && ! (is_string($classId) && Str::isUuid($classId) && is_string($subjectId) && Str::isUuid($subjectId))) {
+            return $this->errorResponse('Format schedule_id tidak valid (harus UUID) atau sertakan kelas & mata pelajaran.', 'VALIDATION_ERROR', 422);
         }
 
         // FIX-GURU-01 (AC3): Toleransi jika scheduleId bukan UUID, fallback selesaikan via classId & subjectId
@@ -240,12 +245,20 @@ class TeacherAttendanceController extends Controller
             $notes = trim($notes."\nCatatan Kendala: ".$learningObstacles);
         }
 
-        // BE-SEC-01: ID yang dikirim tapi bukan UUID harus ditolak 422, bukan
-        // "ditoleransi" lalu jurnal tersimpan dengan referensi sampah.
-        foreach (['schedule_id' => $scheduleId, 'class_id' => $classId, 'subject_id' => $subjectId] as $field => $value) {
+        // BE-SEC-01: ID yang dikirim tapi bukan UUID ditolak 422 — KECUALI
+        // schedule_id, yang boleh diabaikan bila kelas & mapel valid (fallback resmi
+        // FIX-GURU-01). Tanpa kelas/mapel valid, permintaan tetap ditolak.
+        foreach (['class_id' => $classId, 'subject_id' => $subjectId] as $field => $value) {
             if (is_string($value) && trim($value) !== '' && ! Str::isUuid($value)) {
                 return $this->errorResponse("Format {$field} tidak valid (harus UUID).", 'VALIDATION_ERROR', 422);
             }
+        }
+
+        $kelasMapelValid = is_string($classId) && Str::isUuid($classId)
+            && is_string($subjectId) && Str::isUuid($subjectId);
+
+        if (is_string($scheduleId) && trim($scheduleId) !== '' && ! Str::isUuid($scheduleId) && ! $kelasMapelValid) {
+            return $this->errorResponse('Format schedule_id tidak valid (harus UUID) atau sertakan kelas & mata pelajaran.', 'VALIDATION_ERROR', 422);
         }
 
         // FIX-GURU-01 (AC3): Validasi & toleransi bila scheduleId non-UUID, selesaikan via classId & subjectId

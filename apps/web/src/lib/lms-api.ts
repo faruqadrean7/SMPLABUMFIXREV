@@ -9,6 +9,7 @@ import {
   GradeComponent, 
   StudentGradeRow, 
   GradebookPeriod, 
+  GradebookPeriodOption,
   CBTQuestion, 
   CBTExam,
   AttendanceStatus 
@@ -249,16 +250,17 @@ export const lmsApi = {
     return [];
   },
 
-  async getGradebook(classId: string, subjectId: string): Promise<{
+  async getGradebook(classId: string, subjectId: string, periodId?: string): Promise<{
     period: GradebookPeriod;
+    periods: GradebookPeriodOption[];
     components: GradeComponent[];
     grades: StudentGradeRow[];
   }> {
     const response = await apiClient.get('/me/teacher/grades', {
-      params: { class_id: classId, subject_id: subjectId },
+      params: { class_id: classId, subject_id: subjectId, period_id: periodId || undefined },
     });
     if (response.data?.data?.grades) {
-      return response.data.data;
+      return { periods: [], ...response.data.data };
     }
 
     // Jangan mengarang periode: dulu di sini ada periode fiktif 'prd-01' sehingga
@@ -271,6 +273,7 @@ export const lmsApi = {
         class_id: classId,
         subject_id: subjectId,
       },
+      periods: [],
       components: [],
       grades: [],
     };
@@ -279,6 +282,8 @@ export const lmsApi = {
   async saveBulkGrades(payload: {
     class_id: string;
     subject_id: string;
+    /** Periode yang sedang dibuka di buku nilai; wajib agar nilai masuk ke periode yang benar. */
+    period_id?: string;
     grades: { student_id: string; scores: Record<string, number | null> }[];
   }): Promise<{ success: boolean; updated_count: number }> {
     const response = await apiClient.post('/me/teacher/grades/bulk', payload);

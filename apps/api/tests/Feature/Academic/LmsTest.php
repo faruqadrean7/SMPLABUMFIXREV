@@ -386,6 +386,8 @@ class LmsTest extends TestCase
             'teacher_id' => $this->teacher1->id,
             'title' => 'Tugas Penilaian 1',
             'due_at' => Carbon::now()->addDays(2),
+            // Komponen nilai wajib agar penilaian tugas bisa masuk buku nilai.
+            'grade_component_id' => $this->gradeComponent->id,
         ]);
 
         $submission = AssignmentSubmission::create([
@@ -700,6 +702,7 @@ class LmsTest extends TestCase
             'teacher_id' => $this->teacher1->id,
             'title' => 'Tugas Tenggat Kemarin',
             'due_at' => Carbon::now()->subDay(),
+            'grade_component_id' => $this->gradeComponent->id,
         ]);
 
         $tokenStudent1 = $this->student1User->createToken('test')->plainTextToken;

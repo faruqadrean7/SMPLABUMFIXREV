@@ -429,6 +429,11 @@ class TeacherDemoSeeder extends Seeder
         ]);
         $assignment->description = 'Selesaikan latihan soal no 1-10 di buku paket halaman 45, kumpulkan dalam format PDF.';
         $assignment->due_at = now()->addDays(5);
+        // Komponen nilai wajib: tautkan ke komponen mapel ini agar penilaian tugas
+        // bisa masuk buku nilai.
+        $assignment->grade_component_id = GradeComponent::where('class_id', $class7A->id)
+            ->where('subject_id', $subjectMtk->id)
+            ->value('id');
         $assignment->save();
 
         // Submissions

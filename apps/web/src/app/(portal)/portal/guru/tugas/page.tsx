@@ -136,7 +136,8 @@ export default function GuruTugasPage() {
       description: string;
       due_at: string;
       max_score: number;
-      grade_component_id?: string;
+      /** WAJIB: komponen buku nilai tujuan nilai tugas. */
+      grade_component_id: string;
       file?: File;
     }) => lmsApi.createAssignment(payload),
     onSuccess: (newAsg) => {
@@ -168,6 +169,11 @@ export default function GuruTugasPage() {
       toast.error('Judul tugas wajib diisi.');
       return;
     }
+    // Komponen nilai wajib: tanpa komponen, nilai tugas tidak masuk buku nilai.
+    if (!gradeComponentId) {
+      toast.error('Komponen nilai wajib dipilih agar nilai tugas masuk ke Buku Nilai.');
+      return;
+    }
     createMutation.mutate({
       class_id: classId,
       subject_id: subjectId,
@@ -175,7 +181,7 @@ export default function GuruTugasPage() {
       description,
       due_at: new Date(dueDate).toISOString(),
       max_score: Number(maxScore) || 0,
-      grade_component_id: gradeComponentId || undefined,
+      grade_component_id: gradeComponentId,
       file: selectedFile || undefined,
     });
   };
@@ -666,24 +672,32 @@ export default function GuruTugasPage() {
 
               {/* Tautkan ke Komponen Nilai Rapor (PRD BE-GRD-01 Integration) */}
               <div>
-                <label className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                  <span>Komponen Buku Nilai Rapor</span>
-                  <span className="text-[10px] font-normal text-blue-900">Kurikulum Merdeka</span>
+                <label htmlFor="select-komponen-nilai" className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Komponen Buku Nilai Rapor <span className="text-rose-600">*</span></span>
+                  <span className="text-[10px] font-normal text-blue-900">Wajib dipilih</span>
                 </label>
                 <select
+                  id="select-komponen-nilai"
+                  required
+                  aria-required="true"
                   value={gradeComponentId}
                   onChange={(e) => setGradeComponentId(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-semibold"
+                  className={`w-full px-3 py-2 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-semibold ${
+                    gradeComponents.length === 0 ? 'border-slate-200 text-slate-400' : 'border-slate-300'
+                  }`}
                 >
-                  <option value="">Tanpa tautan buku nilai</option>
+                  <option value="" disabled>
+                    {gradeComponents.length === 0 ? 'Belum ada komponen nilai untuk kelas & mapel ini' : '— Pilih komponen nilai —'}
+                  </option>
                   {gradeComponents.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Bila ditautkan, nilai tugas otomatis masuk ke buku nilai pada komponen ini.
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Nilai tugas otomatis masuk ke buku nilai pada komponen ini. Nilai tertinggi antara
+                  input manual dan nilai tugas yang dipakai.
                 </p>
               </div>
 

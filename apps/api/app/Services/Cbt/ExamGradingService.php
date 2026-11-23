@@ -11,6 +11,7 @@ use App\Models\ExamQuestion;
 use App\Models\ExamRoom;
 use App\Models\ExamSession;
 use App\Models\Grade;
+use App\Services\GradeRecorder;
 use App\Models\GradeComponent;
 use App\Models\GradePeriod;
 use App\Models\Question;
@@ -826,18 +827,17 @@ class ExamGradingService
                     continue;
                 }
 
-                Grade::updateOrCreate(
-                    [
-                        'student_id' => $session->student_id,
-                        'component_id' => $component->id,
-                        'period_id' => $period->id,
-                    ],
-                    [
-                        'exam_id' => $exam->id,
-                        'value' => $session->score,
-                        'source' => 'cbt',
-                        'entered_by' => $request->user()?->id,
-                    ]
+                // Nilai otomatis dari CBT: hanya dipakai bila lebih tinggi dari
+                // nilai manual guru (kebijakan nilai tertinggi menang).
+                app(GradeRecorder::class)->recordAuto(
+                    studentId: $session->student_id,
+                    componentId: $component->id,
+                    periodId: $period->id,
+                    value: (float) $session->score,
+                    changeSource: GradeRecorder::SOURCE_CBT,
+                    changedBy: $request->user()?->id,
+                    examId: $exam->id,
+                    note: 'Nilai CBT: '.$exam->title,
                 );
 
                 $syncedCount++;

@@ -691,12 +691,24 @@ class MePortalApiTest extends TestCase
         $teacherToken = $this->teacherUser1->createToken('token')->plainTextToken;
 
         // 1. Guru buat tugas di Class A
+        // Komponen nilai wajib ada & dipilih agar nilai tugas bisa masuk buku nilai.
+        $komponen = \App\Models\GradeComponent::firstOrCreate(
+            [
+                'class_id' => $this->classA->id,
+                'subject_id' => $this->subjectMath->id,
+                'semester_id' => $this->semester->id,
+                'code' => 'TGS',
+            ],
+            ['name' => 'Tugas / Formatif', 'weight' => 25]
+        );
+
         $resAsg = $this->withHeader('Authorization', 'Bearer '.$teacherToken)
             ->postJson('/api/v1/me/teacher/assignments', [
                 'title' => 'Tugas 1: Aljabar Linier',
                 'class_id' => $this->classA->id,
                 'subject_id' => $this->subjectMath->id,
                 'description' => 'Kerjakan halaman 10-15',
+                'grade_component_id' => $komponen->id,
             ]);
         $resAsg->assertStatus(201);
         $asgId = $resAsg->json('data.id');
