@@ -448,8 +448,58 @@ class LmsTest extends TestCase
             'student_id' => $this->student1->id,
             'component_id' => $this->gradeComponent->id,
             'value' => 95.00,
-            'source' => 'manual',
+            // Ditandai 'assignment' supaya bisa dibedakan dari input manual guru.
+            'source' => 'assignment',
             'entered_by' => $this->teacher1User->id,
+        ]);
+
+        // Nilai tugas wajib masuk ke periode TERBUKA yang dibaca buku nilai,
+        // bukan periode bulan kalender berjalan (bug: nilai tidak pernah muncul di buku nilai).
+        $periodeTerbuka = \App\Models\GradePeriod::where('semester_id', $this->gradeComponent->semester_id)
+            ->where('status', 'open')
+            ->orderBy('month')
+            ->first();
+
+        if ($periodeTerbuka) {
+            $this->assertDatabaseHas('grades', [
+                'student_id' => $this->student1->id,
+                'component_id' => $this->gradeComponent->id,
+                'period_id' => $periodeTerbuka->id,
+            ]);
+        }
+    }
+
+    public function test_be_acd_07_skor_tugas_diskalakan_ke_skala_100(): void
+    {
+        $assignment = Assignment::create([
+            'class_id' => $this->classA->id,
+            'subject_id' => $this->subjectMath->id,
+            'teacher_id' => $this->teacher1->id,
+            'title' => 'Tugas Skala 50',
+            'due_at' => Carbon::now()->addDays(2),
+            'max_score' => 50,
+            'grade_component_id' => $this->gradeComponent->id,
+        ]);
+
+        $submission = AssignmentSubmission::create([
+            'assignment_id' => $assignment->id,
+            'student_id' => $this->student1->id,
+            'submitted_at' => Carbon::now(),
+        ]);
+
+        $tokenTeacher = $this->teacher1User->createToken('test')->plainTextToken;
+
+        $this->withHeader('Authorization', "Bearer {$tokenTeacher}")
+            ->patchJson("/api/v1/assignments/{$assignment->id}/submissions/{$submission->id}/grade", [
+                'score' => 45,
+                'feedback' => 'Bagus',
+            ]);
+
+        // 45 dari maksimal 50 -> 90 pada skala 100
+        $this->assertDatabaseHas('grades', [
+            'student_id' => $this->student1->id,
+            'component_id' => $this->gradeComponent->id,
+            'value' => 90.00,
         ]);
     }
 

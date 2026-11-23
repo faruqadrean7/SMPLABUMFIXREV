@@ -691,12 +691,16 @@ class LmsService
             if ($assignment->grade_component_id) {
                 $semesterId = $assignment->gradeComponent?->semester_id;
                 if ($semesterId) {
-                    $currentMonth = (int) Carbon::now()->format('m');
+                    // Periode HARUS sama dengan yang dibaca buku nilai guru (periode terbuka
+                    // paling awal). Dulu dipakai bulan kalender sekarang, sehingga nilai tugas
+                    // masuk ke periode lain dan tidak pernah muncul di buku nilai.
                     $period = GradePeriod::where('semester_id', $semesterId)
-                        ->where('month', $currentMonth)
+                        ->where('status', 'open')
+                        ->orderBy('month')
                         ->first();
 
                     if (! $period) {
+                        $currentMonth = (int) Carbon::now()->format('m');
                         $period = GradePeriod::create([
                             'semester_id' => $semesterId,
                             'month' => $currentMonth,
@@ -708,6 +712,15 @@ class LmsService
                         throw new HttpException(422, 'Periode penilaian telah dikunci. Penilaian tugas tidak dapat dimasukkan ke buku nilai tanpa pembukaan kunci.');
                     }
 
+                    // Skor tugas diskalakan ke skala 100 sesuai nilai maksimal tugas.
+                    $maxScore = (float) ($assignment->max_score ?? 100);
+                    $nilai = $maxScore > 0 && $maxScore !== 100.0
+                        ? round(((float) $data['score'] / $maxScore) * 100, 2)
+                        : (float) $data['score'];
+
+                    // Jaga skala 0-100 walau guru mengisi skor melebihi nilai maksimal tugas.
+                    $nilai = max(0.0, min(100.0, $nilai));
+
                     Grade::updateOrCreate(
                         [
                             'student_id' => $submission->student_id,
@@ -715,8 +728,9 @@ class LmsService
                             'period_id' => $period->id,
                         ],
                         [
-                            'value' => $data['score'],
-                            'source' => 'manual',
+                            'value' => $nilai,
+                            // 'assignment' agar bisa dibedakan dari input manual guru.
+                            'source' => 'assignment',
                             'entered_by' => $currentUser->id,
                         ]
                     );
