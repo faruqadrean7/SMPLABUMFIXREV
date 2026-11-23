@@ -503,6 +503,38 @@ class LmsTest extends TestCase
         ]);
     }
 
+    public function test_be_acd_07_siswa_mendapat_notifikasi_saat_tugas_dinilai(): void
+    {
+        $assignment = Assignment::create([
+            'class_id' => $this->classA->id,
+            'subject_id' => $this->subjectMath->id,
+            'teacher_id' => $this->teacher1->id,
+            'title' => 'Tugas Dengan Notifikasi',
+            'due_at' => Carbon::now()->addDays(2),
+            'grade_component_id' => $this->gradeComponent->id,
+        ]);
+
+        $submission = AssignmentSubmission::create([
+            'assignment_id' => $assignment->id,
+            'student_id' => $this->student1->id,
+            'submitted_at' => Carbon::now(),
+        ]);
+
+        $tokenTeacher = $this->teacher1User->createToken('test')->plainTextToken;
+
+        $this->withHeader('Authorization', "Bearer {$tokenTeacher}")
+            ->patchJson("/api/v1/assignments/{$assignment->id}/submissions/{$submission->id}/grade", [
+                'score' => 80,
+                'feedback' => 'Perbaiki bagian akhir.',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $this->student1User->id,
+            'notif_type' => 'assignment.graded',
+        ]);
+    }
+
     public function test_be_acd_07_other_teacher_cannot_grade_or_delete_assignment_403(): void
     {
         $assignment = Assignment::create([

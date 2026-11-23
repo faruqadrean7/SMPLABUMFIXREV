@@ -11,6 +11,7 @@ use App\Models\Grade;
 use App\Models\GradePeriod;
 use App\Models\Guardian;
 use App\Models\LearningMaterial;
+use App\Models\Notification;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
@@ -735,6 +736,23 @@ class LmsService
                         ]
                     );
                 }
+            }
+
+            // Beri tahu siswa bahwa tugasnya sudah dinilai (dulu tidak ada notifikasi).
+            $siswa = Student::find($submission->student_id);
+            if ($siswa?->user_id) {
+                Notification::create([
+                    'user_id' => $siswa->user_id,
+                    'notif_type' => 'assignment.graded',
+                    'title' => 'Tugas dinilai: '.$assignment->title,
+                    'body' => 'Nilai: '.rtrim(rtrim(number_format((float) $submission->score, 2, ',', '.'), '0'), ',')
+                        .($submission->feedback ? ' — '.$submission->feedback : ''),
+                    'data' => [
+                        'assignment_id' => $assignment->id,
+                        'submission_id' => $submission->id,
+                        'score' => (float) $submission->score,
+                    ],
+                ]);
             }
 
             $this->logAudit(
