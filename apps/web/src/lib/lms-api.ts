@@ -260,8 +260,17 @@ export const lmsApi = {
     if (response.data?.data?.grades) {
       return response.data.data;
     }
+
+    // Jangan mengarang periode: dulu di sini ada periode fiktif 'prd-01' sehingga
+    // buku nilai tampak normal padahal API tidak mengirim data apa pun.
     return {
-      period: { id: 'prd-01', name: 'Semester Gasal 2026/2027', is_locked: false, class_id: classId, subject_id: subjectId },
+      period: {
+        id: '',
+        name: 'Belum ada periode penilaian',
+        is_locked: false,
+        class_id: classId,
+        subject_id: subjectId,
+      },
       components: [],
       grades: [],
     };

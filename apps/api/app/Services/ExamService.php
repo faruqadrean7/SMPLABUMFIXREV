@@ -215,18 +215,24 @@ class ExamService
 
         DB::transaction(function () use ($exam, $data, &$assignedRooms, $request) {
             foreach ($data['rooms'] as $roomItem) {
-                $token = $roomItem['token'] ?? strtoupper(Str::random(6));
+                $sessionNo = $roomItem['session_no'] ?? 1;
 
-                $examRoom = ExamRoom::create([
+                // Idempoten: satu (ujian, ruang, sesi) hanya boleh punya SATU baris.
+                // Dulu setiap panggilan membuat baris baru, sehingga peserta bisa
+                // terdaftar di ruang lama sementara guru mengumumkan token baru —
+                // siswa tidak akan pernah bisa memulai ujian.
+                $examRoom = ExamRoom::firstOrNew([
                     'exam_id' => $exam->id,
                     'room_id' => $roomItem['room_id'],
-                    'proctor_id' => $roomItem['proctor_id'] ?? null,
-                    'session_no' => $roomItem['session_no'] ?? 1,
-                    'token' => $token,
-                    'token_expires_at' => $roomItem['token_expires_at'] ?? $exam->end_at,
+                    'session_no' => $sessionNo,
                 ]);
 
-                $assignedRooms[] = $examRoom->load(['room', 'proctor']);
+                $examRoom->token = $roomItem['token'] ?? ($examRoom->token ?: strtoupper(Str::random(6)));
+                $examRoom->proctor_id = $roomItem['proctor_id'] ?? $examRoom->proctor_id;
+                $examRoom->token_expires_at = $roomItem['token_expires_at'] ?? ($examRoom->token_expires_at ?: $exam->end_at);
+                $examRoom->save();
+
+                $assignedRooms[] = $examRoom->fresh()->load(['room', 'proctor']);
             }
 
             $this->logAudit(

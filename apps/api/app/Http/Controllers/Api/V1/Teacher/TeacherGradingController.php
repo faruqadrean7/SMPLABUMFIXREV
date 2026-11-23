@@ -112,17 +112,94 @@ class TeacherGradingController extends Controller
             return $this->errorResponse('Kelas tidak ditemukan.', 'NOT_FOUND', 404);
         }
 
-        $data = $schoolClass->students->map(fn (Student $s) => [
-            'studentId' => $s->id,
-            'studentName' => $s->full_name,
-            'nisn' => $s->nisn ?? '',
-            'scores' => [],
-            'finalScore' => 85,
-            'letterGrade' => 'A',
-            'isPassed' => true,
-        ]);
+        // Buku nilai: kembalikan periode, komponen, dan NILAI SEBENARNYA.
+        // Sebelumnya endpoint ini mengembalikan skor karangan (85/A untuk semua siswa).
+        $semester = Semester::where('is_active', true)->first() ?? Semester::first();
 
-        return $this->successResponse($data);
+        $period = null;
+        if ($semester) {
+            $period = GradePeriod::where('semester_id', $semester->id)
+                ->where('status', 'open')
+                ->orderBy('month')
+                ->first()
+                ?? GradePeriod::where('semester_id', $semester->id)->orderBy('month')->first();
+        }
+
+        $components = GradeComponent::query()
+            ->where('class_id', $classId)
+            ->where('subject_id', $subjectId)
+            ->when($semester, fn ($q) => $q->where('semester_id', $semester->id))
+            ->orderBy('code')
+            ->get();
+
+        $weightByComponent = $components->pluck('weight', 'id');
+
+        $rawGrades = Grade::query()
+            ->whereIn('component_id', $components->pluck('id'))
+            ->when($period, fn ($q) => $q->where('period_id', $period->id))
+            ->get();
+
+        $scoresByStudent = [];
+        foreach ($rawGrades as $grade) {
+            $scoresByStudent[$grade->student_id][$grade->component_id] = (float) $grade->value;
+        }
+
+        $kktp = 75.0;
+
+        $rows = $schoolClass->students->map(function (Student $s) use ($components, $scoresByStudent, $kktp) {
+            $scores = [];
+            $weighted = 0.0;
+            $totalWeight = 0.0;
+
+            foreach ($components as $component) {
+                $value = $scoresByStudent[$s->id][$component->id] ?? null;
+                $scores[$component->id] = $value;
+
+                if ($value !== null) {
+                    $weight = (float) $component->weight;
+                    $weighted += $value * $weight;
+                    $totalWeight += $weight;
+                }
+            }
+
+            $final = $totalWeight > 0 ? round($weighted / $totalWeight, 1) : 0.0;
+
+            return [
+                'student_id' => $s->id,
+                'nis' => $s->nis ?? '',
+                'name' => $s->full_name,
+                'gender' => $s->gender === 'P' ? 'P' : 'L',
+                'avatar_url' => $s->photoFile?->url ?? null,
+                'scores' => $scores,
+                'final_score' => $final,
+                'is_tuntas' => $final >= $kktp,
+                'notes' => null,
+            ];
+        })->values();
+
+        $kategori = ['TGS' => 'formatif', 'UTS' => 'sumatif_tengah', 'UAS' => 'sumatif_akhir', 'SIKAP' => 'formatif'];
+
+        return $this->successResponse([
+            'period' => [
+                'id' => $period?->id,
+                'class_id' => $classId,
+                'subject_id' => $subjectId,
+                'name' => $period ? ('Periode Bulan '.$period->month) : 'Belum ada periode',
+                'academic_year' => $semester?->academicYear?->name,
+                'semester' => $semester?->name,
+                'is_locked' => $period ? $period->status === 'locked' : false,
+                'locked_at' => $period?->locked_at,
+            ],
+            'components' => $components->map(fn ($c) => [
+                'id' => $c->id,
+                'code' => $c->code,
+                'name' => $c->name,
+                'category' => $kategori[$c->code] ?? 'formatif',
+                'weight_percent' => (float) $c->weight,
+                'kktp' => $kktp,
+            ])->values(),
+            'grades' => $rows,
+        ]);
     }
 
     /**
