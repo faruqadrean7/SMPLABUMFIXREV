@@ -103,6 +103,27 @@ class SmpAccountSeeder extends Seeder
             }
         });
 
+        // Wali kelas butuh peran `homeroom` agar menu wali kelas muncul di portal guru.
+        // Peran ini terpisah dari `teacher`: satu guru bisa mengampu mapel sekaligus wali kelas.
+        $roleHomeroom = Role::firstOrCreate(['code' => 'homeroom'], ['name' => 'Wali Kelas', 'is_system' => true]);
+        $homeroomUserIds = DB::table('classes')
+            ->join('teachers', 'teachers.id', '=', 'classes.homeroom_teacher_id')
+            ->whereNull('classes.deleted_at')
+            ->whereNotNull('teachers.user_id')
+            ->pluck('teachers.user_id')
+            ->unique();
+
+        $homeroomRows = $homeroomUserIds->map(fn ($id) => [
+            'user_id' => $id,
+            'role_id' => $roleHomeroom->id,
+            'created_at' => $now,
+        ])->all();
+
+        foreach (array_chunk($homeroomRows, 200) as $chunk) {
+            DB::table('user_roles')->insertOrIgnore($chunk);
+        }
+
+        $this->command?->info("Peran wali kelas diberikan ke {$homeroomUserIds->count()} guru.");
         $this->command?->info("Akun dibuat: {$studentCount} siswa, {$teacherCount} guru, {$guardianCount} ortu.");
         $this->command?->line('  Password awal semua akun: '.self::DEFAULT_PASSWORD.' (wajib ganti saat login).');
         $this->command?->line('  Login siswa pakai NIS sebagai username, di /masuk.');
