@@ -303,14 +303,38 @@ class MeChildController extends Controller
         $total = $snapshot['total_score'] ?? round($scores->sum(), 2);
         $average = $snapshot['average_score'] ?? ($scores->isNotEmpty() ? round($scores->avg(), 2) : 0);
 
-        $grades = collect($subjects)->map(fn ($s) => [
-            'subject_id' => $s['subject_id'] ?? null,
-            'subject_code' => $s['subject_code'] ?? null,
-            'subject_name' => $s['subject_name'] ?? null,
-            'final_score' => isset($s['final_score']) ? (float) $s['final_score'] : null,
-            'level' => $s['level'] ?? null,
-            'competency_description' => $s['competency_description'] ?? null,
-        ])->values();
+        // Nama guru pengampu per mapel untuk kelas anak saat ini.
+        $childClassId = Student::with('classes')->find($child)?->classes->first()?->id;
+        $teacherBySubject = $childClassId
+            ? TeachingAssignment::with('teacher')
+                ->where('class_id', $childClassId)
+                ->get()
+                ->mapWithKeys(fn ($ta) => [$ta->subject_id => $ta->teacher?->full_name])
+            : collect();
+
+        $grades = collect($subjects)->map(function ($s) use ($teacherBySubject) {
+            $score = isset($s['final_score']) ? (float) $s['final_score'] : null;
+            $letter = $score === null ? null
+                : ($score >= 85 ? 'A' : ($score >= 75 ? 'B' : ($score >= 65 ? 'C' : 'D')));
+
+            // Kirim snake_case DAN camelCase: halaman e-Rapor membaca camelCase,
+            // sementara mapper nilai membaca snake_case.
+            return [
+                'subject_id' => $s['subject_id'] ?? null,
+                'subjectId' => $s['subject_id'] ?? null,
+                'subject_code' => $s['subject_code'] ?? null,
+                'subjectCode' => $s['subject_code'] ?? null,
+                'subject_name' => $s['subject_name'] ?? null,
+                'subjectName' => $s['subject_name'] ?? null,
+                'teacherName' => $teacherBySubject[$s['subject_id'] ?? ''] ?? '-',
+                'final_score' => $score,
+                'finalScore' => $score,
+                'letterGrade' => $letter,
+                'level' => $s['level'] ?? null,
+                'isPassed' => ($s['level'] ?? '') === 'tuntas',
+                'competency_description' => $s['competency_description'] ?? null,
+            ];
+        })->values();
 
         return $this->successResponse([
             'periodId' => $report->id,

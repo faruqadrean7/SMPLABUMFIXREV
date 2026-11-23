@@ -279,21 +279,31 @@ export default function ChildDetailPage() {
                 </div>
 
                 <div className="divide-y divide-slate-100">
-                  {reportCard.grades.map((grade) => (
-                    <div key={grade.subjectId} className="p-4 flex items-center justify-between text-xs">
-                      <div>
-                        <h4 className="font-bold text-sm text-slate-900">{grade.subjectName}</h4>
-                        <p className="text-slate-500 mt-0.5">Guru: {grade.teacherName}</p>
+                  {reportCard.grades.map((grade) => {
+                    // Badge mengikuti status nyata — dulu selalu "Tuntas" walau nilai di bawah KKTP.
+                    const lulus = grade.isPassed ?? (typeof grade.finalScore === 'number' && grade.finalScore >= 75);
+                    return (
+                      <div key={grade.subjectId} className="p-4 flex items-center justify-between text-xs">
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-900">{grade.subjectName}</h4>
+                          {grade.teacherName && grade.teacherName !== '-' && (
+                            <p className="text-slate-500 mt-0.5">Guru: {grade.teacherName}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-base font-black text-slate-900">{grade.finalScore ?? '-'}</span>
+                          {grade.letterGrade && (
+                            <span className="ml-1 text-xs font-bold text-brand-blue">({grade.letterGrade})</span>
+                          )}
+                          <Badge className={lulus
+                            ? 'ml-2 bg-emerald-50 text-status-success border-emerald-200'
+                            : 'ml-2 bg-amber-50 text-amber-700 border-amber-200'}>
+                            {lulus ? 'Tuntas' : 'Perlu Pendampingan'}
+                          </Badge>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-base font-black text-slate-900">{grade.finalScore}</span>
-                        <span className="ml-1 text-xs font-bold text-brand-blue">({grade.letterGrade})</span>
-                        <Badge className="ml-2 bg-emerald-50 text-status-success border-emerald-200">
-                          Tuntas
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
