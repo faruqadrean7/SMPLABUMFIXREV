@@ -32,11 +32,25 @@ class MeFinanceController extends Controller
         $user = $request->user();
         $student = $user->student;
 
-        if (! $student) {
+        if ($student) {
+            $invoices = Invoice::where('student_id', $student->id)
+                ->with(['items.feeType', 'payments'])
+                ->orderBy('due_date', 'asc')
+                ->get();
+
+            return $this->successResponse($invoices);
+        }
+
+        // Wali murid tidak punya profil siswa. Dulu mereka mendapat 404
+        // "Akun ini tidak terhubung dengan data profil siswa" walau portal ortu
+        // memang memakai endpoint keuangan — sekarang gabungkan tagihan semua anak.
+        $childIds = $user->guardian?->students()->pluck('students.id') ?? collect();
+
+        if ($childIds->isEmpty()) {
             return $this->errorResponse('Akun ini tidak terhubung dengan data profil siswa.', 'NOT_FOUND', 404);
         }
 
-        $invoices = Invoice::where('student_id', $student->id)
+        $invoices = Invoice::whereIn('student_id', $childIds)
             ->with(['items.feeType', 'payments'])
             ->orderBy('due_date', 'asc')
             ->get();
