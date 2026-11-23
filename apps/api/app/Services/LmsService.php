@@ -698,13 +698,33 @@ class LmsService
             if ($assignment->grade_component_id) {
                 $semesterId = $assignment->gradeComponent?->semester_id;
                 if ($semesterId) {
-                    // Periode HARUS sama dengan yang dibaca buku nilai guru (periode terbuka
-                    // paling awal). Dulu dipakai bulan kalender sekarang, sehingga nilai tugas
-                    // masuk ke periode lain dan tidak pernah muncul di buku nilai.
-                    $period = GradePeriod::where('semester_id', $semesterId)
-                        ->where('status', 'open')
-                        ->orderBy('month')
-                        ->first();
+                    // Penentuan periode nilai tugas:
+                    //   1. period_id eksplisit dari pemanggil (mis. guru sedang membuka periode 8)
+                    //   2. periode yang cocok dengan BULAN TENGGAT tugas
+                    //   3. periode terbuka paling awal (perilaku lama, tetap kompatibel)
+                    //   4. buat periode bulan berjalan bila belum ada
+                    $period = null;
+
+                    $periodId = $request->input('period_id') ?? $request->input('periodId');
+                    if ($periodId) {
+                        $period = GradePeriod::where('semester_id', $semesterId)->find($periodId);
+                        if (! $period) {
+                            throw new HttpException(422, 'Periode penilaian tidak ditemukan pada semester tugas ini.');
+                        }
+                    }
+
+                    if (! $period && $assignment->due_at) {
+                        $period = GradePeriod::where('semester_id', $semesterId)
+                            ->where('month', (int) $assignment->due_at->format('m'))
+                            ->first();
+                    }
+
+                    if (! $period) {
+                        $period = GradePeriod::where('semester_id', $semesterId)
+                            ->where('status', 'open')
+                            ->orderBy('month')
+                            ->first();
+                    }
 
                     if (! $period) {
                         $currentMonth = (int) Carbon::now()->format('m');
