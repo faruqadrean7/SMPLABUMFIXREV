@@ -55,3 +55,6 @@ docs/mtk/
 
 # Referensi open source lokal (tidak di-commit)
 references/
+
+# Superpowers scratch (brainstorm mockups, plan ledgers)
+.superpowers/

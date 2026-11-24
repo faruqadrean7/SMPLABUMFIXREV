@@ -122,6 +122,41 @@ class TeacherController extends Controller
      * BE-MST-03: Update Teacher
      * PUT /api/v1/teachers/{id}
      */
+    /**
+     * Aktifkan / setel ulang akun login portal guru.
+     * POST /api/v1/teachers/{id}/account
+     */
+    public function provisionAccount(Request $request, string $id): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'username' => ['nullable', 'string', 'max:50'],
+                'password' => ['nullable', 'string', 'min:6'],
+                'email' => ['nullable', 'email', 'max:100'],
+            ]);
+
+            $teacher = $this->teacherStaffService->createOrResetAccount($id, $validated, $request);
+
+            return $this->successResponse([
+                'message' => 'Akun login portal guru berhasil diaktifkan / diperbarui.',
+                'teacher' => $teacher,
+                'user' => [
+                    'id' => $teacher->user?->id,
+                    'username' => $teacher->user?->username,
+                    'email' => $teacher->user?->email,
+                ],
+            ], 200);
+        } catch (ModelNotFoundException) {
+            return $this->errorResponse('Data guru tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorResponse('Gagal membuat akun login guru', 'INTERNAL_ERROR', 500);
+        }
+    }
+
     public function update(UpdateTeacherRequest $request, string $id): JsonResponse
     {
         try {

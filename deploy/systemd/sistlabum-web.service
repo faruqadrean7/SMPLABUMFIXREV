@@ -1,0 +1,19 @@
+[Unit]
+Description=SISTLABUM Web (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/sistlabum/current/apps/web
+EnvironmentFile=/var/www/sistlabum/shared/web.env
+Environment=NODE_ENV=production
+Environment=PORT=3002
+ExecStart=/usr/bin/npm run start -- --port 3002
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+StandardOutput=append:/var/www/sistlabum/logs/web.log
+StandardError=append:/var/www/sistlabum/logs/web.err.log
+
+[Install]
+WantedBy=default.target

@@ -11,6 +11,7 @@ use App\Models\Grade;
 use App\Models\GradePeriod;
 use App\Models\Guardian;
 use App\Models\LearningMaterial;
+use App\Models\Notification;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
@@ -676,6 +677,12 @@ class LmsService
             throw new HttpException(403, 'Hanya guru penugasan yang dapat menilai hasil tugas ini.');
         }
 
+        // Komponen nilai wajib: tanpa komponen, nilai tugas tidak punya tujuan
+        // di buku nilai. Data lama tanpa komponen harus ditautkan lebih dulu.
+        if (! $assignment->grade_component_id) {
+            throw new HttpException(422, 'Tugas ini belum ditautkan ke komponen nilai. Tautkan komponen terlebih dahulu sebelum menilai.');
+        }
+
         $submission = AssignmentSubmission::where('assignment_id', $assignment->id)->findOrFail($submissionId);
 
         return DB::transaction(function () use ($submission, $assignment, $data, $currentUser, $request) {
@@ -691,12 +698,36 @@ class LmsService
             if ($assignment->grade_component_id) {
                 $semesterId = $assignment->gradeComponent?->semester_id;
                 if ($semesterId) {
-                    $currentMonth = (int) Carbon::now()->format('m');
-                    $period = GradePeriod::where('semester_id', $semesterId)
-                        ->where('month', $currentMonth)
-                        ->first();
+                    // Penentuan periode nilai tugas:
+                    //   1. period_id eksplisit dari pemanggil (mis. guru sedang membuka periode 8)
+                    //   2. periode yang cocok dengan BULAN TENGGAT tugas
+                    //   3. periode terbuka paling awal (perilaku lama, tetap kompatibel)
+                    //   4. buat periode bulan berjalan bila belum ada
+                    $period = null;
+
+                    $periodId = $request->input('period_id') ?? $request->input('periodId');
+                    if ($periodId) {
+                        $period = GradePeriod::where('semester_id', $semesterId)->find($periodId);
+                        if (! $period) {
+                            throw new HttpException(422, 'Periode penilaian tidak ditemukan pada semester tugas ini.');
+                        }
+                    }
+
+                    if (! $period && $assignment->due_at) {
+                        $period = GradePeriod::where('semester_id', $semesterId)
+                            ->where('month', (int) $assignment->due_at->format('m'))
+                            ->first();
+                    }
 
                     if (! $period) {
+                        $period = GradePeriod::where('semester_id', $semesterId)
+                            ->where('status', 'open')
+                            ->orderBy('month')
+                            ->first();
+                    }
+
+                    if (! $period) {
+                        $currentMonth = (int) Carbon::now()->format('m');
                         $period = GradePeriod::create([
                             'semester_id' => $semesterId,
                             'month' => $currentMonth,
@@ -708,19 +739,43 @@ class LmsService
                         throw new HttpException(422, 'Periode penilaian telah dikunci. Penilaian tugas tidak dapat dimasukkan ke buku nilai tanpa pembukaan kunci.');
                     }
 
-                    Grade::updateOrCreate(
-                        [
-                            'student_id' => $submission->student_id,
-                            'component_id' => $assignment->grade_component_id,
-                            'period_id' => $period->id,
-                        ],
-                        [
-                            'value' => $data['score'],
-                            'source' => 'manual',
-                            'entered_by' => $currentUser->id,
-                        ]
+                    // Skor tugas diskalakan ke skala 100 sesuai nilai maksimal tugas.
+                    $maxScore = (float) ($assignment->max_score ?? 100);
+                    $nilai = $maxScore > 0 && $maxScore !== 100.0
+                        ? round(((float) $data['score'] / $maxScore) * 100, 2)
+                        : (float) $data['score'];
+
+                    // Jaga skala 0-100 walau guru mengisi skor melebihi nilai maksimal tugas.
+                    $nilai = max(0.0, min(100.0, $nilai));
+
+                    // Nilai otomatis: dipakai hanya bila lebih tinggi dari nilai manual.
+                    app(GradeRecorder::class)->recordAuto(
+                        studentId: $submission->student_id,
+                        componentId: $assignment->grade_component_id,
+                        periodId: $period->id,
+                        value: $nilai,
+                        changeSource: GradeRecorder::SOURCE_ASSIGNMENT,
+                        changedBy: $currentUser->id,
+                        note: 'Nilai tugas: '.$assignment->title,
                     );
                 }
+            }
+
+            // Beri tahu siswa bahwa tugasnya sudah dinilai (dulu tidak ada notifikasi).
+            $siswa = Student::find($submission->student_id);
+            if ($siswa?->user_id) {
+                Notification::create([
+                    'user_id' => $siswa->user_id,
+                    'notif_type' => 'assignment.graded',
+                    'title' => 'Tugas dinilai: '.$assignment->title,
+                    'body' => 'Nilai: '.rtrim(rtrim(number_format((float) $submission->score, 2, ',', '.'), '0'), ',')
+                        .($submission->feedback ? ' — '.$submission->feedback : ''),
+                    'data' => [
+                        'assignment_id' => $assignment->id,
+                        'submission_id' => $submission->id,
+                        'score' => (float) $submission->score,
+                    ],
+                ]);
             }
 
             $this->logAudit(

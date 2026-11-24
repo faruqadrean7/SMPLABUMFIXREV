@@ -115,6 +115,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Tugas Pembelajaran
     Route::get('/assignments', [AssignmentController::class, 'index']);
     Route::post('/assignments', [AssignmentController::class, 'store']);
+    // Harus di atas /assignments/{id} agar tidak tertangkap sebagai ID.
+    Route::get('/assignments/without-grade-component', [AssignmentController::class, 'withoutGradeComponent']);
+    Route::post('/assignments/{id}/link-grade-component', [AssignmentController::class, 'linkGradeComponent']);
     Route::get('/assignments/{id}', [AssignmentController::class, 'show']);
     Route::put('/assignments/{id}', [AssignmentController::class, 'update']);
     Route::delete('/assignments/{id}', [AssignmentController::class, 'destroy']);

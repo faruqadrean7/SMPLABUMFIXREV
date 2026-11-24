@@ -24,6 +24,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { RoleGuard } from '@/components/role-guard';
 import { getStudentNavLinks } from '@/lib/student-navigation';
+import { Labi } from '@/features/portal/mascot/labi';
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -67,22 +68,25 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   return (
     <RoleGuard allowedRoles={['student']} portalName="Portal Siswa">
-      <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans">
+      <div className="portal-siswa siswa-bg flex min-h-screen text-slate-900 font-sans">
         {/* ─── SIDEBAR (Width 288px / w-72 matching Guru & Ortu) ─── */}
-        <aside className="w-72 border-r border-slate-200/90 bg-white flex flex-col fixed inset-y-0 left-0 z-30 shadow-xs">
+        <aside className="w-72 border-r border-indigo-100 bg-white/90 backdrop-blur flex flex-col fixed inset-y-0 left-0 z-30 shadow-sm">
           {/* Brand Header */}
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 bg-white">
-            <div className="w-10 h-10 rounded-xl bg-blue-900 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-xs">
+          <div className="px-5 py-4 border-b border-indigo-50 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl siswa-hero text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-md">
               <School className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
               <h1 className="font-extrabold text-sm text-slate-900 tracking-tight leading-tight">LABSCHOOL UM</h1>
-              <p className="text-xs text-slate-500 font-medium truncate">Portal Pembelajaran Siswa</p>
+              <p className="text-xs text-indigo-500 font-semibold truncate">Portal Belajar Siswa 🎒</p>
             </div>
           </div>
 
           {/* Profil Siswa Card with Real Avatar */}
-          <div className="mx-4 my-3 p-3 bg-slate-50 rounded-xl border border-slate-200/90 space-y-2.5">
+          <div className="mx-4 my-3 p-3 bg-gradient-to-br from-indigo-50 to-sky-50 rounded-2xl border border-indigo-100 space-y-2.5 relative overflow-hidden">
+            <div className="absolute -right-2 -top-1 opacity-90 pointer-events-none">
+              <Labi expression="wave" size={54} />
+            </div>
             <div className="flex items-center gap-2.5">
               {studentAvatar ? (
                 <img
@@ -126,7 +130,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
               <span className="text-slate-500 font-medium">Tingkat Hadir:</span>
               <span className="px-2 py-0.5 rounded-md font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] tracking-wide">
-                {studentDash?.attendanceRate ? `${studentDash.attendanceRate}% Hadir` : 'Hadir Aktif'}
+                {studentDash?.attendanceRate != null ? `${studentDash.attendanceRate}% Hadir` : 'Belum ada presensi'}
               </span>
             </div>
           </div>
@@ -143,10 +147,10 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition-all ${
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-sm transition-all ${
                     isActive
-                      ? 'bg-blue-900 text-white font-semibold shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100/90 hover:text-slate-900 font-medium'
+                      ? 'siswa-hero text-white font-semibold shadow-md'
+                      : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-900 font-medium'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">

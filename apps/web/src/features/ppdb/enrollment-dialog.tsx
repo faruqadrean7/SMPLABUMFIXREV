@@ -158,7 +158,7 @@ export function EnrollmentDialog({
                 <option value="">Pilih Rombel / Kelas...</option>
                 {classes.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.gradeLevel?.name || 'Kelas'})
+                    {c.name} ({(c.grade_level ?? c.gradeLevel)?.name || 'Kelas'})
                   </option>
                 ))}
               </select>

@@ -287,7 +287,8 @@ class TeacherSystematicIdorSweepTest extends TestCase
                 'actor' => 'userStudent',
                 'method' => 'POST',
                 'endpoint' => '/api/v1/assignments',
-                'payload' => ['class_id' => '{class_7a}', 'subject_id' => '{subject_mtk}', 'title' => 'Hacked Task', 'due_at' => '2026-12-31 23:59:59'],
+                // Komponen nilai wajib: sertakan agar validasi lolos dan yang diuji benar-benar otorisasi.
+                'payload' => ['class_id' => '{class_7a}', 'subject_id' => '{subject_mtk}', 'title' => 'Hacked Task', 'due_at' => '2026-12-31 23:59:59', 'grade_component_id' => '{component_mtk}'],
             ],
             'Siswa mengakses slip gaji guru' => [
                 'actor' => 'userStudent',
@@ -378,6 +379,9 @@ class TeacherSystematicIdorSweepTest extends TestCase
         $replacements = [
             '{subject_mtk}' => $this->subjectMtk->id,
             '{class_7a}' => $this->class7A->id,
+            '{component_mtk}' => \App\Models\GradeComponent::where('class_id', $this->class7A->id)
+                ->where('subject_id', $this->subjectMtk->id)
+                ->value('id'),
             '{other_child}' => $this->otherChild->id,
             '{semester}' => $this->semesterGanjil->id,
             '{report_other}' => $this->reportOfOtherClass->id,

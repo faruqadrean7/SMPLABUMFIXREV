@@ -267,17 +267,15 @@ class GradeService
             $isUpdate = $existing !== null;
             $oldValues = $isUpdate ? $existing->only(['value', 'source', 'entered_by']) : null;
 
-            $grade = Grade::updateOrCreate(
-                [
-                    'student_id' => $data['student_id'],
-                    'component_id' => $data['component_id'],
-                    'period_id' => $data['period_id'],
-                ],
-                [
-                    'value' => $data['value'],
-                    'source' => $data['source'] ?? 'manual',
-                    'entered_by' => $currentUser->id,
-                ]
+            // Kebijakan "nilai tertinggi menang": nilai manual tidak menurunkan
+            // nilai otomatis dan sebaliknya. Riwayat dicatat di grade_histories.
+            $grade = app(GradeRecorder::class)->recordManual(
+                studentId: $data['student_id'],
+                componentId: $data['component_id'],
+                periodId: $data['period_id'],
+                value: (float) $data['value'],
+                changedBy: $currentUser?->id,
+                note: 'Input manual buku nilai',
             );
 
             $action = $isUpdate ? 'academic.grade.update' : 'grade.entered';
@@ -350,17 +348,13 @@ class GradeService
                     $this->authorizeGradeEntry($currentUser, $componentId);
                 }
 
-                $grade = Grade::updateOrCreate(
-                    [
-                        'student_id' => $item['student_id'],
-                        'component_id' => $componentId,
-                        'period_id' => $data['period_id'],
-                    ],
-                    [
-                        'value' => $item['value'],
-                        'source' => $item['source'] ?? 'manual',
-                        'entered_by' => $currentUser->id,
-                    ]
+                $grade = app(GradeRecorder::class)->recordManual(
+                    studentId: $item['student_id'],
+                    componentId: $componentId,
+                    periodId: $data['period_id'],
+                    value: (float) $item['value'],
+                    changedBy: $currentUser?->id,
+                    note: 'Input manual (massal)',
                 );
 
                 $savedGrades[] = $grade;

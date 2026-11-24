@@ -68,25 +68,38 @@ export default function BukuNilaiPage() {
     }
   }, [teacherSubjects, selectedSubjectId]);
 
+  // Periode penilaian terpilih (dinamis dari server, tidak di-hardcode)
+  const [selectedPeriodId, setSelectedPeriodId] = useState('');
+
   // Queries
   const { data, isLoading } = useQuery({
-    queryKey: ['gradebook-data', selectedClassId, selectedSubjectId],
-    queryFn: () => lmsApi.getGradebook(selectedClassId, selectedSubjectId),
+    queryKey: ['gradebook-data', selectedClassId, selectedSubjectId, selectedPeriodId],
+    queryFn: () => lmsApi.getGradebook(selectedClassId, selectedSubjectId, selectedPeriodId || undefined),
     enabled: Boolean(selectedClassId),
   });
 
   const period = data?.period;
+  const periodOptions = data?.periods || [];
   const components = data?.components || [];
   const initialGrades = data?.grades || [];
+
+  // Ikuti periode yang dipilih server pada pemuatan pertama / saat periode tak valid.
+  React.useEffect(() => {
+    if (periodOptions.length === 0) return;
+    const ada = periodOptions.some((p) => p.id === selectedPeriodId);
+    if (!ada) {
+      const terpilih = periodOptions.find((p) => p.is_selected) ?? periodOptions[0];
+      setSelectedPeriodId(terpilih.id);
+    }
+  }, [periodOptions, selectedPeriodId]);
 
   // Local state for editable grades
   const [localGrades, setLocalGrades] = useState<StudentGradeRow[]>([]);
 
   React.useEffect(() => {
-    if (initialGrades.length > 0) {
-      setLocalGrades(initialGrades);
-    }
-  }, [initialGrades, selectedClassId, selectedSubjectId]);
+    // Ganti periode = muat ulang; jangan biarkan nilai periode lain menempel.
+    setLocalGrades(initialGrades);
+  }, [initialGrades, selectedClassId, selectedSubjectId, selectedPeriodId]);
 
   // Handle cell score changes with dynamic recalculation
   const handleScoreChange = (studentId: string, componentId: string, valStr: string) => {
@@ -127,6 +140,7 @@ export default function BukuNilaiPage() {
       return lmsApi.saveBulkGrades({
         class_id: selectedClassId,
         subject_id: selectedSubjectId,
+        period_id: selectedPeriodId || period?.id,
         grades: localGrades.map(s => ({
           student_id: s.student_id,
           scores: s.scores,
@@ -458,6 +472,27 @@ export default function BukuNilaiPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Pemilih periode — dinamis dari server, berlaku untuk semua komponen & siswa */}
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Periode:</span>
+                <select
+                  aria-label="Pilih Periode Penilaian"
+                  id="select-period-nilai"
+                  value={selectedPeriodId}
+                  onChange={(e) => setSelectedPeriodId(e.target.value)}
+                  className="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer"
+                >
+                  {periodOptions.length === 0 && (
+                    <option value="">Belum ada periode</option>
+                  )}
+                  {periodOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.is_locked ? ' (terkunci)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Search Input */}
@@ -643,6 +678,25 @@ export default function BukuNilaiPage() {
                       </tr>
                     );
                   })}
+
+                  {/* Empty state: periode terpilih belum punya nilai */}
+                  {filteredGrades.length === 0 && (
+                    <tr>
+                      <td colSpan={6 + components.length + 2} className="py-14 text-center">
+                        <FileSpreadsheet className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                        <p className="text-sm font-bold text-slate-700">
+                          {localGrades.length === 0
+                            ? 'Belum ada nilai pada periode ini'
+                            : 'Tidak ada siswa yang cocok dengan pencarian'}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {localGrades.length === 0
+                            ? `Periode: ${period?.name ?? '—'}. Pilih periode lain atau isi nilai siswa di bawah.`
+                            : 'Ubah kata kunci pencarian.'}
+                        </p>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

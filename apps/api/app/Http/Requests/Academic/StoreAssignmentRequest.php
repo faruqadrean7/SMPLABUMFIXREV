@@ -15,7 +15,9 @@ class StoreAssignmentRequest extends BaseApiRequest
             'description' => ['nullable', 'string', 'max:2000'],
             'due_at' => ['required', 'date', 'after:now'],
             'max_score' => ['nullable', 'numeric', 'between:1,100'],
-            'grade_component_id' => ['nullable', 'uuid', 'exists:grade_components,id'],
+            // WAJIB: setiap tugas harus punya komponen buku nilai agar nilainya
+            // bisa masuk ke buku nilai dan rapor.
+            'grade_component_id' => ['required', 'uuid', 'exists:grade_components,id'],
             'file' => ['nullable', 'file', 'mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,zip', 'max:25600'],
             'file_id' => ['nullable', 'uuid', 'exists:files,id'],
         ];

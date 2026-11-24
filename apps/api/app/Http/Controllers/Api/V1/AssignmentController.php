@@ -24,6 +24,98 @@ class AssignmentController extends Controller
     ) {}
 
     /**
+     * GET /api/v1/assignments/without-grade-component
+     * Data lama: tugas yang belum ditautkan ke komponen buku nilai.
+     * Tidak menghapus apa pun — hanya melaporkan agar bisa ditautkan.
+     */
+    public function withoutGradeComponent(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $query = \App\Models\Assignment::with(['class:id,name', 'subject:id,name,code'])
+                ->whereNull('grade_component_id');
+
+            // Guru hanya melihat tugasnya sendiri.
+            $teacher = \App\Models\Teacher::where('user_id', $user?->id)->first();
+            if ($teacher && ! $user->hasRole(['admin', 'super_admin'])) {
+                $query->where('teacher_id', $teacher->id);
+            }
+
+            $rows = $query->orderByDesc('due_at')->limit(200)->get()->map(fn ($a) => [
+                'id' => $a->id,
+                'title' => $a->title,
+                'class_id' => $a->class_id,
+                'class_name' => $a->class?->name,
+                'subject_id' => $a->subject_id,
+                'subject_name' => $a->subject?->name,
+                'due_at' => $a->due_at?->toISOString(),
+            ])->values();
+
+            return $this->successResponse([
+                'count' => $rows->count(),
+                'assignments' => $rows,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorResponse('Gagal memuat tugas tanpa komponen nilai', 'INTERNAL_ERROR', 500);
+        }
+    }
+
+    /**
+     * POST /api/v1/assignments/{id}/link-grade-component
+     * Menautkan tugas lama ke komponen buku nilai (tanpa menghapus data).
+     */
+    public function linkGradeComponent(string $id, Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'grade_component_id' => ['required', 'uuid', 'exists:grade_components,id'],
+            ]);
+
+            $assignment = \App\Models\Assignment::findOrFail($id);
+            $component = \App\Models\GradeComponent::findOrFail($validated['grade_component_id']);
+
+            // Komponen harus milik kelas & mapel yang sama dengan tugas.
+            if ($component->class_id !== $assignment->class_id || $component->subject_id !== $assignment->subject_id) {
+                return $this->errorResponse(
+                    'Komponen nilai tidak sesuai dengan kelas dan mata pelajaran tugas ini.',
+                    'VALIDATION_ERROR',
+                    422
+                );
+            }
+
+            $user = $request->user();
+            $teacher = \App\Models\Teacher::where('user_id', $user?->id)->first();
+            $isAdmin = $user && $user->hasRole(['admin', 'super_admin']);
+
+            if (! $isAdmin && (! $teacher || $teacher->id !== $assignment->teacher_id)) {
+                return $this->errorResponse(
+                    'Hanya guru pemilik tugas atau admin yang dapat menautkan komponen nilai.',
+                    'FORBIDDEN',
+                    403
+                );
+            }
+
+            $assignment->grade_component_id = $component->id;
+            $assignment->save();
+
+            return $this->successResponse([
+                'assignment_id' => $assignment->id,
+                'grade_component_id' => $component->id,
+                'grade_component_name' => $component->name,
+                'message' => 'Tugas berhasil ditautkan ke komponen buku nilai.',
+            ]);
+        } catch (ModelNotFoundException) {
+            return $this->errorResponse('Tugas atau komponen nilai tidak ditemukan', 'NOT_FOUND', 404);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorResponse('Gagal menautkan komponen nilai', 'INTERNAL_ERROR', 500);
+        }
+    }
+
+    /**
      * BE-ACD-07: Daftar tugas kelas.
      * GET /api/v1/assignments
      */

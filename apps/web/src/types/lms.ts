@@ -167,6 +167,26 @@ export interface GradeComponent {
   kktp: number;
 }
 
+/** Opsi periode untuk pemilih periode saat menilai tugas. */
+export interface TeacherPeriodOption {
+  id: string;
+  name: string;
+  month: number;
+  status: string;
+  is_locked: boolean;
+  is_default: boolean;
+}
+
+/** Opsi periode penilaian untuk pemilih periode di Buku Nilai. */
+export interface GradebookPeriodOption {
+  id: string;
+  name: string;
+  month: number;
+  status: string;
+  is_locked: boolean;
+  is_selected: boolean;
+}
+
 export interface StudentGradeRow {
   student_id: string;
   nis: string;

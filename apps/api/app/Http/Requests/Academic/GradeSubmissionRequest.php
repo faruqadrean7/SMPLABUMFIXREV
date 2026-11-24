@@ -11,6 +11,8 @@ class GradeSubmissionRequest extends BaseApiRequest
         return [
             'score' => ['required', 'numeric', 'between:0,100'],
             'feedback' => ['nullable', 'string', 'max:2000'],
+            // Opsional: periode tujuan nilai. Bila kosong, dipakai periode bulan tenggat tugas.
+            'period_id' => ['nullable', 'uuid', 'exists:grade_periods,id'],
         ];
     }
 

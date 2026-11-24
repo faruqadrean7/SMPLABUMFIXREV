@@ -9,6 +9,8 @@ import {
   GradeComponent, 
   StudentGradeRow, 
   GradebookPeriod, 
+  GradebookPeriodOption,
+  TeacherPeriodOption,
   CBTQuestion, 
   CBTExam,
   AttendanceStatus 
@@ -86,10 +88,28 @@ export const lmsApi = {
   async gradeSubmission(
     assignmentId: string,
     submissionId: string,
-    payload: { score: number; feedback?: string }
+    payload: { score: number; feedback?: string; period_id?: string }
   ): Promise<AssignmentSubmission> {
     const response = await apiClient.post(`/me/teacher/submissions/${submissionId}/grade`, payload);
     return response.data?.data;
+  },
+
+  /** Daftar periode penilaian tahun ajaran aktif (pemilih periode saat menilai). */
+  async getTeacherPeriods(): Promise<TeacherPeriodOption[]> {
+    const response = await apiClient.get('/me/teacher/periods');
+    const rows = response.data?.data;
+    return Array.isArray(rows) ? rows : [];
+  },
+
+  /** Tautkan tugas lama (tanpa komponen) ke komponen buku nilai. */
+  async linkAssignmentGradeComponent(
+    assignmentId: string,
+    gradeComponentId: string
+  ): Promise<{ grade_component_name?: string }> {
+    const response = await apiClient.post(`/assignments/${assignmentId}/link-grade-component`, {
+      grade_component_id: gradeComponentId,
+    });
+    return response.data?.data ?? {};
   },
 
   // ─── 3. Jadwal & Jurnal Mengajar (BE-ACD-01, BE-ACD-02) ───
@@ -249,19 +269,30 @@ export const lmsApi = {
     return [];
   },
 
-  async getGradebook(classId: string, subjectId: string): Promise<{
+  async getGradebook(classId: string, subjectId: string, periodId?: string): Promise<{
     period: GradebookPeriod;
+    periods: GradebookPeriodOption[];
     components: GradeComponent[];
     grades: StudentGradeRow[];
   }> {
     const response = await apiClient.get('/me/teacher/grades', {
-      params: { class_id: classId, subject_id: subjectId },
+      params: { class_id: classId, subject_id: subjectId, period_id: periodId || undefined },
     });
     if (response.data?.data?.grades) {
-      return response.data.data;
+      return { periods: [], ...response.data.data };
     }
+
+    // Jangan mengarang periode: dulu di sini ada periode fiktif 'prd-01' sehingga
+    // buku nilai tampak normal padahal API tidak mengirim data apa pun.
     return {
-      period: { id: 'prd-01', name: 'Semester Gasal 2026/2027', is_locked: false, class_id: classId, subject_id: subjectId },
+      period: {
+        id: '',
+        name: 'Belum ada periode penilaian',
+        is_locked: false,
+        class_id: classId,
+        subject_id: subjectId,
+      },
+      periods: [],
       components: [],
       grades: [],
     };
@@ -270,6 +301,8 @@ export const lmsApi = {
   async saveBulkGrades(payload: {
     class_id: string;
     subject_id: string;
+    /** Periode yang sedang dibuka di buku nilai; wajib agar nilai masuk ke periode yang benar. */
+    period_id?: string;
     grades: { student_id: string; scores: Record<string, number | null> }[];
   }): Promise<{ success: boolean; updated_count: number }> {
     const response = await apiClient.post('/me/teacher/grades/bulk', payload);

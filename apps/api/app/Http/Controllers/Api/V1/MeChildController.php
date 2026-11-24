@@ -9,8 +9,10 @@ use App\Models\CharacterNote;
 use App\Models\Grade;
 use App\Models\ProgressReport;
 use App\Models\ReportCard;
+use App\Models\Semester;
 use App\Models\Student;
 use App\Models\StudentPoint;
+use App\Models\TeachingAssignment;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -52,12 +54,21 @@ class MeChildController extends Controller
             'class_id' => $currentClass?->id,
             'class_name' => $currentClass?->name ?? 'Belum ada kelas',
             'className' => $currentClass?->name ?? 'Belum ada kelas',
-            'academic_year' => $currentClass?->academicYear?->name ?? '2024/2025',
-            'academicYear' => $currentClass?->academicYear?->name ?? '2024/2025',
+            'academic_year' => $currentClass?->academicYear?->name ?? $this->activeAcademicYearName(),
+            'academicYear' => $currentClass?->academicYear?->name ?? $this->activeAcademicYearName(),
             'gender' => $gender,
             'avatar_url' => $student->photoFile?->url ?? null,
             'avatarUrl' => $student->photoFile?->url ?? null,
             'status' => $student->status ?? 'active',
+            // Wali kelas dipakai portal orang tua untuk menampilkan kontak guru.
+            'homeroom_teacher' => $currentClass?->homeroomTeacher
+                ? [
+                    'id' => $currentClass->homeroomTeacher->id,
+                    'name' => $currentClass->homeroomTeacher->full_name,
+                    'nip' => $currentClass->homeroomTeacher->nip,
+                    'phone' => $currentClass->homeroomTeacher->user?->phone,
+                ]
+                : null,
         ];
     }
 
@@ -65,6 +76,17 @@ class MeChildController extends Controller
      * GET /api/v1/me/children
      * Mengambil daftar seluruh anak di bawah perwalian wali yang login.
      */
+    /**
+     * Nama tahun ajaran yang sedang berjalan (bukan hardcode '2024/2025').
+     */
+    private function activeAcademicYearName(): string
+    {
+        $semester = Semester::where('is_active', true)->with('academicYear')->first()
+            ?? Semester::with('academicYear')->orderByDesc('start_date')->first();
+
+        return $semester?->academicYear?->name ?? '-';
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -75,7 +97,7 @@ class MeChildController extends Controller
         }
 
         $students = $guardian->students()
-            ->with(['classes.academicYear', 'photoFile'])
+            ->with(['classes.academicYear', 'classes.homeroomTeacher.user', 'photoFile'])
             ->get();
 
         $data = $students->map(fn (Student $s) => $this->formatChildSummary($s));
@@ -93,7 +115,7 @@ class MeChildController extends Controller
             return $err;
         }
 
-        $student = Student::with(['classes.academicYear', 'photoFile'])->find($child);
+        $student = Student::with(['classes.academicYear', 'classes.homeroomTeacher.user', 'photoFile'])->find($child);
         if (! $student) {
             return $this->errorResponse('Data anak tidak ditemukan.', 'NOT_FOUND', 404);
         }
@@ -172,16 +194,49 @@ class MeChildController extends Controller
             return $err;
         }
 
+        $student = Student::with('classes')->find($child);
+        $classId = $student?->classes->first()?->id;
+
         $grades = Grade::with(['component.subject'])
             ->where('student_id', $child)
             ->get()
             ->groupBy(fn ($g) => $g->component?->subject_id ?? 'unknown');
 
+        // Guru pengampu sebenarnya per (kelas, mapel) — dulu selalu "Guru Pengampu".
+        $teacherBySubject = $classId
+            ? TeachingAssignment::with('teacher')
+                ->where('class_id', $classId)
+                ->get()
+                ->mapWithKeys(fn ($ta) => [$ta->subject_id => $ta->teacher?->full_name])
+            : collect();
+
+        $kktp = 75.0;
+
         $result = [];
         foreach ($grades as $subjectId => $items) {
             $first = $items->first();
             $subject = $first?->component?->subject;
-            $avgScore = round($items->avg('value') ?? 0, 1);
+
+            // Pecah per komponen: Formatif (TGS), Sumatif tengah (UTS), Sumatif akhir (UAS).
+            // Dulu ketiga kolom diisi satu angka rata-rata yang sama.
+            $byCode = [];
+            $weighted = 0.0;
+            $totalWeight = 0.0;
+            foreach ($items as $grade) {
+                $code = $grade->component?->code;
+                $weight = (float) ($grade->component?->weight ?? 0);
+                if ($code) {
+                    $byCode[$code] = (float) $grade->value;
+                }
+                if ($weight > 0) {
+                    $weighted += (float) $grade->value * $weight;
+                    $totalWeight += $weight;
+                }
+            }
+
+            $finalScore = $totalWeight > 0
+                ? round($weighted / $totalWeight, 1)
+                : round((float) ($items->avg('value') ?? 0), 1);
 
             $result[] = [
                 'subjectId' => (string) $subjectId,
@@ -190,16 +245,20 @@ class MeChildController extends Controller
                 'subject_name' => $subject?->name ?? 'Mata Pelajaran',
                 'subjectCode' => $subject?->code ?? '',
                 'subject_code' => $subject?->code ?? '',
-                'teacherName' => 'Guru Pengampu',
-                'dailyAverage' => $avgScore,
-                'midExam' => $avgScore,
-                'finalExam' => $avgScore,
-                'finalScore' => $avgScore,
-                'letterGrade' => $avgScore >= 85 ? 'A' : ($avgScore >= 75 ? 'B' : ($avgScore >= 65 ? 'C' : 'D')),
-                'passingGrade' => 75,
-                'isPassed' => $avgScore >= 75,
+                'teacherName' => $teacherBySubject[$subjectId] ?? '-',
+                'dailyAverage' => $byCode['TGS'] ?? null,
+                'midExam' => $byCode['UTS'] ?? null,
+                'finalExam' => $byCode['UAS'] ?? null,
+                'attitude' => $byCode['SIKAP'] ?? null,
+                'components' => $byCode,
+                'finalScore' => $finalScore,
+                'letterGrade' => $finalScore >= 85 ? 'A' : ($finalScore >= 75 ? 'B' : ($finalScore >= 65 ? 'C' : 'D')),
+                'passingGrade' => $kktp,
+                'isPassed' => $finalScore >= $kktp,
             ];
         }
+
+        usort($result, fn ($a, $b) => strcmp($a['subjectName'], $b['subjectName']));
 
         return $this->successResponse($result);
     }
@@ -220,11 +279,13 @@ class MeChildController extends Controller
             ->first();
 
         if (! $report) {
+            $semester = Semester::where('is_active', true)->with('academicYear')->first();
+
             return $this->successResponse([
-                'periodId' => 'none',
-                'periodName' => 'Semester Berjalan',
-                'academicYear' => '2024/2025',
-                'semester' => 'Ganjil',
+                'periodId' => null,
+                'periodName' => $semester?->name ?? 'Semester Berjalan',
+                'academicYear' => $semester?->academicYear?->name ?? $this->activeAcademicYearName(),
+                'semester' => $semester?->name ?? 'Ganjil',
                 'totalScore' => 0,
                 'averageScore' => 0,
                 'grades' => [],
@@ -233,16 +294,59 @@ class MeChildController extends Controller
 
         $snapshot = $report->data_snapshot ?? [];
 
+        // Snapshot rapor menyimpan nilai per mapel di kunci 'subjects', bukan 'grades'.
+        // Dulu endpoint ini membaca 'grades' sehingga rapor orang tua SELALU kosong
+        // padahal nilainya lengkap tersimpan di snapshot.
+        $subjects = is_array($snapshot['subjects'] ?? null) ? $snapshot['subjects'] : [];
+        $scores = collect($subjects)->pluck('final_score')->filter(fn ($v) => is_numeric($v));
+
+        $total = $snapshot['total_score'] ?? round($scores->sum(), 2);
+        $average = $snapshot['average_score'] ?? ($scores->isNotEmpty() ? round($scores->avg(), 2) : 0);
+
+        // Nama guru pengampu per mapel untuk kelas anak saat ini.
+        $childClassId = Student::with('classes')->find($child)?->classes->first()?->id;
+        $teacherBySubject = $childClassId
+            ? TeachingAssignment::with('teacher')
+                ->where('class_id', $childClassId)
+                ->get()
+                ->mapWithKeys(fn ($ta) => [$ta->subject_id => $ta->teacher?->full_name])
+            : collect();
+
+        $grades = collect($subjects)->map(function ($s) use ($teacherBySubject) {
+            $score = isset($s['final_score']) ? (float) $s['final_score'] : null;
+            $letter = $score === null ? null
+                : ($score >= 85 ? 'A' : ($score >= 75 ? 'B' : ($score >= 65 ? 'C' : 'D')));
+
+            // Kirim snake_case DAN camelCase: halaman e-Rapor membaca camelCase,
+            // sementara mapper nilai membaca snake_case.
+            return [
+                'subject_id' => $s['subject_id'] ?? null,
+                'subjectId' => $s['subject_id'] ?? null,
+                'subject_code' => $s['subject_code'] ?? null,
+                'subjectCode' => $s['subject_code'] ?? null,
+                'subject_name' => $s['subject_name'] ?? null,
+                'subjectName' => $s['subject_name'] ?? null,
+                'teacherName' => $teacherBySubject[$s['subject_id'] ?? ''] ?? '-',
+                'final_score' => $score,
+                'finalScore' => $score,
+                'letterGrade' => $letter,
+                'level' => $s['level'] ?? null,
+                'isPassed' => ($s['level'] ?? '') === 'tuntas',
+                'competency_description' => $s['competency_description'] ?? null,
+            ];
+        })->values();
+
         return $this->successResponse([
             'periodId' => $report->id,
             'periodName' => $report->semester?->name ?? 'Semester Ganjil',
-            'academicYear' => $report->semester?->academicYear?->name ?? '2024/2025',
+            'academicYear' => $report->semester?->academicYear?->name ?? $this->activeAcademicYearName(),
             'semester' => $report->semester?->name ?? 'Ganjil',
-            'totalScore' => $snapshot['total_score'] ?? 0,
-            'averageScore' => $snapshot['average_score'] ?? 0,
+            'totalScore' => $total,
+            'averageScore' => $average,
             'classRank' => $snapshot['rank'] ?? null,
             'homeroomNote' => $snapshot['homeroom_note'] ?? null,
-            'grades' => $snapshot['grades'] ?? [],
+            'status' => $report->status,
+            'grades' => $grades,
         ]);
     }
 
@@ -268,14 +372,10 @@ class MeChildController extends Controller
         return $this->successResponse([
             'periodId' => $note->period_id,
             'periodName' => $note->period?->name ?? 'Semester Berjalan',
-            'academicYear' => '2024/2025',
-            'ratings' => $note->scale_data ?? [
-                'beriman_bertakwa' => 'baik',
-                'gotong_royong' => 'baik',
-                'mandiri' => 'baik',
-                'bernalar_kritis' => 'baik',
-                'kreatif' => 'baik',
-            ],
+            'academicYear' => $this->activeAcademicYearName(),
+            // Jangan mengarang penilaian: dulu lima aspek selalu diisi "baik"
+            // walau guru belum menilai apa pun.
+            'ratings' => $note->scale_data ?? [],
             'homeroomNote' => $note->homeroom_note ?? '',
             'updatedAt' => $note->updated_at?->toISOString() ?? now()->toISOString(),
         ]);

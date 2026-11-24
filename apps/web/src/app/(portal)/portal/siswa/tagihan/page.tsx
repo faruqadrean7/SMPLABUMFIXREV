@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { EmptyState } from '@/components/shared/empty-state';
-import { ErrorState } from '@/components/shared/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 import { financeApi, formatRupiah } from '@/features/finance/finance-api';
 import { Invoice, OfficialReceipt, InvoiceStatus, PaymentProviderSetting } from '@/types/finance';
 import { toast } from '@/components/ui/toast';
@@ -182,11 +182,7 @@ export default function StudentInvoicesPage() {
           <LoadingSpinner label="Memuat informasi tagihan..." size="lg" />
         </Card>
       ) : error ? (
-        <ErrorState
-          title="Gagal Memuat Tagihan"
-          message={error}
-          onRetry={loadData}
-        />
+        <StudentError message={error} onRetry={loadData} />
       ) : invoices.length === 0 ? (
         <Card className="p-8">
           <EmptyState

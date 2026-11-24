@@ -4,14 +4,24 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const configuredAdminPath = process.env.ADMIN_LOGIN_PATH || '/secret-admin-gate-login';
+  // Rewrite internal harus lewat HTTP lokal: di belakang Cloudflare/tunnel,
+  // request.url ber-skema https padahal server ini melayani HTTP biasa (EPROTO).
+  const internalOrigin =
+    process.env.INTERNAL_ORIGIN || `http://127.0.0.1:${process.env.PORT || '3100'}`;
 
   // 1. Pintu Masuk Rahasia Admin: Rewrite URL yang dikonfigurasi ke gateway internal
   if (configuredAdminPath && pathname === configuredAdminPath) {
-    return NextResponse.rewrite(new URL('/admin-gateway-internal', request.url));
+    // Tandai request internal supaya lolos dari blokir di bawah, tanpa membuka
+    // akses langsung ke /admin-gateway-internal dari luar.
+    const headers = new Headers(request.headers);
+    headers.set('x-admin-gateway', '1');
+    return NextResponse.rewrite(new URL('/admin-gateway-internal', internalOrigin), {
+      request: { headers },
+    });
   }
 
   // Blokir akses langsung ke route gateway internal
-  if (pathname === '/admin-gateway-internal') {
+  if (pathname === '/admin-gateway-internal' && request.headers.get('x-admin-gateway') !== '1') {
     return new NextResponse(null, { status: 404, statusText: 'Not Found' });
   }
 

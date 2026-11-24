@@ -158,6 +158,17 @@ export default function nextConfigFunction(phase) {
       },
     ];
   },
+  // Teruskan /api/* ke backend Laravel supaya frontend & API satu origin.
+  // Bisa dioverride lewat API_INTERNAL_URL (mis. saat API ada di host lain).
+  async rewrites() {
+    const apiInternal = process.env.API_INTERNAL_URL || 'http://127.0.0.1:8000';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiInternal}/api/:path*`,
+      },
+    ];
+  },
 };
 
   return nextConfig;

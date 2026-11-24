@@ -31,11 +31,17 @@ class BeCbtImportMtk01Test extends TestCase
 
     private string $schoolId = '00000000-0000-0000-0000-000000000001';
 
-    private string $manifest = 'import/mtk-pas-9-genap-2526.json';
+    /**
+     * Manifest UJI (sintetis, 26 butir dengan bobot total 100) — bukan paket asli.
+     * Paket asli berisi kunci jawaban dan sengaja tidak disimpan di repo, sehingga
+     * test ini memakai fixture agar jalur impor tetap teruji di CI.
+     */
+    private string $manifest = '';
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->manifest = base_path('tests/fixtures/cbt/mtk-pas-9-genap-2526.fixture.json');
         $this->seedMasterData();
     }
 

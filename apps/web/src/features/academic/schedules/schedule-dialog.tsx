@@ -334,7 +334,7 @@ export function ScheduleDialog({
                   <option value="">Pilih Kelas...</option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} ({c.gradeLevel?.name || 'Tingkat'})
+                      {c.name} ({(c.grade_level ?? c.gradeLevel)?.name || 'Tingkat'})
                     </option>
                   ))}
                 </select>

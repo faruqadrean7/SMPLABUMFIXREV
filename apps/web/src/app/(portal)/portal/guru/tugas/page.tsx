@@ -87,6 +87,29 @@ export default function GuruTugasPage() {
     queryFn: () => lmsApi.getAssignments(),
   });
 
+  // ── Penanganan DATA LAMA: tugas yang belum tertaut komponen buku nilai ──
+  const [linkTarget, setLinkTarget] = React.useState<Assignment | null>(null);
+  const [linkComponentId, setLinkComponentId] = React.useState('');
+
+  const { data: linkComponents = [] } = useQuery({
+    queryKey: ['grade-components-link', linkTarget?.class_id, linkTarget?.subject_id],
+    queryFn: () => lmsApi.getGradeComponents(linkTarget!.class_id, linkTarget!.subject_id),
+    enabled: !!linkTarget,
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: () => lmsApi.linkAssignmentGradeComponent(linkTarget!.id, linkComponentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      toast.success('Tugas berhasil ditautkan ke komponen buku nilai.');
+      setLinkTarget(null);
+      setLinkComponentId('');
+    },
+    onError: () => toast.error('Gagal menautkan komponen. Pastikan komponen milik kelas & mapel yang sama.'),
+  });
+
+  const belumTertaut = assignments.filter((a) => !a.grade_component_id);
+
   // Toggle lock state
   const handleToggleLock = (id: string, currentLock: boolean) => {
     const item = assignments.find(a => a.id === id);
@@ -136,7 +159,8 @@ export default function GuruTugasPage() {
       description: string;
       due_at: string;
       max_score: number;
-      grade_component_id?: string;
+      /** WAJIB: komponen buku nilai tujuan nilai tugas. */
+      grade_component_id: string;
       file?: File;
     }) => lmsApi.createAssignment(payload),
     onSuccess: (newAsg) => {
@@ -168,6 +192,11 @@ export default function GuruTugasPage() {
       toast.error('Judul tugas wajib diisi.');
       return;
     }
+    // Komponen nilai wajib: tanpa komponen, nilai tugas tidak masuk buku nilai.
+    if (!gradeComponentId) {
+      toast.error('Komponen nilai wajib dipilih agar nilai tugas masuk ke Buku Nilai.');
+      return;
+    }
     createMutation.mutate({
       class_id: classId,
       subject_id: subjectId,
@@ -175,7 +204,7 @@ export default function GuruTugasPage() {
       description,
       due_at: new Date(dueDate).toISOString(),
       max_score: Number(maxScore) || 0,
-      grade_component_id: gradeComponentId || undefined,
+      grade_component_id: gradeComponentId,
       file: selectedFile || undefined,
     });
   };
@@ -277,6 +306,23 @@ export default function GuruTugasPage() {
           </div>
         </div>
       </div>
+
+      {/* Peringatan data lama: tugas belum tertaut komponen buku nilai */}
+      {belumTertaut.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl px-3.5 py-2.5 flex items-start gap-2.5">
+          <span className="text-amber-700 font-black text-sm leading-none mt-0.5">!</span>
+          <div className="text-xs text-amber-900">
+            <p className="font-bold">
+              {belumTertaut.length} tugas belum tertaut ke komponen buku nilai
+            </p>
+            <p className="mt-0.5">
+              Nilai tugas tersebut tidak akan masuk ke Buku Nilai dan rapor. Klik tombol
+              <span className="font-bold"> “Belum tertaut — Tautkan” </span>
+              pada tugas untuk menautkannya. Data lama tidak diubah atau dihapus.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ─── SEARCH & STATUS TABS ─── */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
@@ -452,6 +498,20 @@ export default function GuruTugasPage() {
                                   <BookmarkCheck className="w-3 h-3 text-emerald-400" />
                                   {assignment.grade_component_name}
                                 </span>
+                              )}
+                              {!assignment.grade_component_id && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLinkTarget(assignment);
+                                    setLinkComponentId('');
+                                  }}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition-colors flex items-center gap-1"
+                                  title="Tugas ini belum tertaut ke komponen buku nilai"
+                                >
+                                  <BookmarkCheck className="w-3 h-3" />
+                                  Belum tertaut — Tautkan
+                                </button>
                               )}
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-800 border border-slate-300">
                                 {assignment.subject?.name || 'Informatika'}
@@ -666,24 +726,32 @@ export default function GuruTugasPage() {
 
               {/* Tautkan ke Komponen Nilai Rapor (PRD BE-GRD-01 Integration) */}
               <div>
-                <label className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                  <span>Komponen Buku Nilai Rapor</span>
-                  <span className="text-[10px] font-normal text-blue-900">Kurikulum Merdeka</span>
+                <label htmlFor="select-komponen-nilai" className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Komponen Buku Nilai Rapor <span className="text-rose-600">*</span></span>
+                  <span className="text-[10px] font-normal text-blue-900">Wajib dipilih</span>
                 </label>
                 <select
+                  id="select-komponen-nilai"
+                  required
+                  aria-required="true"
                   value={gradeComponentId}
                   onChange={(e) => setGradeComponentId(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-semibold"
+                  className={`w-full px-3 py-2 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-semibold ${
+                    gradeComponents.length === 0 ? 'border-slate-200 text-slate-400' : 'border-slate-300'
+                  }`}
                 >
-                  <option value="">Tanpa tautan buku nilai</option>
+                  <option value="" disabled>
+                    {gradeComponents.length === 0 ? 'Belum ada komponen nilai untuk kelas & mapel ini' : '— Pilih komponen nilai —'}
+                  </option>
                   {gradeComponents.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Bila ditautkan, nilai tugas otomatis masuk ke buku nilai pada komponen ini.
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Nilai tugas otomatis masuk ke buku nilai pada komponen ini. Nilai tertinggi antara
+                  input manual dan nilai tugas yang dipakai.
                 </p>
               </div>
 
@@ -799,6 +867,60 @@ export default function GuruTugasPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Tautkan tugas lama ke komponen buku nilai */}
+      {linkTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-black text-slate-900">Tautkan ke Komponen Buku Nilai</h3>
+              <p className="text-xs text-slate-600 mt-1">
+                {linkTarget.title} &middot; Kelas {linkTarget.class?.name ?? '-'} &middot; {linkTarget.subject?.name ?? '-'}
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="select-link-komponen" className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                Komponen Nilai <span className="text-rose-600">*</span>
+              </label>
+              <select
+                id="select-link-komponen"
+                value={linkComponentId}
+                onChange={(e) => setLinkComponentId(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-semibold"
+              >
+                <option value="" disabled>
+                  {linkComponents.length === 0 ? 'Belum ada komponen untuk kelas & mapel ini' : '— Pilih komponen —'}
+                </option>
+                {linkComponents.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Data tugas dan nilai yang sudah ada tidak diubah — hanya ditautkan.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setLinkTarget(null); setLinkComponentId(''); }}
+                className="px-4 py-2 text-xs font-bold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={!linkComponentId || linkMutation.isPending}
+                onClick={() => linkMutation.mutate()}
+                className="px-5 py-2 text-xs font-bold rounded-lg bg-blue-900 text-white hover:bg-blue-950 transition-all shadow-xs disabled:opacity-50"
+              >
+                {linkMutation.isPending ? 'Menautkan...' : 'Tautkan'}
+              </button>
+            </div>
           </div>
         </div>
       )}

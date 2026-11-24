@@ -33,6 +33,8 @@ export default function SpeedGraderPage() {
   const [scoreInput, setScoreInput] = useState<string>('');
   const [feedbackInput, setFeedbackInput] = useState<string>('');
   const [zoomLevel, setZoomLevel] = useState(100);
+  // Periode buku nilai tujuan (dipilih guru, default periode aktif)
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
 
   // Fetch Assignment Detail
   const { data: assignment } = useQuery({
@@ -46,6 +48,21 @@ export default function SpeedGraderPage() {
     queryFn: () => lmsApi.getSubmissions(assignmentId),
   });
 
+  // Daftar periode buku nilai (dinamis, bukan hardcode)
+  const { data: periodOptions = [] } = useQuery({
+    queryKey: ['teacher-periods'],
+    queryFn: () => lmsApi.getTeacherPeriods(),
+  });
+
+  useEffect(() => {
+    if (periodOptions.length === 0) return;
+    const ada = periodOptions.some((p) => p.id === selectedPeriodId);
+    if (!ada) {
+      const def = periodOptions.find((p) => p.is_default) ?? periodOptions[0];
+      setSelectedPeriodId(def.id);
+    }
+  }, [periodOptions, selectedPeriodId]);
+
   const currentSubmission: AssignmentSubmission | undefined = submissions[activeStudentIndex];
 
   // Sync input fields when active student changes
@@ -58,7 +75,7 @@ export default function SpeedGraderPage() {
 
   // Mutation to grade
   const gradeMutation = useMutation({
-    mutationFn: (payload: { score: number; feedback: string }) => 
+    mutationFn: (payload: { score: number; feedback: string; period_id?: string }) => 
       lmsApi.gradeSubmission(assignmentId, currentSubmission!.id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['submissions', assignmentId] });
@@ -93,11 +110,17 @@ export default function SpeedGraderPage() {
       return;
     }
 
+    if (!assignment?.grade_component_id) {
+      toast.error('Tugas ini belum ditautkan ke komponen buku nilai. Tautkan dulu di daftar tugas.');
+      return;
+    }
+
     gradeMutation.mutate({
       score: numScore,
       feedback: feedbackInput,
+      period_id: selectedPeriodId || undefined,
     });
-  }, [assignment?.max_score, currentSubmission, feedbackInput, gradeMutation, scoreInput]);
+  }, [assignment?.grade_component_id, assignment?.max_score, currentSubmission, feedbackInput, gradeMutation, scoreInput, selectedPeriodId]);
 
   // Sync to Grade Ledger (BE-GRD-01)
   const handleSyncToGradebook = () => {
@@ -370,6 +393,17 @@ export default function SpeedGraderPage() {
           {/* Form Penilaian */}
           <form onSubmit={handleSaveGrade} noValidate className="p-5 flex-1 flex flex-col justify-between space-y-5">
             <div className="space-y-4">
+              {/* Peringatan: tugas belum tertaut komponen buku nilai */}
+              {!assignment?.grade_component_id && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold flex items-start gap-2">
+                  <span className="text-base leading-none">!</span>
+                  <span>
+                    Tugas ini belum ditautkan ke komponen buku nilai, sehingga nilai tidak bisa
+                    disimpan. Tautkan komponen dari halaman daftar tugas.
+                  </span>
+                </div>
+              )}
+
               {/* Input Skor Nilai */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -395,6 +429,26 @@ export default function SpeedGraderPage() {
                   <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">
                     / {assignment?.max_score ?? 100}
                   </span>
+                </div>
+
+                {/* Pemilih periode buku nilai tujuan */}
+                <div className="mt-3">
+                  <label htmlFor="select-periode-penilaian" className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                    Masuk ke Periode Buku Nilai
+                  </label>
+                  <select
+                    id="select-periode-penilaian"
+                    value={selectedPeriodId}
+                    onChange={(e) => setSelectedPeriodId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs font-bold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  >
+                    {periodOptions.length === 0 && <option value="">Belum ada periode</option>}
+                    {periodOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.is_locked ? ' (terkunci)' : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Quick Score Preset Chips - SOLID */}

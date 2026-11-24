@@ -11,10 +11,12 @@ use App\Models\ExamQuestion;
 use App\Models\ExamRoom;
 use App\Models\ExamSession;
 use App\Models\Grade;
+use App\Services\GradeRecorder;
 use App\Models\GradeComponent;
 use App\Models\GradePeriod;
 use App\Models\Question;
 use App\Models\User;
+use App\Services\Concerns\GuardsExamOwnership;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +25,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ExamGradingService
 {
+    use GuardsExamOwnership;
+
     /**
      * BE-CBT-05: Jalankan koreksi otomatis untuk soal-soal objektif (PG, PG Kompleks, BS, Menjodohkan, Isian).
      */
@@ -823,18 +827,17 @@ class ExamGradingService
                     continue;
                 }
 
-                Grade::updateOrCreate(
-                    [
-                        'student_id' => $session->student_id,
-                        'component_id' => $component->id,
-                        'period_id' => $period->id,
-                    ],
-                    [
-                        'exam_id' => $exam->id,
-                        'value' => $session->score,
-                        'source' => 'cbt',
-                        'entered_by' => $request->user()?->id,
-                    ]
+                // Nilai otomatis dari CBT: hanya dipakai bila lebih tinggi dari
+                // nilai manual guru (kebijakan nilai tertinggi menang).
+                app(GradeRecorder::class)->recordAuto(
+                    studentId: $session->student_id,
+                    componentId: $component->id,
+                    periodId: $period->id,
+                    value: (float) $session->score,
+                    changeSource: GradeRecorder::SOURCE_CBT,
+                    changedBy: $request->user()?->id,
+                    examId: $exam->id,
+                    note: 'Nilai CBT: '.$exam->title,
                 );
 
                 $syncedCount++;
@@ -872,23 +875,9 @@ class ExamGradingService
      */
     protected function authorizeTeacherOrAdmin(Exam $exam, ?User $user): void
     {
-        if (! $user) {
-            throw new HttpException(401, 'Unauthenticated');
-        }
-
-        if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
-            return;
-        }
-
-        if ($user->hasPermission('cbt.exam.manage')) {
-            return;
-        }
-
-        if ($exam->created_by === $user->id) {
-            return;
-        }
-
-        throw new HttpException(403, 'Anda tidak memiliki hak akses penilaian untuk ujian ini.');
+        // Aturan tunggal ada di trait: izin cbt.exam.manage TIDAK melewati
+        // batas kepemilikan, karena izin itu juga dipegang guru.
+        $this->assertCanManage($exam, $user);
     }
 
     protected function logAudit(

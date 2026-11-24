@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Layers, ArrowLeft } from 'lucide-react';
 import { useStudentDashboard } from '@/lib/use-student-data';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { ErrorState } from '@/components/ui/error-state';
+import { StudentError } from '@/features/portal/mascot/student-states';
 
 export default function StudentP5Page() {
   const { data: studentDash, isLoading, isError, refetch } = useStudentDashboard();
@@ -21,11 +21,7 @@ export default function StudentP5Page() {
   if (isError) {
     return (
       <div className="py-12">
-        <ErrorState
-          title="Gagal Memuat Proyek P5"
-          message="Terjadi kendala saat mengambil data proyek P5 dari server. Silakan coba kembali."
-          onRetry={() => refetch()}
-        />
+        <StudentError message="Terjadi kendala saat mengambil data proyek P5 dari server. Silakan coba kembali." onRetry={() => refetch()} />
       </div>
     );
   }

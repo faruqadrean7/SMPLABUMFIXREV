@@ -75,7 +75,7 @@ describe('FE-ANTIFAKE-02: Hentikan Nilai Fallback Fiktif di Portal Siswa', () =>
 
       render(<StudentCambridgePage />);
 
-      expect(screen.getByText('Gagal Memuat Portofolio Cambridge')).toBeInTheDocument();
+      expect(screen.getByText(/portofolio Cambridge/i)).toBeInTheDocument();
       const retryBtn = screen.getByRole('button', { name: /Coba Lagi/i });
       fireEvent.click(retryBtn);
       expect(mockRefetch).toHaveBeenCalledTimes(1);
@@ -113,7 +113,7 @@ describe('FE-ANTIFAKE-02: Hentikan Nilai Fallback Fiktif di Portal Siswa', () =>
 
       render(<StudentHafalanPage />);
 
-      expect(screen.getByText('Gagal Memuat Data Hafalan')).toBeInTheDocument();
+      expect(screen.getByText(/capaian hafalan/i)).toBeInTheDocument();
       const retryBtn = screen.getByRole('button', { name: /Coba Lagi/i });
       fireEvent.click(retryBtn);
       expect(mockRefetch).toHaveBeenCalledTimes(1);
@@ -152,7 +152,7 @@ describe('FE-ANTIFAKE-02: Hentikan Nilai Fallback Fiktif di Portal Siswa', () =>
 
       render(<StudentP5Page />);
 
-      expect(screen.getByText('Gagal Memuat Proyek P5')).toBeInTheDocument();
+      expect(screen.getByText(/proyek P5/i)).toBeInTheDocument();
       const retryBtn = screen.getByRole('button', { name: /Coba Lagi/i });
       fireEvent.click(retryBtn);
       expect(mockRefetch).toHaveBeenCalledTimes(1);
@@ -184,7 +184,7 @@ describe('FE-ANTIFAKE-02: Hentikan Nilai Fallback Fiktif di Portal Siswa', () =>
 
       render(<StudentPpiPage />);
 
-      expect(screen.getByText('Gagal Memuat Target PPI')).toBeInTheDocument();
+      expect(screen.getByText(/target PPI/i)).toBeInTheDocument();
       const retryBtn = screen.getByRole('button', { name: /Coba Lagi/i });
       fireEvent.click(retryBtn);
       expect(mockRefetch).toHaveBeenCalledTimes(1);

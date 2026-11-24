@@ -43,3 +43,90 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.7);
 }
+
+/* ============================================================
+   Portal Siswa — mascot & fun animations (scoped to .portal-siswa)
+   All motion is disabled under prefers-reduced-motion.
+   ============================================================ */
+@keyframes labi-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes labi-wave { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-24deg); } }
+@keyframes labi-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+@keyframes labi-float { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-12px) rotate(3deg); } }
+
+.portal-siswa .labi-anim { transform-origin: center bottom; }
+.portal-siswa .labi-anim--wave { animation: labi-bob 2.6s ease-in-out infinite; }
+.portal-siswa .labi-anim--wave .labi-arm { transform-origin: 72px 112px; animation: labi-wave 1.4s ease-in-out infinite; }
+.portal-siswa .labi-anim--happy { animation: labi-float 3s ease-in-out infinite; }
+.portal-siswa .labi-anim--cheer { animation: labi-float 2.4s ease-in-out infinite; }
+.portal-siswa .labi-anim--study { animation: labi-bob 3.4s ease-in-out infinite; }
+.portal-siswa .labi-anim--sleepy { animation: labi-float 4s ease-in-out infinite; }
+.portal-siswa .labi-eyes { animation: labi-blink 4s infinite; transform-origin: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-siswa .labi-anim,
+  .portal-siswa .labi-anim--wave,
+  .portal-siswa .labi-anim--wave .labi-arm,
+  .portal-siswa .labi-anim--happy,
+  .portal-siswa .labi-anim--cheer,
+  .portal-siswa .labi-anim--study,
+  .portal-siswa .labi-anim--sleepy,
+  .portal-siswa .labi-eyes { animation: none !important; }
+}
+
+/* ============================================================
+   Portal Siswa — fun theme tokens & helpers (scoped)
+   ============================================================ */
+.portal-siswa {
+  --siswa-sky: #38bdf8;
+  --siswa-indigo: #6366f1;
+  --siswa-sun: #fbbf24;
+  --siswa-mint: #34d399;
+  --siswa-coral: #fb7185;
+  --siswa-grape: #a78bfa;
+}
+.portal-siswa .siswa-bg {
+  background:
+    radial-gradient(1200px 400px at 10% -10%, #e0f2fe 0%, transparent 60%),
+    radial-gradient(1000px 400px at 100% 0%, #f3e8ff 0%, transparent 55%),
+    linear-gradient(160deg, #eff6ff 0%, #f5f3ff 50%, #ecfdf5 100%);
+}
+.portal-siswa .siswa-hero {
+  background: linear-gradient(120deg, var(--siswa-sky), var(--siswa-indigo));
+}
+
+/* Colorful stat tiles (consumed by StatTile in Task 4) */
+.portal-siswa .tile-coral { background: linear-gradient(135deg, #fb7185, #f43f5e); }
+.portal-siswa .tile-sun   { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+.portal-siswa .tile-mint  { background: linear-gradient(135deg, #34d399, #10b981); }
+.portal-siswa .tile-grape { background: linear-gradient(135deg, #a78bfa, #7c3aed); }
+.portal-siswa .tile-sky   { background: linear-gradient(135deg, #38bdf8, #0ea5e9); }
+
+/* Playful card + gentle hover lift (disabled under reduced motion) */
+.portal-siswa .siswa-card { border-radius: 1.25rem; }
+.portal-siswa .siswa-lift { transition: transform .2s ease, box-shadow .2s ease; }
+.portal-siswa .siswa-lift:hover { transform: translateY(-4px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-siswa .siswa-lift { transition: none; }
+  .portal-siswa .siswa-lift:hover { transform: none; }
+}
+
+/* ============================================================
+   Portal Siswa — celebration confetti
+   ============================================================ */
+@keyframes confetti-fall {
+  0% { transform: translateY(-12vh) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translateY(105vh) rotate(540deg); opacity: 0; }
+}
+.confetti-piece {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confetti-fall 2.4s ease-in forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .confetti-piece { animation: none; opacity: 0; }
+}

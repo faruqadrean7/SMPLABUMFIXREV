@@ -356,8 +356,18 @@ class TeacherGradeIntegrityFeatureTest extends TestCase
             'finished_at' => now(),
         ]);
 
-        // 1. Guru tanpa permission cbt.exam.manage ditolak 403
-        $unauthRes = $this->actingAs($this->userMtk)
+        // 1. Guru LAIN (bukan pembuat ujian) ditolak 403 — batas kepemilikan.
+        //    Guru kini memegang cbt.exam.manage, jadi yang membatasi adalah kepemilikan ujian.
+        $roleTeacher = \App\Models\Role::where('code', 'teacher')->firstOrFail();
+        $guruLain = User::create([
+            'username' => 'guru.lain.publish',
+            'email' => 'guru.lain.publish@sekolah.sch.id',
+            'password_hash' => bcrypt('password123'),
+            'status' => 'active',
+        ]);
+        $guruLain->roles()->attach($roleTeacher->id);
+
+        $unauthRes = $this->actingAs($guruLain)
             ->postJson("/api/v1/exams/{$exam->id}/publish-gradebook", [
                 'component_id' => $this->componentMtk->id,
                 'period_id' => $this->lockedPeriod->id,

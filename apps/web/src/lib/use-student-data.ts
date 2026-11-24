@@ -112,7 +112,8 @@ export interface StudentDashboardData {
     endTime: string;
     status: string;
   }>;
-  attendanceRate: number;
+  /** null = belum ada catatan presensi (jangan ditampilkan sebagai 100%). */
+  attendanceRate: number | null;
   totalAchievements: number;
 }
 

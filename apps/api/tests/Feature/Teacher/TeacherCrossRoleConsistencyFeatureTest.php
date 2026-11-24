@@ -184,6 +184,9 @@ class TeacherCrossRoleConsistencyFeatureTest extends TestCase
             'description' => 'Kerjakan soal 1 sampai 10 di buku latihan.',
             'due_at' => now()->addDays(5),
             'max_score' => 100,
+            'grade_component_id' => \App\Models\GradeComponent::where('class_id', $this->class7A->id)
+                ->where('subject_id', $this->subjectMtk->id)
+                ->value('id'),
         ]);
 
         // 2. Siswa kumpulkan tugas dengan catatan pengerjaan

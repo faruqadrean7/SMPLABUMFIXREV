@@ -309,6 +309,18 @@ export interface SchoolClassItem {
   capacity: number;
   program_type?: ProgramType;
   active_students_count?: number;
+  // API mengirim snake_case; camelCase dipertahankan untuk kompatibilitas.
+  academic_year?: {
+    id: string;
+    name: string;
+    is_active?: boolean;
+  };
+  grade_level?: GradeLevelItem;
+  homeroom_teacher?: {
+    id: string;
+    full_name: string;
+    nip?: string | null;
+  } | null;
   academicYear?: {
     id: string;
     name: string;
