@@ -223,8 +223,12 @@ export const cbtApi = {
   assignExamQuestions: async (
     id: string,
     payload: {
-      question_ids: string[];
-      weight_overrides?: Record<string, number>;
+      questions: Array<{
+        question_id: string;
+        sort_order?: number;
+        weight_override?: number | null;
+        package_code?: string | null;
+      }>;
     }
   ): Promise<ApiResponse<any>> => {
     const res = await apiClient.post<ApiResponse<any>>(`/exams/${id}/questions`, payload);
