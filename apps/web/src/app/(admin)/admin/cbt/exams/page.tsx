@@ -32,7 +32,7 @@ import { cbtApi } from '@/features/cbt/cbt-api';
 import { subjectsApi } from '@/features/master/subjects-api';
 import { classesApi } from '@/features/master/classes-api';
 import { academicApi } from '@/features/academic/academic-api';
-import { ExamItem, ExamType, ExamStatus, ExamResultItem, ExamRoomItem } from '@/types/cbt';
+import { ExamItem, ExamType, ExamStatus, ExamResultItem, EssaySubmissionItem, ExamRoomItem } from '@/types/cbt';
 import { SubjectItem, SchoolClassItem } from '@/types/master';
 import { GradeComponentItem, GradePeriodItem } from '@/types/academic';
 
@@ -52,6 +52,10 @@ export default function ExamsAdminPage() {
 
   const [activeExam, setActiveExam] = useState<ExamItem | null>(null);
   const [examResults, setExamResults] = useState<ExamResultItem[]>([]);
+  const [essaySubmissions, setEssaySubmissions] = useState<EssaySubmissionItem[]>([]);
+  const [essayScoreInputs, setEssayScoreInputs] = useState<Record<string, string>>({});
+  const [gradingAnswerId, setGradingAnswerId] = useState<string | null>(null);
+  const [resultsTab, setResultsTab] = useState<'rekap' | 'esai'>('rekap');
   const [isLoadingResults, setIsLoadingResults] = useState<boolean>(false);
 
   // Gradebook Publish Form State
@@ -232,15 +236,26 @@ export default function ExamsAdminPage() {
 
   const handleOpenResults = async (exam: ExamItem) => {
     setActiveExam(exam);
+    setResultsTab('rekap');
     setIsResultsModalOpen(true);
     setIsLoadingResults(true);
 
     try {
-      const [resultsRes, compRes] = await Promise.all([
+      const [resultsRes, essaysRes, compRes] = await Promise.all([
         cbtApi.getExamResults(exam.id),
+        cbtApi.getEssaySubmissions(exam.id).catch(() => null),
         academicApi.listGradeComponents({ subject_id: exam.subject_id }),
       ]);
       setExamResults(extractResultsArray(resultsRes.data));
+      const subs = essaysRes?.data?.submissions || [];
+      setEssaySubmissions(subs);
+      const initialScores: Record<string, string> = {};
+      subs.forEach((s) => {
+        if (s.current_score !== null && s.current_score !== undefined) {
+          initialScores[s.answer_id] = String(s.current_score);
+        }
+      });
+      setEssayScoreInputs(initialScores);
       setGradeComponents(compRes || []);
       if (compRes && compRes.length > 0) {
         setSelectedComponentId(compRes[0].id);
@@ -253,6 +268,34 @@ export default function ExamsAdminPage() {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal memuat hasil ujian.' });
     } finally {
       setIsLoadingResults(false);
+    }
+  };
+
+  const handleGradeEssay = async (sub: EssaySubmissionItem) => {
+    if (!activeExam) return;
+    const rawVal = essayScoreInputs[sub.answer_id];
+    const scoreNum = parseFloat(rawVal);
+    if (Number.isNaN(scoreNum) || scoreNum < 0 || scoreNum > sub.max_score) {
+      setFeedbackMsg({ type: 'error', text: `Skor esai harus berada di antara 0 dan ${sub.max_score}.` });
+      return;
+    }
+
+    setGradingAnswerId(sub.answer_id);
+    try {
+      await cbtApi.gradeEssay(activeExam.id, { answer_id: sub.answer_id, score: scoreNum });
+      setFeedbackMsg({ type: 'success', text: `Nilai esai ${sub.student_name} berhasil disimpan (${scoreNum}/${sub.max_score}).` });
+      const [resultsRes, essaysRes] = await Promise.all([
+        cbtApi.getExamResults(activeExam.id),
+        cbtApi.getEssaySubmissions(activeExam.id).catch(() => null),
+      ]);
+      setExamResults(extractResultsArray(resultsRes.data));
+      if (essaysRes?.data?.submissions) {
+        setEssaySubmissions(essaysRes.data.submissions);
+      }
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menyimpan nilai esai.' });
+    } finally {
+      setGradingAnswerId(null);
     }
   };
 
@@ -933,7 +976,93 @@ export default function ExamsAdminPage() {
               </form>
             </div>
 
-            {/* Results Table */}
+            {/* Results & Essay Grading Tabs */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResultsTab('rekap')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    resultsTab === 'rekap' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Rekap Nilai ({examResults.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResultsTab('esai')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    resultsTab === 'esai' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Koreksi Esai Manual ({essaySubmissions.filter((s) => !s.is_graded).length} Belum Dinilai)
+                </button>
+              </div>
+            </div>
+
+            {resultsTab === 'esai' ? (
+              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                {essaySubmissions.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500 border rounded-lg">
+                    Tidak ada jawaban soal uraian/esai pada ujian ini.
+                  </div>
+                ) : (
+                  essaySubmissions.map((sub) => {
+                    const ansText =
+                      typeof sub.student_answer === 'object' && sub.student_answer !== null
+                        ? (sub.student_answer.text ?? JSON.stringify(sub.student_answer))
+                        : String(sub.student_answer ?? '-');
+
+                    return (
+                      <div key={sub.answer_id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="font-bold text-xs text-slate-900">{sub.student_name}</span>
+                            <span className="text-[11px] text-slate-500 ml-2">NIS: {sub.nis}</span>
+                          </div>
+                          <Badge
+                            className={`text-[10px] ${
+                              sub.is_graded
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : 'bg-amber-100 text-amber-800 border-amber-300'
+                            }`}
+                          >
+                            {sub.is_graded ? `Dinilai: ${sub.current_score}/${sub.max_score}` : `Belum Dinilai (Maks ${sub.max_score})`}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-medium">{sub.question_text}</div>
+                        <div className="p-2.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 whitespace-pre-line">
+                          {ansText}
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <label className="text-[11px] font-semibold text-slate-600">Skor (0–{sub.max_score}):</label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={sub.max_score}
+                            step="0.5"
+                            value={essayScoreInputs[sub.answer_id] ?? ''}
+                            onChange={(e) =>
+                              setEssayScoreInputs((prev) => ({ ...prev, [sub.answer_id]: e.target.value }))
+                            }
+                            className="w-24 h-8 text-xs"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={gradingAnswerId === sub.answer_id}
+                            onClick={() => handleGradeEssay(sub)}
+                            className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white"
+                          >
+                            {gradingAnswerId === sub.answer_id ? 'Menyimpan...' : 'Simpan Nilai'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            ) : (
             <div className="space-y-2">
               <div className="text-xs font-bold text-slate-800">Daftar Nilai Siswa</div>
               <div className="overflow-x-auto max-h-72 border rounded-lg">
@@ -976,6 +1105,11 @@ export default function ExamsAdminPage() {
                           </td>
                           <td className="py-2.5 px-3 text-center font-bold text-slate-900 text-sm">
                             {r.total_score !== null ? r.total_score : '-'}
+                            {r.grading_status === 'pending_essay' && (
+                              <span className="block text-[10px] font-medium text-amber-600">
+                                Menunggu Esai ({r.ungraded_essays_count})
+                              </span>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 text-center">
                             {r.total_score !== null ? (
@@ -1002,6 +1136,7 @@ export default function ExamsAdminPage() {
                 </table>
               </div>
             </div>
+            )}
 
             <div className="flex justify-end pt-3 border-t">
               <Button size="sm" variant="outline" onClick={() => setIsResultsModalOpen(false)} className="text-xs">

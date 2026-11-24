@@ -8,6 +8,7 @@ import {
   ExamMonitorResponse,
   ExamMonitorSessionItem,
   ExamResultItem,
+  EssaySubmissionItem,
   ItemAnalysisItem,
   StudentSessionData,
   StudentSessionQuestionItem,
@@ -305,6 +306,26 @@ export const cbtApi = {
       `/exams/${id}/results`,
       { params: filters }
     );
+    return res.data;
+  },
+
+  getEssaySubmissions: async (
+    id: string,
+    filters?: { question_id?: string; status?: 'graded' | 'ungraded' }
+  ): Promise<ApiResponse<{ exam_id: string; total_essays: number; ungraded_count: number; submissions: EssaySubmissionItem[] }>> => {
+    const res = await apiClient.get<
+      ApiResponse<{ exam_id: string; total_essays: number; ungraded_count: number; submissions: EssaySubmissionItem[] }>
+    >(`/exams/${id}/essay-submissions`, { params: filters });
+    return res.data;
+  },
+
+  gradeEssay: async (
+    id: string,
+    payload: { answer_id: string; score: number }
+  ): Promise<ApiResponse<{ answer_id: string; session_id: string; score: number; max_score: number; session_total_score: number }>> => {
+    const res = await apiClient.post<
+      ApiResponse<{ answer_id: string; session_id: string; score: number; max_score: number; session_total_score: number }>
+    >(`/exams/${id}/grade-essay`, payload);
     return res.data;
   },
 

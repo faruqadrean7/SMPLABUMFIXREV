@@ -29,6 +29,7 @@ import { StudentSessionQuestionItem, QuestionType } from '@/types/cbt';
 import { useAuth } from '@/providers/auth-provider';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { toast } from '@/components/ui/toast';
+import { MathText } from '@/components/cbt/math-text';
 import { Confetti } from '@/features/portal/mascot/confetti';
 import { Labi } from '@/features/portal/mascot/labi';
 
@@ -55,6 +56,7 @@ export default function StudentCbtPlayerPage() {
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [autosaveStatus, setAutosaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [fontScale, setFontScale] = useState<'sm' | 'base' | 'lg'>('base');
 
   // Anti-Cheat & Lock Status (Enforced by server)
   const [violationCount, setViolationCount] = useState<number>(0);
@@ -1063,7 +1065,7 @@ export default function StudentCbtPlayerPage() {
 
         {/* Center: Autosave Indicator & Timer */}
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-300">
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-300" aria-live="polite">
             {autosaveStatus === 'saving' ? (
               <span className="flex items-center gap-1 text-amber-300">
                 <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" /> Menyimpan...
@@ -1080,6 +1082,8 @@ export default function StudentCbtPlayerPage() {
           </div>
 
           <div
+            aria-live="polite"
+            aria-label={`Sisa waktu ujian ${timerDisplay}`}
             className={`flex items-center gap-2 px-3 py-1 rounded-lg border font-mono font-bold text-sm tracking-wider ${
               isUrgentTime
                 ? 'bg-rose-950/80 border-rose-500 text-rose-300 animate-pulse'
@@ -1093,6 +1097,22 @@ export default function StudentCbtPlayerPage() {
 
         {/* User Meta & Actions */}
         <div className="flex items-center gap-2.5">
+          {/* Kontrol Ukuran Teks (Aksesibilitas Inklusi) */}
+          <div className="hidden md:flex items-center bg-slate-800 rounded-lg border border-slate-700 p-0.5" role="group" aria-label="Ukuran huruf soal">
+            {(['sm', 'base', 'lg'] as const).map((sz) => (
+              <button
+                key={sz}
+                type="button"
+                onClick={() => setFontScale(sz)}
+                aria-label={`Ukuran huruf ${sz === 'sm' ? 'kecil' : sz === 'base' ? 'normal' : 'besar'}`}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                  fontScale === sz ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {sz === 'sm' ? 'A-' : sz === 'base' ? 'A' : 'A+'}
+              </button>
+            ))}
+          </div>
           <div className="hidden lg:block text-right">
             <div className="text-xs font-semibold text-slate-100">
               {user?.profile?.fullName || user?.profile?.name || user?.username || 'Siswa CBT'}
@@ -1154,10 +1174,30 @@ export default function StudentCbtPlayerPage() {
                   </span>
                 </div>
 
-                {/* Question Stem Text */}
-                <div className="text-sm font-medium text-slate-900 leading-relaxed whitespace-pre-line">
-                  {currentQ.stem}
+                {/* Question Stem Text + Math Formula */}
+                <div
+                  className={`font-medium text-slate-900 leading-relaxed whitespace-pre-line ${
+                    fontScale === 'lg' ? 'text-base sm:text-lg' : fontScale === 'sm' ? 'text-xs' : 'text-sm'
+                  }`}
+                >
+                  <MathText text={currentQ.stem} />
                 </div>
+
+                {currentQ.body?.formula && (
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-900">
+                    <MathText text={`$$${currentQ.body.formula}$$`} />
+                  </div>
+                )}
+
+                {/* Question Stimulus Audio */}
+                {currentQ.body?.audio_url && (
+                  <div className="my-2 p-3 rounded-xl border border-slate-200 bg-slate-50 max-w-xl">
+                    <p className="text-[11px] font-semibold text-slate-600 mb-1.5">Stimulus Audio Soal:</p>
+                    <audio controls className="w-full" src={currentQ.body.audio_url}>
+                      Browser Anda tidak mendukung pemutar audio.
+                    </audio>
+                  </div>
+                )}
 
                 {/* Question Stimulus Media / Image */}
                 {(currentQ.body?.media_url || currentQ.body?.image_url || (currentQ as any).media_url) && (
@@ -1174,16 +1214,19 @@ export default function StudentCbtPlayerPage() {
                 <div className="space-y-3 pt-2">
                   {/* Model 1: Pilihan Ganda Tunggal (PG) */}
                   {currentQ.question_type === 'pg' && currentQ.options && (
-                    <div className="space-y-2.5">
+                    <div className="space-y-2.5" role="radiogroup" aria-label={`Pilihan jawaban soal nomor ${currentIndex + 1}`}>
                       {currentQ.options.map((opt) => {
                         const isSelected =
                           answers[currentQ.question_id] === opt.id ||
                           answers[currentQ.question_id]?.selected_option_id === opt.id;
+                        const optImg = (opt as any).body?.media_url || (opt as any).body?.image_url;
 
                         return (
                           <button
                             key={opt.id}
                             type="button"
+                            role="radio"
+                            aria-checked={isSelected}
                             onClick={() => handleAnswerChange(currentQ.question_id, opt.id)}
                             className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-start gap-3 ${
                               isSelected
@@ -1200,9 +1243,22 @@ export default function StudentCbtPlayerPage() {
                             >
                               {opt.label}
                             </span>
-                            <span className="text-xs text-slate-800 font-medium mt-0.5">
-                              {opt.text}
-                            </span>
+                            <div className="flex-1 space-y-2 mt-0.5">
+                              <span
+                                className={`text-slate-800 font-medium block ${
+                                  fontScale === 'lg' ? 'text-sm sm:text-base' : 'text-xs'
+                                }`}
+                              >
+                                <MathText text={opt.text} />
+                              </span>
+                              {optImg && (
+                                <img
+                                  src={optImg}
+                                  alt={`Gambar opsi ${opt.label}`}
+                                  className="max-h-40 rounded-lg border border-slate-200 object-contain"
+                                />
+                              )}
+                            </div>
                           </button>
                         );
                       })}
@@ -1221,6 +1277,7 @@ export default function StudentCbtPlayerPage() {
                           ? currentRaw
                           : (Array.isArray(currentRaw?.selected_option_ids) ? currentRaw.selected_option_ids : []);
                         const isSelected = currentArr.includes(opt.id);
+                        const optImg = (opt as any).body?.media_url || (opt as any).body?.image_url;
 
                         return (
                           <button
@@ -1247,9 +1304,22 @@ export default function StudentCbtPlayerPage() {
                             >
                               {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
                             </div>
-                            <span className="text-xs text-slate-800 font-medium">
-                              <b className="mr-1">{opt.label}.</b> {opt.text}
-                            </span>
+                            <div className="flex-1 space-y-2">
+                              <span
+                                className={`text-slate-800 font-medium block ${
+                                  fontScale === 'lg' ? 'text-sm sm:text-base' : 'text-xs'
+                                }`}
+                              >
+                                <b className="mr-1">{opt.label}.</b> <MathText text={opt.text} />
+                              </span>
+                              {optImg && (
+                                <img
+                                  src={optImg}
+                                  alt={`Gambar opsi ${opt.label}`}
+                                  className="max-h-40 rounded-lg border border-slate-200 object-contain"
+                                />
+                              )}
+                            </div>
                           </button>
                         );
                       })}

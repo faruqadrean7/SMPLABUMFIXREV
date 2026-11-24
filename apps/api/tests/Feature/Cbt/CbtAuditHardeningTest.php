@@ -528,4 +528,93 @@ class CbtAuditHardeningTest extends TestCase
             ->deleteJson("/api/v1/question-banks/{$this->bankA->id}")
             ->assertStatus(403);
     }
+
+    public function test_phase3_isian_multi_key_and_numeric_tolerance_plus_grading_status(): void
+    {
+        $qIsianMulti = Question::create([
+            'bank_id' => $this->bankA->id,
+            'question_type' => 'isian',
+            'body' => [
+                'content' => 'Berapa nilai pendekatan pi (2 desimal)?',
+                'correct_answer' => '3.14|3,14',
+                'numeric_tolerance' => 0.02,
+            ],
+            'weight' => 10.0,
+            'status' => 'aktif',
+        ]);
+
+        $qEssay = Question::create([
+            'bank_id' => $this->bankA->id,
+            'question_type' => 'uraian',
+            'body' => ['content' => 'Jelaskan pembuktian Teorema Pythagoras!'],
+            'weight' => 10.0,
+            'status' => 'aktif',
+        ]);
+
+        $exam = Exam::create([
+            'subject_id' => $this->subject->id,
+            'created_by' => $this->adminUser->id,
+            'title' => 'Ujian Phase 3 Multi Key & Esai',
+            'exam_type' => 'harian',
+            'duration_min' => 60,
+            'start_at' => Carbon::now()->subMinutes(5),
+            'end_at' => Carbon::now()->addHour(),
+            'status' => 'berlangsung',
+        ]);
+        ExamQuestion::create(['exam_id' => $exam->id, 'question_id' => $qIsianMulti->id, 'sort_order' => 1]);
+        ExamQuestion::create(['exam_id' => $exam->id, 'question_id' => $qEssay->id, 'sort_order' => 2]);
+        $er = ExamRoom::create(['exam_id' => $exam->id, 'room_id' => $this->room1->id, 'session_no' => 1, 'token' => 'PH3001']);
+        ExamParticipant::create(['exam_id' => $exam->id, 'student_id' => $this->student1->id, 'exam_room_id' => $er->id]);
+
+        $this->actingAs($this->studentUser1, 'sanctum')
+            ->postJson("/api/v1/exams/{$exam->id}/start-session", ['token' => 'PH3001'])
+            ->assertStatus(200);
+
+        // Jawab dengan nilai dalam rentang toleransi (3,15) & isi esai
+        $this->actingAs($this->studentUser1, 'sanctum')
+            ->postJson("/api/v1/exams/{$exam->id}/save-answer", [
+                'question_id' => $qIsianMulti->id,
+                'answer' => ['text' => '3,15'],
+            ])
+            ->assertStatus(200);
+
+        $this->actingAs($this->studentUser1, 'sanctum')
+            ->postJson("/api/v1/exams/{$exam->id}/save-answer", [
+                'question_id' => $qEssay->id,
+                'answer' => ['text' => 'a^2 + b^2 = c^2'],
+            ])
+            ->assertStatus(200);
+
+        $this->actingAs($this->studentUser1, 'sanctum')
+            ->postJson("/api/v1/exams/{$exam->id}/finish-session")
+            ->assertStatus(200);
+
+        // Sebelum esai dinilai, results harus berstatus pending_essay dan skor sementara = 50 (10 dari 20)
+        $resBefore = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson("/api/v1/exams/{$exam->id}/results")
+            ->assertStatus(200);
+        $this->assertEquals(50.0, (float) $resBefore->json('data.results.0.total_score'));
+        $this->assertEquals('pending_essay', $resBefore->json('data.results.0.grading_status'));
+        $this->assertEquals(1, $resBefore->json('data.results.0.ungraded_essays_count'));
+
+        // Nilai esai via endpoint -> grading_status menjadi final dan skor menjadi 100
+        $essaySub = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson("/api/v1/exams/{$exam->id}/essay-submissions")
+            ->assertStatus(200);
+        $answerId = $essaySub->json('data.submissions.0.answer_id');
+
+        $this->actingAs($this->adminUser, 'sanctum')
+            ->postJson("/api/v1/exams/{$exam->id}/grade-essay", [
+                'answer_id' => $answerId,
+                'score' => 10,
+            ])
+            ->assertStatus(200);
+
+        $resAfter = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson("/api/v1/exams/{$exam->id}/results")
+            ->assertStatus(200);
+        $this->assertEquals(100.0, (float) $resAfter->json('data.results.0.total_score'));
+        $this->assertEquals('final', $resAfter->json('data.results.0.grading_status'));
+        $this->assertEquals(0, $resAfter->json('data.results.0.ungraded_essays_count'));
+    }
 }

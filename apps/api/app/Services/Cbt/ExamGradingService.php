@@ -242,9 +242,29 @@ class ExamGradingService
         $sessions = $query->get();
         $passingGrade = (float) ($exam->passing_grade ?? 75.0);
 
-        $results = $sessions->map(function ($s) use ($passingGrade) {
+        $essayQuestionIds = ExamQuestion::where('exam_id', $exam->id)
+            ->whereHas('question', fn ($qq) => $qq->where('question_type', 'uraian'))
+            ->pluck('question_id')
+            ->all();
+
+        $results = $sessions->map(function ($s) use ($passingGrade, $essayQuestionIds) {
             $score = $s->score !== null ? (float) $s->score : null;
             $isPassed = $score !== null && $score >= $passingGrade;
+
+            $ungradedEssaysCount = 0;
+            if (! empty($essayQuestionIds)) {
+                $gradedEssayCount = $s->answers
+                    ->whereIn('question_id', $essayQuestionIds)
+                    ->whereNotNull('score')
+                    ->count();
+                $answeredEssayCount = $s->answers
+                    ->whereIn('question_id', $essayQuestionIds)
+                    ->filter(fn ($a) => $a->answer !== null && $a->answer !== '')
+                    ->count();
+                $ungradedEssaysCount = max(0, $answeredEssayCount - $gradedEssayCount);
+            }
+
+            $gradingStatus = $ungradedEssaysCount > 0 ? 'pending_essay' : 'final';
 
             return [
                 'session_id' => $s->id,
@@ -258,6 +278,8 @@ class ExamGradingService
                 'total_score' => $score,
                 'passing_grade' => $passingGrade,
                 'is_passed' => $isPassed,
+                'grading_status' => $gradingStatus,
+                'ungraded_essays_count' => $ungradedEssaysCount,
                 'answers_count' => $s->answers->count(),
             ];
         });
@@ -549,27 +571,67 @@ class ExamGradingService
                 return round(($matchedCount / $totalTarget) * $maxWeight, 2);
 
             case 'isian':
-                // Isian singkat: bandingkan dengan label atau body teks opsi yang benar (case-insensitive & trimmed)
-                $correctText = null;
-                $correctOption = $question->options->firstWhere('is_correct', true);
+                // Isian singkat: dukung banyak variasi kunci (options is_correct, body.accepted_answers, atau pemisah | / ;) serta toleransi numerik
+                $acceptedList = [];
 
-                if ($correctOption) {
-                    $correctText = $correctOption->body['text'] ?? $correctOption->label;
-                } elseif (isset($question->body['correct_answer'])) {
-                    $correctText = $question->body['correct_answer'];
+                $correctOptions = $question->options->where('is_correct', true);
+                foreach ($correctOptions as $opt) {
+                    $val = $opt->body['text'] ?? $opt->label;
+                    if ($val !== null && $val !== '') {
+                        $acceptedList[] = (string) $val;
+                    }
                 }
 
-                if ($correctText === null) {
+                if (isset($question->body['accepted_answers']) && is_array($question->body['accepted_answers'])) {
+                    foreach ($question->body['accepted_answers'] as $acc) {
+                        if (is_scalar($acc) && (string) $acc !== '') {
+                            $acceptedList[] = (string) $acc;
+                        }
+                    }
+                }
+
+                if (isset($question->body['correct_answer']) && is_scalar($question->body['correct_answer'])) {
+                    $acceptedList[] = (string) $question->body['correct_answer'];
+                }
+
+                // Pecah variasi yang dipisahkan dengan '|' atau ';'
+                $expandedAccepted = [];
+                foreach ($acceptedList as $item) {
+                    foreach (preg_split('/[|;]/', $item) ?: [] as $part) {
+                        $trimmed = trim($part);
+                        if ($trimmed !== '') {
+                            $expandedAccepted[] = $trimmed;
+                        }
+                    }
+                }
+
+                if (empty($expandedAccepted)) {
                     return 0.0;
                 }
 
                 $studentText = is_array($userAnswer) ? ($userAnswer['text'] ?? $userAnswer['value'] ?? '') : (string) $userAnswer;
-
-                $normCorrect = strtolower(trim(preg_replace('/\s+/', ' ', (string) $correctText)));
                 $normStudent = strtolower(trim(preg_replace('/\s+/', ' ', (string) $studentText)));
+                if ($normStudent === '') {
+                    return 0.0;
+                }
 
-                if ($normCorrect === $normStudent) {
-                    return $maxWeight;
+                // Cek toleransi numerik jika dikonfigurasi pada body soal
+                $tolerance = isset($question->body['numeric_tolerance']) && is_numeric($question->body['numeric_tolerance'])
+                    ? (float) $question->body['numeric_tolerance']
+                    : null;
+
+                $studentNumStr = str_replace(',', '.', $normStudent);
+                foreach ($expandedAccepted as $candidate) {
+                    $normCorrect = strtolower(trim(preg_replace('/\s+/', ' ', $candidate)));
+                    if ($normCorrect === $normStudent) {
+                        return $maxWeight;
+                    }
+                    if ($tolerance !== null && is_numeric($studentNumStr)) {
+                        $candNumStr = str_replace(',', '.', $normCorrect);
+                        if (is_numeric($candNumStr) && abs((float) $studentNumStr - (float) $candNumStr) <= $tolerance) {
+                            return $maxWeight;
+                        }
+                    }
                 }
 
                 return 0.0;

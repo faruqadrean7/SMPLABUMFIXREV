@@ -252,7 +252,25 @@ export interface ExamResultItem {
   total_score: number | null;
   passing_grade: number;
   is_passed: boolean;
+  grading_status?: 'pending_essay' | 'final';
+  ungraded_essays_count?: number;
   answers_count: number;
+}
+
+export interface EssaySubmissionItem {
+  answer_id: string;
+  session_id: string;
+  student_id: string;
+  student_name: string;
+  nis: string;
+  question_id: string;
+  question_text: string;
+  student_answer: any;
+  current_score: number | null;
+  max_score: number;
+  is_graded: boolean;
+  graded_by?: string | null;
+  answered_at?: string | null;
 }
 
 export interface ItemAnalysisDistractor {
