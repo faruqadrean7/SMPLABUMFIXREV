@@ -91,7 +91,7 @@ export default function ExamsAdminPage() {
     passing_grade: 75.0,
     shuffle_questions: false,
     shuffle_options: false,
-    show_result_mode: 'after_release' as 'immediate' | 'after_release' | 'never',
+    show_result_mode: 'after_release' as 'after_submit' | 'after_release' | 'never',
   });
 
   // Enroll Class Selection
@@ -791,11 +791,11 @@ export default function ExamsAdminPage() {
                   <label className="text-xs font-semibold text-slate-700">Tampilan Nilai ke Siswa</label>
                   <select
                     value={examForm.show_result_mode}
-                    onChange={(e) => setExamForm({ ...examForm, show_result_mode: e.target.value as 'immediate' | 'after_release' | 'never' })}
+                    onChange={(e) => setExamForm({ ...examForm, show_result_mode: e.target.value as 'after_submit' | 'after_release' | 'never' })}
                     className="w-full text-xs rounded-md border border-slate-300 p-2 mt-1"
                   >
                     <option value="after_release">Setelah Dirilis Guru/Admin</option>
-                    <option value="immediate">Langsung Setelah Selesai</option>
+                    <option value="after_submit">Langsung Setelah Selesai</option>
                     <option value="never">Disembunyikan (Khusus Arsip)</option>
                   </select>
                 </div>
