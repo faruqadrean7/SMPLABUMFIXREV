@@ -52,3 +52,6 @@ playwright-report/
 docs/mtk/
 /apps/api/storage/app/import/
 .claude/
+
+# Referensi open source lokal (tidak di-commit)
+references/
