@@ -11,6 +11,13 @@ class StoreQuestionBankRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! $this->has('name') && $this->has('title')) {
+            $this->merge(['name' => $this->input('title')]);
+        }
+    }
+
     public function rules(): array
     {
         return [

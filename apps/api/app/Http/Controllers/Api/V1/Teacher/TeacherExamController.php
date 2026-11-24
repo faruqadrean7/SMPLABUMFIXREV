@@ -36,6 +36,7 @@ class TeacherExamController extends Controller
         }
 
         $exams = Exam::with(['subject', 'rooms'])
+            ->withCount('questions')
             ->where('created_by', $request->user()->id)
             ->latest()
             ->get();
@@ -46,10 +47,10 @@ class TeacherExamController extends Controller
             'subjectName' => $e->subject?->name ?? 'Mata Pelajaran',
             'classNames' => [],
             'durationMinutes' => $e->duration_min ?? 60,
-            'totalQuestions' => 30,
+            'totalQuestions' => (int) ($e->questions_count ?? 0),
             'startTime' => $e->start_at?->toISOString() ?? now()->toISOString(),
             'endTime' => $e->end_at?->toISOString() ?? now()->addHours(2)->toISOString(),
-            'isProctor' => false,
+            'isProctor' => $e->rooms->contains(fn ($r) => $r->proctor_id === $request->user()->id),
             'status' => $e->status ?? 'scheduled',
         ]);
 
@@ -546,9 +547,18 @@ class TeacherExamController extends Controller
 
             // Create initial exam room
             $room = Room::first();
+            if (! $room) {
+                $room = Room::create([
+                    'school_id' => $request->user()->school_id ?? '00000000-0000-0000-0000-000000000001',
+                    'code' => 'LAB-CBT-DEFAULT',
+                    'name' => 'Ruang CBT Utama',
+                    'room_type' => 'laboratorium',
+                    'capacity' => 40,
+                ]);
+            }
             $examRoom = ExamRoom::create([
                 'exam_id' => $exam->id,
-                'room_id' => $room?->id,
+                'room_id' => $room->id,
                 'proctor_id' => $request->user()->id,
                 'session_no' => 1,
                 'token' => strtoupper(Str::random(6)),
@@ -638,8 +648,10 @@ class TeacherExamController extends Controller
         }
 
         if ($request->filled('q') || $request->filled('search')) {
-            $search = trim($request->query('q') ?? $request->query('search'));
-            $query->where('body', 'like', "%{$search}%");
+            $search = strtolower(trim($request->query('q') ?? $request->query('search')));
+            $isPgsql = DB::getDriverName() === 'pgsql';
+            $textExpr = $isPgsql ? 'LOWER(CAST(body AS TEXT))' : 'LOWER(body)';
+            $query->whereRaw("{$textExpr} LIKE ?", ["%{$search}%"]);
         }
 
         $perPage = max(1, min(100, (int) $request->input('per_page', 15)));

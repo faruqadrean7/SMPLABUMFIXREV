@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { StudentCBTExamItem } from '@/types/student';
 import { useStudentExams, useStudentDashboard } from '@/lib/use-student-data';
-import { cbtApi } from '@/features/cbt/cbt-api';
+import { cbtApi, cbtSessionLock } from '@/features/cbt/cbt-api';
 import { ExamListSkeleton } from '@/components/ui/student-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StudentError } from '@/features/portal/mascot/student-states';
@@ -61,11 +61,11 @@ export default function StudentCBTListPage() {
           date_str: e.startTime ? e.startTime.split('T')[0] : 'Hari Ini',
           time_range: e.startTime ? `${e.startTime.slice(11, 16)} - ${e.endTime?.slice(11, 16) || ''}` : '07:30 - 09:00',
           duration_minutes: e.durationMinutes || 60,
-          total_questions: e.totalQuestions || 30,
+          total_questions: e.totalQuestions ?? 0,
           room_name: e.roomName || 'Lab Komputer 1',
           kktp: e.kktp || 75,
           status: normalizedStatus,
-          token_required: e.tokenRequired || 'LAB-CBT',
+          token_required: '',
           score: e.score,
           is_passed: e.score !== undefined && e.score !== null ? e.score >= (e.kktp || 75) : undefined,
         };
@@ -110,21 +110,28 @@ export default function StudentCBTListPage() {
     setTokenError(null);
 
     try {
-      // FE-CBT-UJIAN-01: Panggil startStudentSession dengan token nyata ke backend
-      await cbtApi.startStudentSession(exam.id, { token: trimmedToken });
+      // FE-CBT-UJIAN-01 & SEC-CBT-02: Verifikasi token wajib melalui otoritas server tanpa fallback bypass klien
+      const deviceFingerprint = cbtSessionLock.getDeviceFingerprint();
+      const res = await cbtApi.startStudentSession(exam.id, {
+        token: trimmedToken,
+        device_fingerprint: deviceFingerprint,
+      });
+
+      if (res.data?.session_lock_token) {
+        cbtSessionLock.setLockToken(exam.id, res.data.session_lock_token);
+        if (res.data.session_id) {
+          cbtSessionLock.setLockToken(res.data.session_id, res.data.session_lock_token);
+        }
+      }
 
       // Masuk ke ruang ujian CBT kanonis
       router.push(`/portal/siswa/ujian/${exam.id}`);
     } catch (err: any) {
-      if (trimmedToken === exam.token_required?.toUpperCase()) {
-        router.push(`/portal/siswa/ujian/${exam.id}`);
-      } else {
-        const serverMessage =
-          err?.message ||
-          err?.response?.data?.message ||
-          'Token tidak valid atau tidak cocok dengan ruang ujian. Pastikan token sesuai dengan yang tertera di papan pengawas.';
-        setTokenError(serverMessage);
-      }
+      const serverMessage =
+        err?.message ||
+        err?.response?.data?.message ||
+        'Token tidak valid atau tidak cocok dengan ruang ujian. Pastikan token sesuai dengan yang tertera di papan pengawas.';
+      setTokenError(serverMessage);
     } finally {
       setIsVerifyingToken(false);
     }
@@ -501,8 +508,8 @@ export default function StudentCBTListPage() {
 
                           <div className="p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
                             <span className="text-slate-400 font-medium text-[10px] block">Token Pengawas</span>
-                            <span className="font-mono font-black text-rose-700 mt-0.5 text-xs block">
-                              {exam.token_required}
+                            <span className="font-semibold text-rose-700 mt-0.5 text-xs block">
+                              Wajib Input Token Lab
                             </span>
                           </div>
                         </div>
@@ -625,9 +632,21 @@ export default function StudentCBTListPage() {
                             </div>
                           )}
 
-                          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
-                            TUNTAS (KKTP: {exam.kktp})
-                          </span>
+                          {typeof exam.score === 'number' ? (
+                            exam.score >= exam.kktp ? (
+                              <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                                TUNTAS (KKTP: {exam.kktp})
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200 shadow-2xs">
+                                BELUM TUNTAS (KKTP: {exam.kktp})
+                              </span>
+                            )
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs">
+                              MENUNGGU RILIS NILAI
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))
@@ -712,20 +731,18 @@ export default function StudentCBTListPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                <img
-                  src={activeExamToday?.teacher_avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150'}
-                  alt={activeExamToday?.teacher_name || 'Pengawas'}
-                  className="w-11 h-11 rounded-xl object-cover shadow-xs border border-slate-200 shrink-0"
-                />
+                <div className="w-11 h-11 rounded-xl bg-blue-900 text-white font-bold flex items-center justify-center shadow-xs shrink-0">
+                  <School className="w-5 h-5" />
+                </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="text-sm font-bold text-slate-900 truncate">
-                    {activeExamToday?.teacher_name || 'Budi Santoso, S.Kom., M.T.'}
+                    {activeExamToday?.teacher_name || 'Tim Pengawas Ruang CBT'}
                   </h4>
-                  <p className="text-xs text-slate-500 font-mono font-medium truncate">
-                    19870512 201201 1 003
+                  <p className="text-xs text-slate-500 font-medium truncate">
+                    {activeExamToday?.room_name || 'Laboratorium Komputer Sekolah'}
                   </p>
                   <p className="text-xs text-blue-900 font-semibold truncate">
-                    {activeExamToday ? `Pengawas Sesi • ${activeExamToday.subject_name}` : 'Teknisi Jaringan & CBT Server Lab'}
+                    {activeExamToday ? `Pengawas Sesi • ${activeExamToday.subject_name}` : 'Layanan Pengawasan Asesmen CBT'}
                   </p>
                 </div>
               </div>
@@ -733,16 +750,16 @@ export default function StudentCBTListPage() {
               <div className="grid grid-cols-2 gap-2 pt-0.5">
                 <button
                   type="button"
-                  onClick={() => toast.info(activeExamToday ? 'Pemberitahuan telah dikirimkan ke layar pengawas lab. Pengawas akan menghampiri workstation Anda.' : 'Pemberitahuan kendala teknis telah terkirim ke tim teknisi lab.', 'Bantuan Pengawas')}
+                  onClick={() => toast.info('Silakan angkat tangan di tempat duduk Anda untuk memanggil pengawas ruang ujian secara langsung.', 'Prosedur Bantuan Lab')}
                   className="px-3 py-2 rounded-xl bg-blue-900 hover:bg-blue-950 text-white text-xs font-bold text-center transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <LifeBuoy className="w-3.5 h-3.5 text-white" />
-                  <span>Bantuan Teknis</span>
+                  <span>Prosedur Bantuan</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => toast.info(activeExamToday ? `Token ruang ujian aktif diumumkan di papan tulis lab: ${activeExamToday.token_required}` : 'Tidak ada sesi ujian aktif saat ini. Token baru akan dibagikan saat jadwal sesi dimulai.', 'Panduan Token')}
+                  onClick={() => toast.info('Token ruang ujian hanya diumumkan secara langsung oleh pengawas ruang di laboratorium saat jadwal sesi dimulai.', 'Panduan Token')}
                   className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold text-center transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-white" />
@@ -811,13 +828,8 @@ export default function StudentCBTListPage() {
                   <HelpCircle className="w-4 h-4 text-blue-900 shrink-0 mt-0.5" />
                   <div className="space-y-1 leading-relaxed">
                     <p className="font-normal">
-                      Mintalah token sesi ujian kepada pengawas di ruang lab komputer. Setelah token diverifikasi, sesi ujian akan langsung beralih ke mode pengerjaan layar penuh dan timer server mulai berjalan.
+                      Masukkan token sesi ujian yang diumumkan oleh pengawas di ruang lab komputer. Setelah token diverifikasi, sesi ujian terkunci pada perangkat ini dan timer server mulai berjalan.
                     </p>
-                    {selectedExam?.token_required && (
-                      <p className="text-[11px] font-semibold text-blue-900 bg-blue-100/80 px-2 py-1 rounded inline-block">
-                        Token Pengawas Lab: <strong className="font-mono text-xs font-black">{selectedExam.token_required}</strong>
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -829,7 +841,7 @@ export default function StudentCBTListPage() {
                   <input
                     type="text"
                     required
-                    placeholder={selectedExam?.token_required ? `Contoh: ${selectedExam.token_required}` : 'Contoh: UH2026'}
+                    placeholder="Contoh: 6 Karakter Token"
                     value={tokenInput}
                     onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
                     className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-center font-mono font-black text-xl uppercase tracking-widest text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-blue-900 transition-colors"

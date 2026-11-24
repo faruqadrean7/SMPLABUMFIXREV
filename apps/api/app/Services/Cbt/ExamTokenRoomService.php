@@ -290,7 +290,7 @@ class ExamTokenRoomService
         $student = $participant->student;
         $exam = $participant->exam;
         $room = $participant->examRoom;
-        $qrString = "EXAM-CARD|{$exam->id}|{$student?->id}|{$participant->id}|{$room?->token}";
+        $qrString = "EXAM-CARD|{$exam->id}|{$student?->id}|{$participant->id}";
 
         $currentClass = $student?->classes?->first();
         $className = $currentClass?->name ?? '-';
@@ -317,8 +317,7 @@ class ExamTokenRoomService
             '  Durasi Pengerjaan: '.($exam?->duration_min ?? 90).' Menit',
             '------------------------------------------------------------------------',
             'KODE VERIFIKASI / QR: '.$qrString,
-            'TOKEN RUANG UJIAN   : '.($room?->token ?? 'BELUM DI-GENERATE'),
-            'STATUS TOKEN        : '.($room?->token_expires_at ? 'Berlaku s/d '.$room->token_expires_at->format('d/m/Y H:i') : '-'),
+            'TOKEN RUANG UJIAN   : DIUMUMKAN OLEH PENGAWAS RUANG SAAT SESI DIMULAI',
             '========================================================================',
             'Catatan:',
             '1. Harap membawa kartu ini saat pelaksanaan ujian CBT.',

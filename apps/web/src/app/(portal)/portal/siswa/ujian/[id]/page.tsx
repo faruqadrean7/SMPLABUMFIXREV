@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { cbtApi } from '@/features/cbt/cbt-api';
+import { cbtApi, cbtSessionLock } from '@/features/cbt/cbt-api';
 import { StudentSessionQuestionItem, QuestionType } from '@/types/cbt';
 import { useAuth } from '@/providers/auth-provider';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
@@ -81,6 +81,8 @@ export default function StudentCbtPlayerPage() {
   const memoryPendingAnswersRef = useRef<Record<string, any>>({});
   const memoryPendingViolationsRef = useRef<any[]>([]);
   const isDrainingRef = useRef<boolean>(false);
+  const lastViolationAtRef = useRef<number>(0);
+  const textSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   useEffect(() => {
     isFinishedRef.current = isFinished;
@@ -328,20 +330,21 @@ export default function StudentCbtPlayerPage() {
     return () => window.removeEventListener('online', handleOnline);
   }, [flushPendingOfflineData]);
 
-  // Force Submit saat waktu server habis
+  // Force Submit saat waktu server habis (pastikan antrean offline di-flush lebih dulu)
   const handleForceSubmitTimeout = useCallback(async () => {
     if (isFinishedRef.current) return;
     setIsSubmitting(true);
     try {
+      await flushPendingOfflineData();
       await cbtApi.finishStudentSession(examId);
+      clearOfflineQueues();
     } catch (err) {
       console.error('Force submit failed:', err);
     } finally {
       setIsSubmitting(false);
       setIsFinished(true);
-      clearOfflineQueues();
     }
-  }, [examId, clearOfflineQueues]);
+  }, [examId, clearOfflineQueues, flushPendingOfflineData]);
 
   // Load Session Questions & Server State
   useEffect(() => {
@@ -358,6 +361,12 @@ export default function StudentCbtPlayerPage() {
         setQuestions(loadedQuestions);
         if (sessionData.session_id) {
           sessionIdRef.current = sessionData.session_id;
+        }
+        if (sessionData.session_lock_token) {
+          cbtSessionLock.setLockToken(examId, sessionData.session_lock_token);
+          if (sessionData.session_id) {
+            cbtSessionLock.setLockToken(sessionData.session_id, sessionData.session_lock_token);
+          }
         }
 
         // 1. Sinkronisasi offset waktu server (Date.now() clock skew handling)
@@ -466,7 +475,16 @@ export default function StudentCbtPlayerPage() {
     setTokenSubmitting(true);
     setTokenModalError(null);
     try {
-      await cbtApi.startStudentSession(examId, { token: trimmed });
+      const startRes = await cbtApi.startStudentSession(examId, {
+        token: trimmed,
+        device_fingerprint: cbtSessionLock.getDeviceFingerprint(),
+      });
+      if (startRes.data?.session_lock_token) {
+        cbtSessionLock.setLockToken(examId, startRes.data.session_lock_token);
+        if (startRes.data.session_id) {
+          cbtSessionLock.setLockToken(startRes.data.session_id, startRes.data.session_lock_token);
+        }
+      }
       setTokenModalOpen(false);
       // Reload session
       setIsLoading(true);
@@ -478,6 +496,12 @@ export default function StudentCbtPlayerPage() {
       setQuestions(loadedQuestions);
       if (sessionData.session_id) {
         sessionIdRef.current = sessionData.session_id;
+      }
+      if (sessionData.session_lock_token) {
+        cbtSessionLock.setLockToken(examId, sessionData.session_lock_token);
+        if (sessionData.session_id) {
+          cbtSessionLock.setLockToken(sessionData.session_id, sessionData.session_lock_token);
+        }
       }
       const endsAtStr = sessionData.ends_at || sessionData.deadline_at;
       if (endsAtStr) {
@@ -516,21 +540,52 @@ export default function StudentCbtPlayerPage() {
     };
   }, [computeRemaining, handleForceSubmitTimeout]);
 
-  // Heartbeat Presence Ping (every 30 seconds)
+  // Heartbeat Presence Ping (every 30 seconds) + Live Server Time/Lock Sync
   useEffect(() => {
-    heartbeatIntervalRef.current = setInterval(() => {
-      const targetId = sessionIdRef.current || examId;
+    heartbeatIntervalRef.current = setInterval(async () => {
+      const targetId = sessionIdRef.current;
       if (targetId && !isFinishedRef.current) {
-        cbtApi.sendStudentHeartbeat(targetId).catch(() => {});
+        try {
+          const hbRes = await cbtApi.sendStudentHeartbeat(targetId, {
+            client_timestamp: new Date().toISOString(),
+            device_fingerprint: cbtSessionLock.getDeviceFingerprint(),
+            screen_state: document.fullscreenElement ? 'fullscreen' : 'windowed',
+            active_tab: !document.hidden,
+          });
+          const hbData = hbRes?.data;
+          if (hbData) {
+            if (hbData.server_time) {
+              serverOffsetMsRef.current = new Date(hbData.server_time).getTime() - Date.now();
+            }
+            const nextEndsAt = hbData.ends_at || hbData.deadline_at;
+            if (nextEndsAt) {
+              endsAtMsRef.current = new Date(nextEndsAt).getTime();
+              setRemainingSeconds(computeRemaining());
+            }
+            if (typeof hbData.violation_count === 'number') {
+              setViolationCount(hbData.violation_count);
+            }
+            if (hbData.status === 'terkunci') {
+              setIsLocked(true);
+            } else if (hbData.status === 'selesai') {
+              setIsFinished(true);
+            }
+          }
+        } catch (hbErr: any) {
+          if (hbErr?.code === 'EXAM_TIME_OVER') {
+            setRemainingSeconds(0);
+            setIsFinished(true);
+          }
+        }
       }
     }, 30000);
 
     return () => {
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
     };
-  }, [examId]);
+  }, [examId, computeRemaining]);
 
-  // Anti-Cheat Window Blur / Tab Switch Listener & VisibilityChange Skew Recalculation
+  // Anti-Cheat Window Blur / Tab Switch / Fullscreen Exit / BeforeUnload Listener
   useEffect(() => {
     const handleVisibilityChange = () => {
       // Hitung ulang timer segera saat kembali ke tab (kebal tab throttling background browser)
@@ -552,17 +607,39 @@ export default function StudentCbtPlayerPage() {
       }
     };
 
+    const handleFullscreenChange = () => {
+      const nowFull = Boolean(document.fullscreenElement);
+      setIsFullscreen(nowFull);
+    };
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isFinishedRef.current && questions.length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [computeRemaining, handleForceSubmitTimeout]);
+  }, [computeRemaining, handleForceSubmitTimeout, questions.length]);
 
   const triggerViolation = async (violationType: string) => {
+    // Debounce 1500ms agar satu aksi pindah tab (visibilitychange + window.blur) tidak dihitung ganda
+    const nowMs = Date.now();
+    if (nowMs - lastViolationAtRef.current < 1500) {
+      return;
+    }
+    lastViolationAtRef.current = nowMs;
     setShowViolationModal(true);
 
     const idempotencyKey = `${violationType}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -646,34 +723,13 @@ export default function StudentCbtPlayerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, questions, isFinished, isLocked, showConfirmModal, showViolationModal]);
 
-  // Save Answer to Server with Offline Queue
-  const handleAnswerChange = async (questionId: string, answerValue: any) => {
-    const updated = { ...answers, [questionId]: answerValue };
-    setAnswers(updated);
-    setAutosaveStatus('saving');
-
-    const timestamp = Date.now();
-    const idempotencyKey = `${questionId}_${timestamp}_${Math.random().toString(36).substring(2, 7)}`;
-    const entry = {
-      value: answerValue,
-      timestamp,
-      idempotency_key: idempotencyKey,
-    };
-
-    // 1. Simpan ke local storage terlebih dahulu agar tidak hilang bila koneksi putus atau reload mendadak
-    const currentQueue = readStoredAnswers();
-    currentQueue[questionId] = answerValue;
-
-    const metaMap = readStoredAnswersMeta();
-    metaMap[questionId] = { timestamp, idempotency_key: idempotencyKey };
-
-    writeStoredAnswers(currentQueue, metaMap);
-
+  // Save Answer to Server with Offline Queue & Optional Debounce (untuk isian/uraian)
+  const persistAnswerToServer = async (questionId: string, answerValue: any, timestamp: number, idempotencyKey: string) => {
     try {
       await cbtApi.saveStudentAnswer(examId, {
         question_id: questionId,
         answer: answerValue,
-        is_flagged: doubts.includes(questionId),
+        is_flagged: doubtsRef.current.includes(questionId),
         answered_at: new Date(timestamp).toISOString(),
         idempotency_key: idempotencyKey,
       } as any);
@@ -692,7 +748,6 @@ export default function StudentCbtPlayerPage() {
       setAutosaveStatus('saved');
     } catch (err: any) {
       setAutosaveStatus('error');
-      // Server-side timing lock rejection (mendukung EXAM_TIME_OVER dan BUSINESS_RULE_VIOLATION backward compatible)
       if (
         err?.code === 'EXAM_TIME_OVER' ||
         err?.code === 'BUSINESS_RULE_VIOLATION' ||
@@ -703,6 +758,39 @@ export default function StudentCbtPlayerPage() {
         setIsFinished(true);
       }
     }
+  };
+
+  const handleAnswerChange = async (questionId: string, answerValue: any, debounceMs = 0) => {
+    const updated = { ...answers, [questionId]: answerValue };
+    setAnswers(updated);
+    setAutosaveStatus('saving');
+
+    const timestamp = Date.now();
+    const idempotencyKey = `${questionId}_${timestamp}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // 1. Simpan ke local storage terlebih dahulu agar tidak hilang bila koneksi putus atau reload mendadak
+    const currentQueue = readStoredAnswers();
+    currentQueue[questionId] = answerValue;
+
+    const metaMap = readStoredAnswersMeta();
+    metaMap[questionId] = { timestamp, idempotency_key: idempotencyKey };
+
+    writeStoredAnswers(currentQueue, metaMap);
+
+    if (textSaveTimersRef.current[questionId]) {
+      clearTimeout(textSaveTimersRef.current[questionId]);
+      delete textSaveTimersRef.current[questionId];
+    }
+
+    if (debounceMs > 0) {
+      textSaveTimersRef.current[questionId] = setTimeout(() => {
+        delete textSaveTimersRef.current[questionId];
+        persistAnswerToServer(questionId, answerValue, timestamp, idempotencyKey);
+      }, debounceMs);
+      return;
+    }
+
+    await persistAnswerToServer(questionId, answerValue, timestamp, idempotencyKey);
   };
 
   // Toggle Doubt (Ragu-ragu)
@@ -738,6 +826,11 @@ export default function StudentCbtPlayerPage() {
   const handleConfirmFinish = async () => {
     setIsSubmitting(true);
     try {
+      // Hentikan debounce timer yang masih tertunda dan flush seluruh jawaban offline ke server sebelum submit final
+      Object.values(textSaveTimersRef.current).forEach((t) => clearTimeout(t));
+      textSaveTimersRef.current = {};
+      await flushPendingOfflineData();
+
       await cbtApi.finishStudentSession(examId);
       setShowConfirmModal(false);
       setIsFinished(true);
@@ -1251,7 +1344,7 @@ export default function StudentCbtPlayerPage() {
                       <label className="text-xs font-semibold text-slate-700">Tulis Jawaban Singkat:</label>
                       <Input
                         value={typeof answers[currentQ.question_id] === 'object' ? (answers[currentQ.question_id]?.text ?? '') : (answers[currentQ.question_id] || '')}
-                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value })}
+                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value }, 800)}
                         placeholder="Ketikkan jawaban Anda di sini..."
                         className="text-xs h-10 max-w-md"
                       />
@@ -1267,7 +1360,7 @@ export default function StudentCbtPlayerPage() {
                       <Textarea
                         rows={6}
                         value={typeof answers[currentQ.question_id] === 'object' ? (answers[currentQ.question_id]?.text ?? '') : (answers[currentQ.question_id] || '')}
-                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value })}
+                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value }, 800)}
                         placeholder="Tuliskan penjelasan dan argumen jawaban Anda di sini..."
                         className="text-xs leading-relaxed"
                       />

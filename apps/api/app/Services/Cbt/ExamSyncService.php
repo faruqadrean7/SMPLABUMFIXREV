@@ -42,7 +42,9 @@ class ExamSyncService
 
         $participants = $participantsQuery->get();
 
-        $questionsPayload = $exam->questions->map(function ($eq) {
+        $hmacSecret = (string) ($exam->sync_node_token ?: config('services.cbt.master_sync_token') ?: config('app.key'));
+
+        $questionsPayload = $exam->questions->map(function ($eq) use ($hmacSecret, $exam) {
             $q = $eq->question;
             if (! $q) {
                 return null;
@@ -55,13 +57,13 @@ class ExamSyncService
                 'package_code' => $eq->package_code,
                 'question_type' => $q->question_type,
                 'body' => $q->body,
-                'options' => $q->options->map(function ($opt) {
+                'options' => $q->options->map(function ($opt) use ($hmacSecret, $exam) {
                     return [
                         'id' => $opt->id,
                         'label' => $opt->label,
                         'body' => $opt->body,
                         'match_key' => $opt->match_key,
-                        'is_correct_hash' => hash('sha256', ($opt->is_correct ? 'CORRECT_' : 'INCORRECT_').$opt->id),
+                        'is_correct_hash' => hash_hmac('sha256', ($opt->is_correct ? 'CORRECT_' : 'INCORRECT_').$exam->id.':'.$opt->id, $hmacSecret),
                     ];
                 })->all(),
             ];
@@ -173,9 +175,11 @@ class ExamSyncService
                         'seed' => $item['seed'] ?? Str::random(10),
                     ]);
                 } else {
-                    // Idempotency: Jika sesi sudah berstatus selesai di server pusat, hindari penimpaan tidak perlu
+                    // Idempotency: Jika sesi sudah berstatus selesai di server pusat, lewati penimpaan jawaban & pelanggaran
                     if ($session->status === 'selesai' && $session->score !== null) {
                         $conflictCount++;
+
+                        continue;
                     } else {
                         $session->status = 'selesai';
                         $session->submitted_at = $submittedAt;

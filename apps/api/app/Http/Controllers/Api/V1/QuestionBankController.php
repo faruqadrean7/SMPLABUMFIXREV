@@ -58,14 +58,18 @@ class QuestionBankController extends Controller
      * BE-CBT-01: Detail paket bank soal.
      * GET /api/v1/question-banks/{id}
      */
-    public function show(string $id): JsonResponse
+    public function show(string $id, Request $request): JsonResponse
     {
         try {
-            $bank = $this->service->getQuestionBank($id);
+            $bank = $this->service->getQuestionBank($id, $request);
 
             return $this->successResponse($bank);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Bank soal tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            $code = $e->getStatusCode() === 403 ? 'FORBIDDEN' : 'BUSINESS_RULE_VIOLATION';
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -85,6 +89,10 @@ class QuestionBankController extends Controller
             return $this->successResponse($bank);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Bank soal tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            $code = $e->getStatusCode() === 403 ? 'FORBIDDEN' : 'BUSINESS_RULE_VIOLATION';
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -105,7 +113,9 @@ class QuestionBankController extends Controller
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Bank soal tidak ditemukan.', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+            $code = $e->getStatusCode() === 403 ? 'FORBIDDEN' : 'BUSINESS_RULE_VIOLATION';
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 

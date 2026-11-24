@@ -187,22 +187,57 @@ export interface ExamSessionItem {
 }
 
 export interface ExamMonitorSessionItem {
+  participant_id?: string;
   session_id: string;
   student_id: string;
   student_name: string;
-  nis: string;
+  nis?: string;
+  student_nis?: string;
+  package_code?: string | null;
+  room_id?: string;
   room_name?: string;
+  proctor_name?: string;
   status: ExamSessionStatus;
-  progress_percent: number;
-  answered_count: number;
+  started_at?: string | null;
+  deadline_at?: string | null;
+  submitted_at?: string | null;
+  extra_minutes?: number;
+  progress_percent?: number;
+  progress_percentage?: number;
+  answered_count?: number;
+  answered_questions?: number;
   total_questions: number;
   remaining_seconds: number;
   blur_count: number;
-  last_heartbeat_diff_seconds: number;
-  is_online: boolean;
+  last_heartbeat_at?: string | null;
+  last_heartbeat_diff_seconds?: number;
+  is_online?: boolean;
   ip_address?: string;
-  violations_count: number;
+  violation_count?: number;
+  violations_count?: number;
   locked_reason?: string | null;
+}
+
+export interface ExamMonitorResponse {
+  exam_id: string;
+  exam_title?: string;
+  duration_min?: number;
+  server_time?: string;
+  summary?: {
+    total_participants: number;
+    not_started_count: number;
+    in_progress_count: number;
+    finished_count: number;
+    locked_count: number;
+    total_violations: number;
+  };
+  participants?: ExamMonitorSessionItem[];
+  // Backward-compatible legacy aliases
+  total_participants?: number;
+  active_count?: number;
+  submitted_count?: number;
+  blocked_count?: number;
+  sessions?: ExamMonitorSessionItem[];
 }
 
 export interface ExamResultItem {
@@ -259,6 +294,7 @@ export interface StudentSessionQuestionItem {
 
 export interface StudentSessionData {
   session_id: string;
+  session_lock_token?: string;
   exam?: {
     id: string;
     title: string;

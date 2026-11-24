@@ -48,14 +48,19 @@ class ExamGradingService
             throw new HttpException(422, 'Tidak ada sesi ujian yang ditemukan untuk dinilai.');
         }
 
-        // Peta bobot soal ujian (mengutamakan weight_override jika ada)
-        $examQuestions = ExamQuestion::where('exam_id', $exam->id)->get()->keyBy('question_id');
+        // Peta soal ujian lengkap dengan relasi question (mencegah N+1 dan mendukung multi-paket)
+        $allExamQuestions = ExamQuestion::with('question')->where('exam_id', $exam->id)->get();
+        $participantPackages = ExamParticipant::where('exam_id', $exam->id)
+            ->pluck('package_code', 'student_id');
 
         $gradedSessionsCount = 0;
         $gradedAnswersCount = 0;
 
-        DB::transaction(function () use ($sessions, $examQuestions, $request, &$gradedSessionsCount, &$gradedAnswersCount) {
+        DB::transaction(function () use ($sessions, $allExamQuestions, $participantPackages, $request, &$gradedSessionsCount, &$gradedAnswersCount) {
             foreach ($sessions as $session) {
+                $pkgCode = $participantPackages->get($session->student_id);
+                $sessionExamQuestions = $this->filterQuestionsForPackage($allExamQuestions, $pkgCode)->keyBy('question_id');
+
                 foreach ($session->answers as $answer) {
                     $question = $answer->question;
                     if (! $question) {
@@ -64,7 +69,7 @@ class ExamGradingService
 
                     // Tipe objektif yang dikoreksi otomatis
                     if (in_array($question->question_type, ['pg', 'pg_kompleks', 'bs', 'menjodohkan', 'isian'])) {
-                        $eq = $examQuestions->get($question->id);
+                        $eq = $sessionExamQuestions->get($question->id) ?? $allExamQuestions->firstWhere('question_id', $question->id);
                         $maxWeight = (float) ($eq?->weight_override ?? $question->weight ?? 1.0);
 
                         $score = $this->evaluateObjectiveAnswer($question, $answer->answer, $maxWeight);
@@ -77,8 +82,8 @@ class ExamGradingService
                     }
                 }
 
-                // Kalkulasi ulang total score sesi
-                $this->refreshSessionTotalScore($session, $examQuestions);
+                // Kalkulasi ulang total score sesi sesuai paket soal peserta
+                $this->refreshSessionTotalScore($session, $sessionExamQuestions);
                 $gradedSessionsCount++;
             }
         });
@@ -364,6 +369,11 @@ class ExamGradingService
 
         $upperGroup = $sessions->slice(0, $groupSize);
         $lowerGroup = $sessions->slice(-$groupSize);
+        $upperIds = $upperGroup->pluck('id')->all();
+        $lowerIds = $lowerGroup->pluck('id')->all();
+
+        // Gunakan koleksi jawaban yang sudah di-eager load (tanpa N+1 query per soal)
+        $answersByQuestion = $exam->sessions->flatMap->answers->groupBy('question_id');
 
         $examQuestions = $exam->questions;
 
@@ -375,13 +385,10 @@ class ExamGradingService
 
             $maxWeight = (float) ($eq->weight_override ?? $q->weight ?? 1.0);
 
-            // Kumpulkan semua jawaban untuk soal ini
-            $allAnswers = ExamAnswer::whereHas('session', fn ($sq) => $sq->where('exam_id', $exam->id))
-                ->where('question_id', $q->id)
-                ->get();
+            $allAnswers = $answersByQuestion->get($q->id, collect());
 
             $totalParticipants = $allAnswers->count();
-            if ($totalParticipants === 0) {
+            if ($totalParticipants === 0 || $maxWeight <= 0) {
                 continue;
             }
 
@@ -390,8 +397,8 @@ class ExamGradingService
             $difficultyIndex = round($totalScoreSum / ($totalParticipants * $maxWeight), 3);
 
             // Hitung daya pembeda: p_upper - p_lower
-            $upperAnswers = $allAnswers->whereIn('session_id', $upperGroup->pluck('id'));
-            $lowerAnswers = $allAnswers->whereIn('session_id', $lowerGroup->pluck('id'));
+            $upperAnswers = $allAnswers->whereIn('session_id', $upperIds);
+            $lowerAnswers = $allAnswers->whereIn('session_id', $lowerIds);
 
             $upperScoreAvg = $upperAnswers->count() > 0 ? ($upperAnswers->sum('score') / ($upperAnswers->count() * $maxWeight)) : 0;
             $lowerScoreAvg = $lowerAnswers->count() > 0 ? ($lowerAnswers->sum('score') / ($lowerAnswers->count() * $maxWeight)) : 0;
@@ -474,18 +481,28 @@ class ExamGradingService
                 return 0.0;
 
             case 'pg_kompleks':
-                // Multiple select: hitung proporsi kebenaran
-                $correctOptionIds = $question->options->where('is_correct', true)->pluck('id')->all();
-                $chosenIds = [];
+                // Multiple select: deduplikasi ID pilihan & validasi hanya opsi milik soal ini
+                $validOptionIds = $question->options->pluck('id')->map(fn ($id) => (string) $id)->all();
+                $correctOptionIds = $question->options->where('is_correct', true)->pluck('id')->map(fn ($id) => (string) $id)->all();
+                $rawChosenIds = [];
                 if (is_array($userAnswer)) {
                     if (isset($userAnswer['selected_option_ids']) && is_array($userAnswer['selected_option_ids'])) {
-                        $chosenIds = $userAnswer['selected_option_ids'];
+                        $rawChosenIds = $userAnswer['selected_option_ids'];
                     } elseif (isset($userAnswer['option_ids']) && is_array($userAnswer['option_ids'])) {
-                        $chosenIds = $userAnswer['option_ids'];
+                        $rawChosenIds = $userAnswer['option_ids'];
                     } elseif (array_is_list($userAnswer)) {
-                        $chosenIds = $userAnswer;
+                        $rawChosenIds = $userAnswer;
                     }
                 }
+
+                // SEC-CBT-01: Wajib deduplikasi agar pengiriman ID berulang tidak menggandakan skor
+                $chosenIds = array_values(array_unique(array_map(
+                    'strval',
+                    array_filter($rawChosenIds, fn ($v) => is_scalar($v) && (string) $v !== '')
+                )));
+
+                // Abaikan/tolak ID yang bukan bagian dari opsi soal ini
+                $chosenIds = array_values(array_intersect($chosenIds, $validOptionIds));
 
                 if (empty($correctOptionIds) || empty($chosenIds)) {
                     return 0.0;
@@ -494,8 +511,8 @@ class ExamGradingService
                 $correctCount = count(array_intersect($chosenIds, $correctOptionIds));
                 $wrongCount = count(array_diff($chosenIds, $correctOptionIds));
 
-                // Skor parsial proporsional dikurangi kesalahan
-                $ratio = max(0, ($correctCount - $wrongCount) / count($correctOptionIds));
+                // Skor parsial proporsional dikurangi kesalahan, dibatasi rentang [0, 1]
+                $ratio = min(1.0, max(0.0, ($correctCount - $wrongCount) / count($correctOptionIds)));
 
                 return round($ratio * $maxWeight, 2);
 
@@ -563,12 +580,31 @@ class ExamGradingService
     }
 
     /**
+     * Filter daftar ExamQuestion sesuai kode paket peserta (mendukung ujian multi-paket A/B).
+     */
+    protected function filterQuestionsForPackage($examQuestions, ?string $packageCode)
+    {
+        if (! $packageCode) {
+            return $examQuestions;
+        }
+
+        return $examQuestions->filter(function ($eq) use ($packageCode) {
+            return $eq->package_code === null || $eq->package_code === '' || $eq->package_code === $packageCode;
+        });
+    }
+
+    /**
      * Hitung nilai butir soal objektif (PG, dsb) dan total skor untuk satu sesi ujian.
      */
     public function gradeSessionObjectiveAnswers(ExamSession $session): void
     {
         $session->loadMissing(['answers.question.options', 'exam']);
-        $examQuestions = ExamQuestion::where('exam_id', $session->exam_id)->get()->keyBy('question_id');
+        $participant = ExamParticipant::where('exam_id', $session->exam_id)
+            ->where('student_id', $session->student_id)
+            ->first();
+
+        $allExamQuestions = ExamQuestion::with('question')->where('exam_id', $session->exam_id)->get();
+        $examQuestions = $this->filterQuestionsForPackage($allExamQuestions, $participant?->package_code)->keyBy('question_id');
 
         foreach ($session->answers as $answer) {
             $question = $answer->question;
@@ -577,7 +613,7 @@ class ExamGradingService
             }
 
             if (in_array($question->question_type, ['pg', 'pg_kompleks', 'bs', 'menjodohkan', 'isian'])) {
-                $eq = $examQuestions->get($question->id);
+                $eq = $examQuestions->get($question->id) ?? $allExamQuestions->firstWhere('question_id', $question->id);
                 $maxWeight = (float) ($eq?->weight_override ?? $question->weight ?? 1.0);
                 $score = $this->evaluateObjectiveAnswer($question, $answer->answer, $maxWeight);
                 $answer->score = $score;
@@ -589,15 +625,19 @@ class ExamGradingService
     }
 
     /**
-     * Hitung ulang total score sesi dari seluruh butir jawaban dan normalisasi ke skala 0–100.
+     * Hitung ulang total score sesi dari seluruh butir jawaban paket peserta dan normalisasi ke skala 0–100.
      */
     public function refreshSessionTotalScore(ExamSession $session, $examQuestions = null): void
     {
         if ($examQuestions === null) {
-            $examQuestions = ExamQuestion::where('exam_id', $session->exam_id)->get()->keyBy('question_id');
+            $participant = ExamParticipant::where('exam_id', $session->exam_id)
+                ->where('student_id', $session->student_id)
+                ->first();
+            $allExamQuestions = ExamQuestion::with('question')->where('exam_id', $session->exam_id)->get();
+            $examQuestions = $this->filterQuestionsForPackage($allExamQuestions, $participant?->package_code)->keyBy('question_id');
         }
 
-        $answers = ExamAnswer::where('session_id', $session->id)->get();
+        $answers = ExamAnswer::where('session_id', $session->id)->get()->keyBy('question_id');
 
         $totalEarned = 0.0;
         $totalMax = 0.0;
@@ -606,14 +646,14 @@ class ExamGradingService
             $maxWeight = (float) ($eq->weight_override ?? $eq->question?->weight ?? 1.0);
             $totalMax += $maxWeight;
 
-            $ans = $answers->firstWhere('question_id', $eq->question_id);
+            $ans = $answers->get($eq->question_id);
             if ($ans && $ans->score !== null) {
                 $totalEarned += (float) $ans->score;
             }
         }
 
         if ($totalMax > 0) {
-            $normalizedScore = round(($totalEarned / $totalMax) * 100, 2);
+            $normalizedScore = min(100.0, max(0.0, round(($totalEarned / $totalMax) * 100, 2)));
         } else {
             $normalizedScore = 0.0;
         }
@@ -739,9 +779,13 @@ class ExamGradingService
             }
 
             $firstRoom = $parentExam->rooms->first();
+            $fallbackRoomId = $firstRoom?->room_id ?? \App\Models\Room::value('id');
+            if (! $fallbackRoomId) {
+                throw new HttpException(422, 'Ujian induk belum memiliki ruangan ujian dan belum ada data ruangan di sistem.');
+            }
             $remedialRoom = ExamRoom::create([
                 'exam_id' => $remedialExam->id,
-                'room_id' => $firstRoom?->room_id ?? $parentExam->subject_id,
+                'room_id' => $fallbackRoomId,
                 'proctor_id' => $firstRoom?->proctor_id ?? $request->user()->id,
                 'session_no' => 1,
                 'token' => strtoupper(Str::random(6)),

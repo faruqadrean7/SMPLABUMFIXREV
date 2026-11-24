@@ -193,10 +193,10 @@ export default function QuestionBanksPage() {
     setIsCreatingBank(true);
     try {
       const res = await cbtApi.createQuestionBank({
+        name: bankForm.title,
         title: bankForm.title,
         code: bankForm.code,
         subject_id: bankForm.subject_id,
-        grade_level: parseInt(bankForm.grade_level, 10),
       });
       setFeedbackMsg({ type: 'success', text: 'Paket bank soal berhasil dibuat!' });
       setIsBankModalOpen(false);

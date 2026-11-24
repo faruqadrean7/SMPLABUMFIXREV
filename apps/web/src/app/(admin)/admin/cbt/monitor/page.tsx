@@ -27,18 +27,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { cbtApi } from '@/features/cbt/cbt-api';
-import { ExamItem, ExamMonitorSessionItem } from '@/types/cbt';
+import { ExamItem, ExamMonitorResponse, ExamMonitorSessionItem } from '@/types/cbt';
 
 export default function LiveCbtMonitorPage() {
   const [exams, setExams] = useState<ExamItem[]>([]);
   const [selectedExamId, setSelectedExamId] = useState<string>('');
-  const [monitorData, setMonitorData] = useState<{
-    total_participants: number;
-    active_count: number;
-    submitted_count: number;
-    blocked_count: number;
-    sessions: ExamMonitorSessionItem[];
-  } | null>(null);
+  const [monitorData, setMonitorData] = useState<ExamMonitorResponse | null>(null);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -140,10 +134,17 @@ export default function LiveCbtMonitorPage() {
   const selectedExam = exams.find((e) => e.id === selectedExamId);
   const activeRoom = selectedExam?.rooms && selectedExam.rooms.length > 0 ? selectedExam.rooms[0] : null;
 
-  const filteredSessions = (monitorData?.sessions || []).filter((s) => {
+  const rawParticipants = monitorData?.participants || monitorData?.sessions || [];
+  const totalParticipants = monitorData?.summary?.total_participants ?? monitorData?.total_participants ?? rawParticipants.length;
+  const activeCount = monitorData?.summary?.in_progress_count ?? monitorData?.active_count ?? 0;
+  const submittedCount = monitorData?.summary?.finished_count ?? monitorData?.submitted_count ?? 0;
+  const blockedCount = monitorData?.summary?.locked_count ?? monitorData?.blocked_count ?? 0;
+
+  const filteredSessions = rawParticipants.filter((s) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return s.student_name.toLowerCase().includes(q) || s.nis.toLowerCase().includes(q);
+    const nis = (s.student_nis || s.nis || '').toLowerCase();
+    return (s.student_name || '').toLowerCase().includes(q) || nis.includes(q);
   });
 
   return (
@@ -253,7 +254,7 @@ export default function LiveCbtMonitorPage() {
           <CardContent className="p-4">
             <div className="text-[11px] font-semibold text-slate-500 uppercase">Total Peserta</div>
             <div className="text-2xl font-bold text-slate-900 mt-1">
-              {monitorData?.total_participants ?? 0} Siswa
+              {totalParticipants} Siswa
             </div>
           </CardContent>
         </Card>
@@ -262,7 +263,7 @@ export default function LiveCbtMonitorPage() {
           <CardContent className="p-4">
             <div className="text-[11px] font-semibold text-slate-500 uppercase">Sedang Mengerjakan</div>
             <div className="text-2xl font-bold text-emerald-600 mt-1">
-              {monitorData?.active_count ?? 0} Sesi
+              {activeCount} Sesi
             </div>
           </CardContent>
         </Card>
@@ -271,7 +272,7 @@ export default function LiveCbtMonitorPage() {
           <CardContent className="p-4">
             <div className="text-[11px] font-semibold text-slate-500 uppercase">Telah Dikumpulkan</div>
             <div className="text-2xl font-bold text-indigo-600 mt-1">
-              {monitorData?.submitted_count ?? 0} Selesai
+              {submittedCount} Selesai
             </div>
           </CardContent>
         </Card>
@@ -280,7 +281,7 @@ export default function LiveCbtMonitorPage() {
           <CardContent className="p-4">
             <div className="text-[11px] font-semibold text-slate-500 uppercase">Terkunci / Pelanggaran</div>
             <div className="text-2xl font-bold text-rose-600 mt-1">
-              {monitorData?.blocked_count ?? 0} Anomali
+              {blockedCount} Terkunci
             </div>
           </CardContent>
         </Card>
@@ -307,17 +308,33 @@ export default function LiveCbtMonitorPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredSessions.map((session, idx) => {
-              const isWorking = session.status === 'in_progress';
-              const isFinished = session.status === 'submitted' || session.status === 'force_submitted';
-              const isBlocked = session.status === 'blocked';
+              const isWorking = session.status === 'mengerjakan' || session.status === 'in_progress';
+              const isFinished =
+                session.status === 'selesai' ||
+                session.status === 'submitted' ||
+                session.status === 'force_submitted';
+              const isBlocked = session.status === 'terkunci' || session.status === 'blocked';
 
-              const mins = Math.floor(session.remaining_seconds / 60);
-              const secs = session.remaining_seconds % 60;
+              const remSecs = Math.max(0, Math.floor(session.remaining_seconds ?? 0));
+              const mins = Math.floor(remSecs / 60);
+              const secs = remSecs % 60;
               const timeDisplay = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+              const nisDisplay = session.student_nis || session.nis || '-';
+              const answeredCount = session.answered_questions ?? session.answered_count ?? 0;
+              const progressPct = session.progress_percentage ?? session.progress_percent ?? 0;
+              const violationTotal = session.violation_count ?? session.violations_count ?? session.blur_count ?? 0;
+              const isOnline =
+                typeof session.is_online === 'boolean'
+                  ? session.is_online
+                  : Boolean(
+                      isWorking &&
+                        session.last_heartbeat_at &&
+                        Date.now() - new Date(session.last_heartbeat_at).getTime() < 90000
+                    );
 
               return (
                 <div
-                  key={session.session_id}
+                  key={session.session_id || session.participant_id || session.student_id}
                   className={`p-4 rounded-xl border bg-white shadow-sm transition-all flex flex-col justify-between ${
                     isBlocked
                       ? 'border-rose-400 bg-rose-50/20 ring-1 ring-rose-400'
@@ -334,13 +351,21 @@ export default function LiveCbtMonitorPage() {
                         <span className="font-bold text-xs text-slate-700">Meja #{idx + 1}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        {session.is_online ? (
+                        {isFinished ? (
+                          <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 py-0">
+                            Selesai
+                          </Badge>
+                        ) : isBlocked ? (
+                          <Badge variant="outline" className="text-[10px] bg-rose-50 text-rose-700 border-rose-200 py-0">
+                            Terkunci
+                          </Badge>
+                        ) : isOnline || isWorking ? (
                           <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 py-0">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> {isOnline ? 'Live' : 'Mengerjakan'}
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-400 py-0">
-                            Offline
+                            Belum Mulai
                           </Badge>
                         )}
                       </div>
@@ -351,21 +376,23 @@ export default function LiveCbtMonitorPage() {
                       <div className="font-bold text-xs text-slate-900 truncate" title={session.student_name}>
                         {session.student_name}
                       </div>
-                      <div className="text-[10px] text-slate-500">NIS: {session.nis}</div>
+                      <div className="text-[10px] text-slate-500">
+                        NIS: {nisDisplay} {session.room_name ? `• ${session.room_name}` : ''}
+                      </div>
                     </div>
 
                     {/* Progress Bar */}
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-[10px] text-slate-600">
                         <span>
-                          Terjawab: <b>{session.answered_count}</b> / {session.total_questions}
+                          Terjawab: <b>{answeredCount}</b> / {session.total_questions}
                         </span>
-                        <span>{session.progress_percent}%</span>
+                        <span>{progressPct}%</span>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                         <div
                           className="bg-blue-600 h-1.5 rounded-full transition-all"
-                          style={{ width: `${session.progress_percent}%` }}
+                          style={{ width: `${progressPct}%` }}
                         />
                       </div>
                     </div>
@@ -376,10 +403,10 @@ export default function LiveCbtMonitorPage() {
                         <Clock className="h-3 w-3" />
                         <span className="font-mono font-medium">{timeDisplay}</span>
                       </div>
-                      {session.blur_count > 0 && (
+                      {violationTotal > 0 && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">
                           <AlertTriangle className="h-3 w-3" />
-                          Tab Blur: {session.blur_count}x
+                          Pelanggaran: {violationTotal}x
                         </span>
                       )}
                     </div>
@@ -387,7 +414,9 @@ export default function LiveCbtMonitorPage() {
 
                   {/* Proctor Action Buttons */}
                   <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between gap-1">
-                    {isBlocked ? (
+                    {!session.session_id ? (
+                      <span className="text-[10px] text-slate-400 italic">Menunggu siswa memulai sesi</span>
+                    ) : isBlocked ? (
                       <Button
                         size="sm"
                         onClick={() => {
@@ -473,7 +502,7 @@ export default function LiveCbtMonitorPage() {
 
             <div className="text-xs text-slate-600 space-y-2">
               <p>
-                Konfirmasi aksi pengawas untuk siswa: <b>{activeSession.student_name}</b> (NIS: {activeSession.nis}).
+                Konfirmasi aksi pengawas untuk siswa: <b>{activeSession.student_name}</b> (NIS: {activeSession.student_nis || activeSession.nis || '-'}).
               </p>
 
               {actionType === 'extra_time' && (

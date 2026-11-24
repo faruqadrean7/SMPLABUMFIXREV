@@ -155,7 +155,7 @@ export default function ExamsAdminPage() {
   };
 
   const handleToggleStatus = async (exam: ExamItem) => {
-    const nextStatus = exam.status === 'active' || exam.status === 'berlangsung' ? 'selesai' : 'active';
+    const nextStatus = exam.status === 'active' || exam.status === 'berlangsung' ? 'selesai' : 'berlangsung';
     setTogglingExamId(exam.id);
     try {
       await cbtApi.updateExamStatus(exam.id, nextStatus);
@@ -168,9 +168,15 @@ export default function ExamsAdminPage() {
     }
   };
 
-  const handleOpenRooms = (exam: ExamItem) => {
+  const handleOpenRooms = async (exam: ExamItem) => {
     setActiveExam(exam);
     setIsRoomsModalOpen(true);
+    try {
+      const detail = await cbtApi.getExam(exam.id);
+      setActiveExam(detail.data);
+    } catch {
+      // Gunakan data ringkas jika gagal memuat detail
+    }
   };
 
   const handleRegenerateToken = async (roomId: string) => {
@@ -202,7 +208,10 @@ export default function ExamsAdminPage() {
 
     setIsEnrolling(true);
     try {
+      const firstRoomId = activeExam.rooms && activeExam.rooms.length > 0 ? activeExam.rooms[0].id : undefined;
       await cbtApi.enrollExamParticipants(activeExam.id, {
+        exam_room_id: firstRoomId,
+        class_id: selectedClassId,
         class_ids: [selectedClassId],
       });
       setFeedbackMsg({ type: 'success', text: 'Peserta rombel berhasil didaftarkan ke ujian.' });
@@ -215,6 +224,12 @@ export default function ExamsAdminPage() {
     }
   };
 
+  const extractResultsArray = (payload: any): ExamResultItem[] => {
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.results)) return payload.results;
+    return [];
+  };
+
   const handleOpenResults = async (exam: ExamItem) => {
     setActiveExam(exam);
     setIsResultsModalOpen(true);
@@ -225,7 +240,7 @@ export default function ExamsAdminPage() {
         cbtApi.getExamResults(exam.id),
         academicApi.listGradeComponents({ subject_id: exam.subject_id }),
       ]);
-      setExamResults(resultsRes.data || []);
+      setExamResults(extractResultsArray(resultsRes.data));
       setGradeComponents(compRes || []);
       if (compRes && compRes.length > 0) {
         setSelectedComponentId(compRes[0].id);
@@ -248,7 +263,7 @@ export default function ExamsAdminPage() {
       await cbtApi.runAutoGrade(activeExam.id);
       setFeedbackMsg({ type: 'success', text: 'Koreksi otomatis soal objektif berhasil dijalankan!' });
       const res = await cbtApi.getExamResults(activeExam.id);
-      setExamResults(res.data || []);
+      setExamResults(extractResultsArray(res.data));
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menjalankan koreksi otomatis.' });
     } finally {

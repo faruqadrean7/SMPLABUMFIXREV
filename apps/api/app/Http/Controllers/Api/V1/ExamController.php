@@ -33,7 +33,14 @@ class ExamController extends Controller
     public function index(ListExamRequest $request): JsonResponse
     {
         try {
-            $paginator = $this->service->listExams($request->validated());
+            $filters = $request->validated();
+            $user = $request->user();
+            $isPrivileged = $user && ($user->hasRole(['super_admin', 'admin']) || $user->hasPermission('cbt.exam.manage') || $user->hasRole('teacher'));
+            if (! $isPrivileged) {
+                $filters['exclude_draft_archived'] = true;
+            }
+
+            $paginator = $this->service->listExams($filters);
 
             return $this->paginatedResponse($paginator);
         } catch (Throwable $e) {
@@ -56,7 +63,11 @@ class ExamController extends Controller
         } catch (Throwable $e) {
             report($e);
 
-            return $this->errorResponse('Terjadi kesalahan saat membuat ujian: '.$e->getMessage(), 'INTERNAL_ERROR', 500);
+            $msg = config('app.debug')
+                ? 'Terjadi kesalahan saat membuat ujian: '.$e->getMessage()
+                : 'Terjadi kesalahan saat membuat ujian.';
+
+            return $this->errorResponse($msg, 'INTERNAL_ERROR', 500);
         }
     }
 
@@ -70,10 +81,25 @@ class ExamController extends Controller
             $exam = $this->service->getExam($id);
 
             $user = $request->user();
-            if ($user && ! $user->hasRole(['super_admin', 'admin']) && ! $user->hasPermission('cbt.exam.manage')) {
+            $isPrivileged = $user && (
+                $user->hasRole(['super_admin', 'admin'])
+                || $user->hasPermission('cbt.exam.manage')
+                || $exam->created_by === $user->id
+            );
+
+            if (! $isPrivileged) {
+                if (in_array($exam->status, ['draft', 'dibatalkan'], true)) {
+                    return $this->errorResponse('Ujian CBT belum tersedia.', 'FORBIDDEN', 403);
+                }
+
+                // SEC-CBT-03: Cegah kebocoran soal, token ruang, dan PII daftar peserta kelas
                 $exam->unsetRelation('questions');
+                $exam->unsetRelation('participants');
                 if ($exam->relationLoaded('rooms')) {
-                    $exam->rooms->makeHidden(['token']);
+                    $exam->rooms->each(function ($room) {
+                        $room->makeHidden(['token', 'proctor_id']);
+                        $room->unsetRelation('proctor');
+                    });
                 }
             }
 
@@ -216,7 +242,11 @@ class ExamController extends Controller
         } catch (Throwable $e) {
             report($e);
 
-            return $this->errorResponse('Terjadi kesalahan saat mendaftarkan peserta ujian: '.$e->getMessage(), 'INTERNAL_ERROR', 500);
+            $msg = config('app.debug')
+                ? 'Terjadi kesalahan saat mendaftarkan peserta ujian: '.$e->getMessage()
+                : 'Terjadi kesalahan saat mendaftarkan peserta ujian.';
+
+            return $this->errorResponse($msg, 'INTERNAL_ERROR', 500);
         }
     }
 

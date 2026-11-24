@@ -123,13 +123,20 @@ Route::middleware('auth:sanctum')->group(function () {
     // BE-CBT-04: Eksekusi Ujian Siswa (Live Session, Autosave, Anti-Cheat)
     // =====================================================================
     // Alur Pengerjaan Ujian oleh Siswa
-    Route::post('/exams/{id}/start-session', [ExamSessionController::class, 'start']);
-    Route::get('/exams/{id}/session-questions', [ExamSessionController::class, 'questions']);
-    Route::post('/exams/{id}/save-answer', [ExamSessionController::class, 'saveAnswer']);
-    Route::post('/exams/{id}/log-violation', [ExamSessionController::class, 'logViolation']);
-    Route::post('/exams/{id}/violations', [ExamSessionController::class, 'logViolation']);
-    Route::post('/exams/{id}/finish-session', [ExamSessionController::class, 'finish']);
-    Route::get('/exams/{id}/review', [ExamSessionController::class, 'review']);
+    Route::post('/exams/{id}/start-session', [ExamSessionController::class, 'start'])
+        ->middleware('throttle:20,1');
+    Route::get('/exams/{id}/session-questions', [ExamSessionController::class, 'questions'])
+        ->middleware('throttle:60,1');
+    Route::post('/exams/{id}/save-answer', [ExamSessionController::class, 'saveAnswer'])
+        ->middleware('throttle:300,1');
+    Route::post('/exams/{id}/log-violation', [ExamSessionController::class, 'logViolation'])
+        ->middleware('throttle:60,1');
+    Route::post('/exams/{id}/violations', [ExamSessionController::class, 'logViolation'])
+        ->middleware('throttle:60,1');
+    Route::post('/exams/{id}/finish-session', [ExamSessionController::class, 'finish'])
+        ->middleware('throttle:20,1');
+    Route::get('/exams/{id}/review', [ExamSessionController::class, 'review'])
+        ->middleware('throttle:30,1');
 
     // Pengawas / Proctor Mengelola Sesi Terkunci & Tambahan Waktu
     Route::post('/exam-sessions/{sessionId}/manage', [ExamSessionController::class, 'manage']);
@@ -142,7 +149,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================================
     // BE-CBT-12: Heartbeat Sesi & Deteksi Anomali Perangkat/IP
     // =====================================================================
-    Route::post('/exam-sessions/{sessionId}/heartbeat', [ExamSessionController::class, 'heartbeat']);
+    Route::post('/exam-sessions/{sessionId}/heartbeat', [ExamSessionController::class, 'heartbeat'])
+        ->middleware('throttle:30,1');
     Route::get('/exams/{id}/anomalies', [ExamSessionController::class, 'anomalies']);
 
     // =====================================================================

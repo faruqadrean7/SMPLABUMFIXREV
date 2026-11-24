@@ -11,11 +11,20 @@ class EnrollExamParticipantsRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! $this->has('class_id') && is_array($this->input('class_ids')) && count($this->input('class_ids')) > 0) {
+            $this->merge(['class_id' => $this->input('class_ids')[0]]);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'exam_room_id' => ['required', 'uuid', 'exists:exam_rooms,id'],
+            'exam_room_id' => ['nullable', 'uuid', 'exists:exam_rooms,id'],
             'class_id' => ['nullable', 'uuid', 'exists:classes,id'],
+            'class_ids' => ['nullable', 'array'],
+            'class_ids.*' => ['uuid', 'exists:classes,id'],
             'student_ids' => ['nullable', 'array'],
             'student_ids.*' => ['uuid', 'exists:students,id'],
             'package_code' => ['nullable', 'string', 'max:20'],
@@ -25,7 +34,7 @@ class EnrollExamParticipantsRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            if (empty($this->class_id) && empty($this->student_ids)) {
+            if (empty($this->class_id) && empty($this->class_ids) && empty($this->student_ids)) {
                 $validator->errors()->add('target', 'Wajib memilih class_id atau daftar student_ids untuk mendaftarkan peserta ujian.');
             }
         });
