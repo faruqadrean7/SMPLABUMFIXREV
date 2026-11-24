@@ -175,7 +175,7 @@ class ImportCbtExamPackage extends Command
     private function loadManifest(): ?array
     {
         $path = $this->argument('manifest');
-        if (! str_starts_with($path, '/')) {
+        if (! is_file($path)) {
             // Terima dua bentuk: "import/x.json" (relatif ke storage/app)
             // maupun "storage/app/import/x.json" (relatif ke root proyek).
             $candidates = [base_path($path), storage_path('app/'.$path)];

@@ -124,7 +124,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================================
     // Alur Pengerjaan Ujian oleh Siswa
     Route::post('/exams/{id}/start-session', [ExamSessionController::class, 'start'])
-        ->middleware('throttle:20,1');
+        ->middleware('throttle:60,1');
     Route::get('/exams/{id}/session-questions', [ExamSessionController::class, 'questions'])
         ->middleware('throttle:60,1');
     Route::post('/exams/{id}/save-answer', [ExamSessionController::class, 'saveAnswer'])
@@ -134,7 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/exams/{id}/violations', [ExamSessionController::class, 'logViolation'])
         ->middleware('throttle:60,1');
     Route::post('/exams/{id}/finish-session', [ExamSessionController::class, 'finish'])
-        ->middleware('throttle:20,1');
+        ->middleware('throttle:60,1');
     Route::get('/exams/{id}/review', [ExamSessionController::class, 'review'])
         ->middleware('throttle:30,1');
 
