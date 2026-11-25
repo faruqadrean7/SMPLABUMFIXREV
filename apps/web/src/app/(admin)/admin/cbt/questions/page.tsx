@@ -320,6 +320,7 @@ export default function QuestionBanksPage() {
       }
       setIsQuestionModalOpen(false);
       fetchQuestions(selectedBankId);
+      fetchBanksAndSubjects();
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menyimpan butir soal.' });
     } finally {
@@ -340,6 +341,7 @@ export default function QuestionBanksPage() {
       toast.success('Butir soal berhasil dihapus.');
       setQuestionToDelete(null);
       fetchQuestions(selectedBankId);
+      fetchBanksAndSubjects();
     } catch (err: any) {
       const errMsg = err?.message || 'Gagal menghapus butir soal.';
       setFeedbackMsg({ type: 'error', text: errMsg });

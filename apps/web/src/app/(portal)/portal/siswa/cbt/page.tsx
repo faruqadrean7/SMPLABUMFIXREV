@@ -52,14 +52,39 @@ export default function StudentCBTListPage() {
           normalizedStatus = 'aktif';
         }
 
+        const formatWibDate = (iso?: string) => {
+          if (!iso) return 'Hari Ini';
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return iso.split('T')[0];
+          return d.toLocaleDateString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            timeZone: 'Asia/Jakarta',
+          });
+        };
+        const formatWibTime = (iso?: string) => {
+          if (!iso) return '';
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return iso.slice(11, 16);
+          return d.toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Jakarta',
+          }).replace(':', '.');
+        };
+
         return {
           id: e.id,
           title: e.title,
           subject_name: e.subjectName,
           subject_code: 'CBT',
           teacher_name: 'Guru Pengampu CBT',
-          date_str: e.startTime ? e.startTime.split('T')[0] : 'Hari Ini',
-          time_range: e.startTime ? `${e.startTime.slice(11, 16)} - ${e.endTime?.slice(11, 16) || ''}` : '07:30 - 09:00',
+          date_str: formatWibDate(e.startTime),
+          time_range: e.startTime
+            ? `${formatWibTime(e.startTime)} - ${formatWibTime(e.endTime)} WIB`
+            : '07.30 - 09.00 WIB',
           duration_minutes: e.durationMinutes || 60,
           total_questions: e.totalQuestions ?? 0,
           room_name: e.roomName || 'Lab Komputer 1',

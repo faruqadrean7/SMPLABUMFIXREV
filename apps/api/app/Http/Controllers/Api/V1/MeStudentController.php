@@ -50,7 +50,14 @@ class MeStudentController extends Controller
     {
         $student->loadMissing('classes');
 
-        return $student->program_type ?? $student->classes->first()?->program_type ?? 'reguler';
+        $studentProg = $student->program_type;
+        $classProg = $student->classes->first()?->program_type;
+
+        if (empty($studentProg) || ($studentProg === 'reguler' && in_array($classProg, ['tahfidz', 'icp', 'inklusi'], true))) {
+            return $classProg ?? 'reguler';
+        }
+
+        return $studentProg;
     }
 
     /**
