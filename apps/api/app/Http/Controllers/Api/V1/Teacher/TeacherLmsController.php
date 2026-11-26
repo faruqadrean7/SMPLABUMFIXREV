@@ -132,7 +132,7 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        $assignments = Assignment::with(['class' => fn ($q) => $q->withCount('students'), 'subject'])
+        $assignments = Assignment::with(['class' => fn ($q) => $q->withCount('students'), 'subject', 'gradeComponent'])
             ->where('teacher_id', $teacher->id)
             ->withCount(['submissions', 'submissions as graded_count' => fn ($q) => $q->whereNotNull('score')])
             ->latest()
@@ -153,6 +153,10 @@ class TeacherLmsController extends Controller
             'submittedCount' => $a->submissions_count,
             'gradedCount' => $a->graded_count,
             'description' => $a->description ?? '',
+            // Wajib dikirim: UI memakainya untuk menandai tugas yang belum tertaut
+            // ke komponen buku nilai (data lama).
+            'grade_component_id' => $a->grade_component_id,
+            'grade_component_name' => $a->gradeComponent?->name,
             'createdAt' => $a->created_at?->toISOString() ?? now()->toISOString(),
         ]);
 

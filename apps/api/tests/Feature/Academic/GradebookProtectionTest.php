@@ -278,6 +278,40 @@ class GradebookProtectionTest extends TestCase
         $this->assertDatabaseHas('assignments', ['id' => $assignment->id]);
     }
 
+    // Daftar tugas guru harus memuat status tautan komponen (dipakai UI)
+    public function test_daftar_tugas_memuat_status_komponen_nilai(): void
+    {
+        $tertaut = Assignment::create([
+            'class_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->teacher->id,
+            'title' => 'Tugas Tertaut',
+            'due_at' => now()->addDays(3),
+            'max_score' => 100,
+            'grade_component_id' => $this->tgs->id,
+        ]);
+
+        $tanpa = Assignment::create([
+            'class_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->teacher->id,
+            'title' => 'Tugas Tanpa Komponen',
+            'due_at' => now()->addDays(3),
+            'max_score' => 100,
+            'grade_component_id' => null,
+        ]);
+
+        $res = $this->actingAs($this->guru, 'sanctum')
+            ->getJson('/api/v1/me/teacher/assignments')
+            ->assertOk();
+
+        $rows = collect($res->json('data'))->keyBy('id');
+
+        $this->assertSame($this->tgs->id, $rows[$tertaut->id]['grade_component_id']);
+        $this->assertNotNull($rows[$tertaut->id]['grade_component_name']);
+        $this->assertNull($rows[$tanpa->id]['grade_component_id'], 'Tugas tanpa komponen harus null agar UI menandainya.');
+    }
+
     // Pemilih periode: daftar periode untuk halaman penilaian tugas
     public function test_daftar_periode_tersedia_untuk_guru(): void
     {
