@@ -112,6 +112,7 @@ function PublicRelationsAdminContent() {
   const [complaintSearch, setComplaintSearch] = useState('');
   const [complaintCategoryFilter, setComplaintCategoryFilter] = useState(categoryParam || 'all');
   const [complaintStatusFilter, setComplaintStatusFilter] = useState('all');
+  const [complaintSeverityFilter, setComplaintSeverityFilter] = useState('all');
   const [selectedComplaint, setSelectedComplaint] = useState<ComplaintItem | null>(null);
   const [isComplaintModalOpen, setIsComplaintModalOpen] = useState(false);
   const [isLoadingComplaintDetail, setIsLoadingComplaintDetail] = useState(false);
@@ -186,6 +187,7 @@ function PublicRelationsAdminContent() {
         q: complaintSearch || undefined,
         category: complaintCategoryFilter !== 'all' ? complaintCategoryFilter : undefined,
         status: complaintStatusFilter !== 'all' ? complaintStatusFilter : undefined,
+        severity: complaintSeverityFilter !== 'all' ? complaintSeverityFilter : undefined,
         per_page: 50,
       });
       setComplaints(res.data || []);
@@ -194,7 +196,7 @@ function PublicRelationsAdminContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [complaintSearch, complaintCategoryFilter, complaintStatusFilter]);
+  }, [complaintSearch, complaintCategoryFilter, complaintStatusFilter, complaintSeverityFilter]);
 
   const fetchPartnerships = useCallback(async () => {
     try {
@@ -879,6 +881,20 @@ function PublicRelationsAdminContent() {
                     <option value="ditolak">Ditolak</option>
                   </select>
                 </div>
+                <div>
+                  <select
+                    className="w-full h-10 px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={complaintSeverityFilter}
+                    onChange={(e) => setComplaintSeverityFilter(e.target.value)}
+                    aria-label="Saring tingkat keparahan"
+                  >
+                    <option value="all">Semua Keparahan</option>
+                    <option value="kritis">Kritis (≤ 6 jam)</option>
+                    <option value="tinggi">Tinggi (≤ 24 jam)</option>
+                    <option value="sedang">Sedang (≤ 72 jam)</option>
+                    <option value="rendah">Rendah (≤ 120 jam)</option>
+                  </select>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -927,27 +943,66 @@ function PublicRelationsAdminContent() {
                           ditolak: 'bg-red-100 text-red-800 border-red-200',
                         };
 
+                        const severityStyles: Record<string, string> = {
+                          kritis: 'bg-red-600 text-white border-red-700',
+                          tinggi: 'bg-orange-100 text-orange-800 border-orange-300',
+                          sedang: 'bg-sky-100 text-sky-800 border-sky-300',
+                          rendah: 'bg-slate-100 text-slate-700 border-slate-300',
+                        };
+
+                        // Sisa waktu penanganan: badge jujur, bukan angka SLA statis
+                        const slaInfo = (() => {
+                          if (c.status === 'selesai' || c.status === 'ditolak') {
+                            return { text: 'Ditutup', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+                          }
+                          if (!c.due_at) return null;
+                          const msLeft = new Date(c.due_at).getTime() - Date.now();
+                          if (msLeft < 0) {
+                            const jamLewat = Math.floor(Math.abs(msLeft) / 3600000);
+                            return {
+                              text: c.escalated_at ? `Terlambat ${jamLewat} jam · dieskalasi` : `Terlambat ${jamLewat} jam`,
+                              cls: 'bg-red-50 text-red-700 border-red-300',
+                            };
+                          }
+                          const jamSisa = Math.floor(msLeft / 3600000);
+                          return {
+                            text: jamSisa <= 6 ? `Sisa ${jamSisa} jam` : `Sisa ${Math.floor(jamSisa / 24)} hari`,
+                            cls: jamSisa <= 6 ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-slate-50 text-slate-600 border-slate-200',
+                          };
+                        })();
+
                         return (
                           <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                             <td className="py-3 px-4 font-mono font-semibold text-indigo-600 whitespace-nowrap">
                               {c.ticket_code}
                             </td>
                             <td className="py-3 px-4">
-                              {c.category === 'bullying' ? (
-                                <div className="flex flex-col gap-1 items-start">
+                              <div className="flex flex-col gap-1 items-start">
+                                {c.category === 'bullying' ? (
                                   <Badge className="bg-red-100 text-red-800 border-red-200 text-xs font-semibold flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3 text-red-600" />
                                     Perundungan
                                   </Badge>
-                                  <span className="text-[10px] text-red-700 font-semibold bg-red-50 border border-red-200/80 px-1.5 py-0.5 rounded">
-                                    SLA: ≤ 48 Jam
+                                ) : (
+                                  <Badge variant="outline" className="capitalize text-xs font-normal">
+                                    {c.category}
+                                  </Badge>
+                                )}
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span
+                                    className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${
+                                      severityStyles[c.severity || 'sedang'] || severityStyles.sedang
+                                    }`}
+                                  >
+                                    {c.severity || 'sedang'}
                                   </span>
+                                  {slaInfo && (
+                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${slaInfo.cls}`}>
+                                      {slaInfo.text}
+                                    </span>
+                                  )}
                                 </div>
-                              ) : (
-                                <Badge variant="outline" className="capitalize text-xs font-normal">
-                                  {c.category}
-                                </Badge>
-                              )}
+                              </div>
                             </td>
                             <td className="py-3 px-4 max-w-xs">
                               <p className="line-clamp-2 text-slate-800 text-xs leading-relaxed">{c.content}</p>
@@ -1418,7 +1473,7 @@ function PublicRelationsAdminContent() {
                   <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                   <div className="text-xs text-red-950 space-y-1">
                     <p className="font-semibold flex items-center gap-2 text-red-900">
-                      <span>Perhatian Khusus — Kasus Perundungan (SLA: ≤ 48 Jam)</span>
+                      <span>Perhatian Khusus — Kasus Perundungan (tenggat ≤ 24 jam)</span>
                       <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
                         Prioritas Tinggi
                       </span>

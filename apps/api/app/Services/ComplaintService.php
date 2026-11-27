@@ -18,6 +18,44 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class ComplaintService
 {
     /**
+     * Triase otomatis per kategori. Perundungan & pungli langsung berisiko tinggi
+     * sehingga tidak boleh antre bersama aduan fasilitas biasa.
+     */
+    private const SEVERITY_BY_CATEGORY = [
+        'bullying' => 'tinggi',
+        'pungli' => 'tinggi',
+        'akademik' => 'sedang',
+        'fasilitas' => 'sedang',
+        'pelayanan' => 'sedang',
+        'lainnya' => 'rendah',
+    ];
+
+    /**
+     * Tenggat penanganan (jam) menurut tingkat keparahan.
+     */
+    private const SLA_HOURS_BY_SEVERITY = [
+        'kritis' => 6,
+        'tinggi' => 24,
+        'sedang' => 72,
+        'rendah' => 120,
+    ];
+
+    /**
+     * Alur status yang sah. Mencegah aduan "meloncat" atau mundur
+     * sehingga riwayat penanganan tetap bisa dipertanggungjawabkan.
+     */
+    private const ALLOWED_TRANSITIONS = [
+        // 'ditindaklanjuti' boleh langsung dari 'baru' untuk aduan yang sudah jelas
+        // (mis. bullying dengan bukti foto); yang dilarang adalah melompat ke 'selesai'
+        // tanpa melewati tahap penanganan.
+        'baru' => ['ditinjau', 'ditindaklanjuti', 'ditolak'],
+        'ditinjau' => ['ditindaklanjuti', 'selesai', 'ditolak'],
+        'ditindaklanjuti' => ['selesai', 'ditolak'],
+        'selesai' => [],
+        'ditolak' => [],
+    ];
+
+    /**
      * BE-GUEST-02: Public complaint / whistleblowing submission.
      * Menerima aduan publik dengan opsi anonim (whistleblower protection).
      */
@@ -40,15 +78,22 @@ class ComplaintService
             // P0-20: Pengguna terautentikasi selalu terikat ke school_id miliknya (cegah spoofing tenant)
             $resolvedSchoolId = $currentUser?->school_id ?? ($data['school_id'] ?? null);
 
+            // Triase otomatis: kategori menentukan keparahan awal & tenggat penanganan.
+            // Klien tidak boleh menentukan sendiri (bisa dipakai menurunkan prioritas aduan).
+            $severity = self::SEVERITY_BY_CATEGORY[$data['category']] ?? 'sedang';
+            $dueAt = Carbon::now()->addHours(self::SLA_HOURS_BY_SEVERITY[$severity] ?? 72);
+
             $complaint = Complaint::create([
                 'school_id' => $resolvedSchoolId,
                 'reporter_user_id' => $reporterUserId,
                 'ticket_code' => $ticketCode,
                 'category' => $data['category'],
+                'severity' => $severity,
                 'content' => trim($data['content']),
                 'is_anonymous' => $isAnonymous,
                 'status' => 'baru',
                 'assigned_to' => null,
+                'due_at' => $dueAt,
             ]);
 
             // BE-GUEST-04: Asosiasi lampiran foto terkonfirmasi ke pengaduan
@@ -80,7 +125,9 @@ class ComplaintService
                 'complaint_id' => $complaint->id,
                 'actor_id' => null,
                 'event_type' => 'created',
-                'response_text' => 'Aspirasi / pengaduan berhasil didaftarkan dan menunggu peninjauan tim sekolah.',
+                'response_text' => $data['category'] === 'bullying'
+                    ? 'Laporan perundungan diterima dan diprioritaskan. Tim BK akan meninjau dalam 24 jam. Kode tiket ini adalah satu-satunya kunci pelacakan — simpan baik-baik.'
+                    : 'Aspirasi / pengaduan berhasil didaftarkan dan menunggu peninjauan tim sekolah.',
                 'created_at' => Carbon::now(),
             ]);
 
@@ -115,6 +162,8 @@ class ComplaintService
                 'category' => $complaint->category,
                 'is_anonymous' => $complaint->is_anonymous,
                 'status' => $complaint->status,
+                'severity' => $complaint->severity,
+                'due_at' => $complaint->due_at?->toIso8601String(),
                 'attachment_count' => count($attachmentFileIds),
                 'created_at' => $complaint->created_at->toIso8601String(),
                 'message' => 'Pengaduan berhasil dikirim. Simpan kode tiket ini untuk memeriksa perkembangan penanganan secara berkala.',
@@ -144,6 +193,10 @@ class ComplaintService
             'content' => null,
             'content_redacted' => true,
             'status' => $complaint->status,
+            'severity' => $complaint->severity,
+            'sla_state' => $complaint->sla_state,
+            'due_at' => $complaint->due_at?->toIso8601String(),
+            'first_responded_at' => $complaint->first_responded_at?->toIso8601String(),
             'created_at' => $complaint->created_at->toIso8601String(),
             'updated_at' => $complaint->updated_at->toIso8601String(),
             'timeline' => $complaint->events->map(function (ComplaintEvent $event) {
@@ -203,9 +256,30 @@ class ComplaintService
             $query->where('assigned_to', $filters['assigned_to']);
         }
 
+        // Triase: saring per tingkat keparahan
+        if (! empty($filters['severity']) && $filters['severity'] !== 'all') {
+            $query->where('severity', $filters['severity']);
+        }
+
+        // Hanya aduan yang melewati tenggat
+        if (! empty($filters['overdue'])) {
+            $query->overdue();
+        }
+
+        // Hanya aduan yang belum punya penanggung jawab
+        if (! empty($filters['unassigned'])) {
+            $query->whereNull('assigned_to');
+        }
+
         $perPage = min((int) ($filters['per_page'] ?? 15), 100);
 
-        $paginator = $query->orderBy('created_at', 'desc')->paginate($perPage);
+        // Urutkan menurut tenggat terdekat: aduan berisiko tinggi tidak tertimbun
+        // di bawah aduan fasilitas yang lebih baru.
+        $paginator = $query
+            ->orderByRaw("CASE severity WHEN 'kritis' THEN 1 WHEN 'tinggi' THEN 2 WHEN 'sedang' THEN 3 ELSE 4 END")
+            ->orderByRaw('due_at ASC NULLS LAST')
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
 
         // Hak akses melihat identitas pelapor non-anonim
         $canViewReporter = $this->canViewReporterIdentity($currentUser);
@@ -310,9 +384,15 @@ class ComplaintService
         $newStatus = $data['status'];
         $currentStatus = $complaint->status;
 
-        // Validasi alur status (tidak boleh kembali ke status 'baru' setelah selesai/ditolak)
-        if (in_array($currentStatus, ['selesai', 'ditolak'], true) && in_array($newStatus, ['baru', 'ditinjau'], true)) {
-            throw new HttpException(422, "Pengaduan yang sudah berstatus '{$currentStatus}' tidak dapat dikembalikan ke status '{$newStatus}'.");
+        // Validasi alur status berbasis peta transisi
+        if ($newStatus === $currentStatus) {
+            throw new HttpException(422, "Pengaduan sudah berstatus '{$currentStatus}'. Pilih status berikutnya sesuai alur.");
+        }
+
+        $allowed = self::ALLOWED_TRANSITIONS[$currentStatus] ?? [];
+        if (! in_array($newStatus, $allowed, true)) {
+            $next = empty($allowed) ? 'tidak ada (status akhir)' : implode(', ', $allowed);
+            throw new HttpException(422, "Perubahan status '{$currentStatus}' → '{$newStatus}' tidak sah. Langkah berikutnya: {$next}.");
         }
 
         return DB::transaction(function () use ($complaint, $newStatus, $data, $currentUser, $request) {
@@ -323,6 +403,20 @@ class ComplaintService
             if (array_key_exists('assigned_to', $data)) {
                 $complaint->assigned_to = $data['assigned_to'];
             }
+
+            // Triase manual oleh petugas: boleh menaikkan/menurunkan keparahan.
+            // Tenggat dihitung ulang dari waktu tanggapan pertama bila belum ada.
+            if (! empty($data['severity']) && $data['severity'] !== $complaint->severity) {
+                $complaint->severity = $data['severity'];
+                $baseTime = $complaint->first_responded_at ?? Carbon::now();
+                $complaint->due_at = $baseTime->copy()->addHours(self::SLA_HOURS_BY_SEVERITY[$data['severity']] ?? 72);
+            }
+
+            // Catat waktu tanggapan pertama (dasar perhitungan SLA & laporan kinerja)
+            if ($complaint->first_responded_at === null) {
+                $complaint->first_responded_at = Carbon::now();
+            }
+
             $complaint->save();
 
             // Buat event perkembangan pada timeline
@@ -333,6 +427,10 @@ class ComplaintService
                 'response_text' => trim($data['response_text']),
                 'created_at' => Carbon::now(),
             ]);
+
+            // Pelapor yang login (bukan anonim) diberi tahu perubahannya.
+            // Isi aduan tidak pernah disalin ke notifikasi (09_SECURITY_PRIVACY §6.7).
+            $this->notifyReporterStatusChange($complaint, $newStatus);
 
             // Audit Log (P0-18: jangan tulis isi teks tanggapan sensitif ke audit_logs)
             $this->logAudit(
@@ -478,6 +576,96 @@ class ComplaintService
         } catch (\Throwable $e) {
             report($e);
         }
+    }
+
+    /**
+     * Beri tahu pelapor (bila terautentikasi & tidak anonim) bahwa aduannya bergerak.
+     */
+    protected function notifyReporterStatusChange(Complaint $complaint, string $newStatus): void
+    {
+        if ($complaint->is_anonymous || empty($complaint->reporter_user_id)) {
+            return;
+        }
+
+        $label = [
+            'ditinjau' => 'sedang ditinjau tim sekolah',
+            'ditindaklanjuti' => 'sedang ditindaklanjuti',
+            'selesai' => 'telah selesai ditangani',
+            'ditolak' => 'ditutup tanpa tindak lanjut',
+        ][$newStatus] ?? $newStatus;
+
+        try {
+            Notification::create([
+                'user_id' => $complaint->reporter_user_id,
+                'notif_type' => 'complaint.status_changed',
+                'title' => 'Perkembangan Pengaduan Anda',
+                'body' => "Pengaduan {$complaint->ticket_code} {$label}. Buka halaman lacak untuk melihat catatan penanganan.",
+                'data' => [
+                    'ticket_code' => $complaint->ticket_code,
+                    'status' => $newStatus,
+                    'action_url' => '/lapor/lacak?kode='.$complaint->ticket_code,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * Eskalasi otomatis: aduan yang melewati tenggat dan belum ditutup
+     * diberi tanda dan diteruskan ke Kepala Sekolah + Guru BK.
+     * Dijalankan berkala oleh command complaints:escalate-overdue.
+     */
+    public function escalateOverdue(): int
+    {
+        $overdue = Complaint::query()
+            ->overdue()
+            ->whereNull('escalated_at')
+            ->get();
+
+        if ($overdue->isEmpty()) {
+            return 0;
+        }
+
+        $staff = User::where('status', 'active')
+            ->whereHas('roles', function ($q) {
+                $q->whereIn('code', ['counselor', 'guru_bk', 'principal', 'kepala_sekolah', 'super_admin']);
+            })
+            ->get();
+
+        foreach ($overdue as $complaint) {
+            $complaint->escalated_at = Carbon::now();
+            $complaint->save();
+
+            ComplaintEvent::create([
+                'complaint_id' => $complaint->id,
+                'actor_id' => null,
+                'event_type' => 'escalated',
+                'response_text' => 'Penanganan melewati batas waktu. Laporan diteruskan ke Kepala Sekolah dan Guru BK untuk ditindaklanjuti.',
+                'created_at' => Carbon::now(),
+            ]);
+
+            foreach ($staff as $user) {
+                try {
+                    Notification::create([
+                        'user_id' => $user->id,
+                        'notif_type' => 'complaint.sla_breach',
+                        'title' => 'Pengaduan Melewati Tenggat',
+                        'body' => "Pengaduan {$complaint->ticket_code} (kategori {$complaint->category}, keparahan {$complaint->severity}) belum ditutup melewati tenggat. Mohon segera ditindaklanjuti.",
+                        'data' => [
+                            'ticket_code' => $complaint->ticket_code,
+                            'category' => $complaint->category,
+                            'severity' => $complaint->severity,
+                            'action_url' => '/admin/public-relations?tab=complaints',
+                        ],
+                    ]);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+
+        return $overdue->count();
     }
 
     /**

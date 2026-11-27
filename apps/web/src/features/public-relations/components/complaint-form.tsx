@@ -558,6 +558,24 @@ export function ComplaintForm({
               {errors.category && (
                 <p className="text-xs text-red-600 font-medium">{errors.category.message}</p>
               )}
+
+              {/* Panduan cepat saat memilih Perundungan */}
+              {selectedCategory === 'bullying' && (
+                <div className="rounded-xl border border-red-200 bg-red-50/60 p-3.5 space-y-1.5">
+                  <p className="text-xs font-bold text-red-900 flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-red-600" />
+                    Jika ada risiko keselamatan saat ini
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-red-900/80">
+                    Segera hubungi Guru BK, wali kelas, atau kantor sekolah — jangan menunggu balasan lewat
+                    halaman ini. Laporan di sini ditangani dalam <strong>24 jam</strong>.
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-red-900/80">
+                    Kamu boleh melapor <strong>anonim</strong>: identitas pelapor tidak disimpan, hanya kode
+                    tiket yang bisa dipakai melacak. Simpan kode itu setelah laporan terkirim.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* 2. URAIAN LAPORAN */}

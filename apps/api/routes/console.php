@@ -30,6 +30,9 @@ Schedule::command('partnership:mou-expiry-reminder')->dailyAt('07:00')->withoutO
 // 6. ticket-sla-reminder: Per jam (Tiket pending lewat SLA)
 Schedule::command('sarpras:ticket-sla-reminder')->hourly()->withoutOverlapping();
 
+// Anti-bullying: eskalasi aduan yang melewati tenggat penanganan (tiap 30 menit)
+Schedule::command('complaints:escalate-overdue')->everyThirtyMinutes()->withoutOverlapping();
+
 // 7. backup-verify: Mingguan (Verifikasi backup)
 Schedule::command('system:backup-verify')->weekly()->withoutOverlapping();
 

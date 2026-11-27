@@ -19,16 +19,25 @@ class Complaint extends Model
         'reporter_user_id',
         'ticket_code',
         'category',
+        'severity',
         'content',
         'is_anonymous',
         'status',
         'assigned_to',
+        'due_at',
+        'first_responded_at',
+        'escalated_at',
     ];
 
     protected $casts = [
         'content' => SafeEncryptedCast::class,
         'is_anonymous' => 'boolean',
+        'due_at' => 'datetime',
+        'first_responded_at' => 'datetime',
+        'escalated_at' => 'datetime',
     ];
+
+    protected $appends = ['is_overdue', 'sla_state'];
 
     public function reporter(): BelongsTo
     {
@@ -51,6 +60,48 @@ class Complaint extends Model
     public function attachments(): HasMany
     {
         return $this->hasMany(File::class, 'owner_id')->where('owner_type', 'complaint');
+    }
+
+    /**
+     * Triase: aduan lewat tenggat dan belum ditutup dianggap terlambat.
+     */
+    public function getIsOverdueAttribute(): bool
+    {
+        if (! $this->due_at || in_array($this->status, ['selesai', 'ditolak'], true)) {
+            return false;
+        }
+
+        return $this->due_at->isPast();
+    }
+
+    /**
+     * sla_state: 'selesai' | 'tepat_waktu' | 'mendekati' | 'terlambat' | 'terlambat_berat'
+     * Dipakai UI untuk memberi warna badge tanpa menghitung ulang di klien.
+     */
+    public function getSlaStateAttribute(): string
+    {
+        if (in_array($this->status, ['selesai', 'ditolak'], true)) {
+            return 'selesai';
+        }
+
+        if (! $this->due_at) {
+            return 'tepat_waktu';
+        }
+
+        $hoursLeft = now()->diffInHours($this->due_at, false);
+
+        if ($hoursLeft < 0) {
+            return $this->escalated_at ? 'terlambat_berat' : 'terlambat';
+        }
+
+        return $hoursLeft <= 6 ? 'mendekati' : 'tepat_waktu';
+    }
+
+    public function scopeOverdue($query)
+    {
+        return $query->whereNotNull('due_at')
+            ->where('due_at', '<', now())
+            ->whereNotIn('status', ['selesai', 'ditolak']);
     }
 
     // Compatibility accessors

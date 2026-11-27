@@ -73,6 +73,12 @@ export interface ComplaintItem {
   content: string;
   is_anonymous: boolean;
   status: 'baru' | 'ditinjau' | 'ditindaklanjuti' | 'selesai' | 'ditolak';
+  severity?: 'rendah' | 'sedang' | 'tinggi' | 'kritis';
+  due_at?: string | null;
+  first_responded_at?: string | null;
+  escalated_at?: string | null;
+  is_overdue?: boolean;
+  sla_state?: 'selesai' | 'tepat_waktu' | 'mendekati' | 'terlambat' | 'terlambat_berat';
   assigned_to?: string | null;
   reporter_user_id?: string | null;
   created_at: string;
@@ -112,6 +118,10 @@ export interface PublicComplaintTrackResult {
   content?: string | null;
   content_redacted?: boolean;
   status: string;
+  severity?: 'rendah' | 'sedang' | 'tinggi' | 'kritis';
+  sla_state?: 'selesai' | 'tepat_waktu' | 'mendekati' | 'terlambat' | 'terlambat_berat';
+  due_at?: string | null;
+  first_responded_at?: string | null;
   created_at: string;
   updated_at: string;
   timeline: Array<{

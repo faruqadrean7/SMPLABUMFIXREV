@@ -21,7 +21,7 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-describe('ADM-GUEST-02: Review Admin Pengaduan Bullying (Prioritas, SLA 48 Jam & Audit Baca)', () => {
+describe('ADM-GUEST-02: Review Admin Pengaduan Bullying (Prioritas, Tenggat 24 Jam & Audit Baca)', () => {
   const mockComplaints = [
     {
       id: 'comp-1',
@@ -30,6 +30,10 @@ describe('ADM-GUEST-02: Review Admin Pengaduan Bullying (Prioritas, SLA 48 Jam &
       content: 'Laporan perundungan fisik di area belakang lab komputer.',
       is_anonymous: true,
       status: 'baru',
+      severity: 'tinggi',
+      due_at: new Date(Date.now() + 20 * 3600 * 1000).toISOString(),
+      is_overdue: false,
+      sla_state: 'tepat_waktu',
       created_at: '2026-11-03T07:00:00Z',
       updated_at: '2026-11-03T07:00:00Z',
       events: [
@@ -117,11 +121,14 @@ describe('ADM-GUEST-02: Review Admin Pengaduan Bullying (Prioritas, SLA 48 Jam &
     expect(await screen.findByText('ASP-20261103-BULL1')).toBeInTheDocument();
     expect(screen.getByText('ASP-20261103-FASIL')).toBeInTheDocument();
 
-    // Pastikan badge SLA 48 Jam muncul untuk baris perundungan
-    expect(screen.getByText('SLA: ≤ 48 Jam')).toBeInTheDocument();
+    // Baris perundungan menampilkan label kategori + tingkat keparahan
     expect(screen.getByText('Perundungan')).toBeInTheDocument();
+    expect(screen.getByText('tinggi')).toBeInTheDocument();
 
-    // Fasilitas tidak memiliki badge SLA darurat
+    // Indikator tenggat dihitung dari due_at, bukan angka SLA statis
+    expect(screen.getByText(/Sisa \d+ jam|Sisa \d+ hari/)).toBeInTheDocument();
+
+    // Fasilitas tetap tampil sebagai kategori biasa
     expect(screen.getByText('fasilitas')).toBeInTheDocument();
   });
 
@@ -150,7 +157,7 @@ describe('ADM-GUEST-02: Review Admin Pengaduan Bullying (Prioritas, SLA 48 Jam &
     expect(screen.getByText('BE-REPORT-02')).toBeInTheDocument();
 
     // Verifikasi banner khusus perundungan dengan peringatan SLA
-    expect(screen.getByText(/Perhatian Khusus — Kasus Perundungan \(SLA: ≤ 48 Jam\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Perhatian Khusus — Kasus Perundungan \(tenggat ≤ 24 jam\)/i)).toBeInTheDocument();
     expect(screen.getByText('Prioritas Tinggi')).toBeInTheDocument();
   });
 

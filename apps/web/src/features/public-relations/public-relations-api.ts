@@ -70,6 +70,9 @@ export const publicRelationsApi = {
     q?: string;
     category?: string;
     status?: string;
+    severity?: string;
+    overdue?: boolean;
+    unassigned?: boolean;
     start_date?: string;
     end_date?: string;
     assigned_to?: string;

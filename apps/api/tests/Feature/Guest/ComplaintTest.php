@@ -306,7 +306,9 @@ class ComplaintTest extends TestCase
         $response->assertStatus(422)
             ->assertJsonPath('error.code', 'UNPROCESSABLE_ENTITY');
 
-        $this->assertStringContainsString('tidak dapat dikembalikan ke status', $response->json('error.message'));
+        // Pesan kini menyebut transisi yang ditolak beserta langkah yang sah
+        $this->assertStringContainsString('tidak sah', $response->json('error.message'));
+        $this->assertStringContainsString('status akhir', $response->json('error.message'));
     }
 
     /**
