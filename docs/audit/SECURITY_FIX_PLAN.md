@@ -1,23 +1,30 @@
 # Rencana Perbaikan Keamanan, Analisis Dampak Kontrak API, & Prosedur Rollback (`SECURITY_FIX_PLAN`)
 
-> **Basis Verifikasi:** Branch `develop` · Commit awal `be6a875` · Update Pasca-Eksekusi Tier 0 + P0-16 (`66ea9bc`)  
+> **Basis Verifikasi:** Branch `develop` · Commit awal `be6a875` · Update Pasca-Eksekusi Tier 0 + P0-16 + Tier 1A (`6ec1be3`)  
 > **Prinsip Eksekusi:** Perubahan kecil & terisolasi (*surgical hotfix*, bukan refactoring besar), **non-destruktif terhadap data lama**, menjaga kebijakan bisnis `max(manual, auto)` & perbaikan `grade_component_id`, serta memetakan dampak ke **Web (`apps/web`)** dan **Android (`apps/mobile`)** sebelum eksekusi.
 
-## Status Eksekusi Terkini (Tier 0 + Surgical Fix P0-16 — SELESAI)
+## Status Eksekusi Terkini (Tier 0 + Surgical Fix P0-16 + Tier 1A — SELESAI)
 
-| ID | Status | Commit | File Utama | Rollback Command |
-|---|---|---|---|---|
-| **P0-01** | **SELESAI** | `7c5903e` | `DocxQuestionParser.php`, `BeCbt13DocxImportSecurityTest.php` | `git revert 7c5903e` |
-| **P0-02** | **SELESAI** | `018230e` | `OrphanFileService.php`, `OrphanFilePolymorphicProtectionTest.php` | `git revert 018230e` |
-| **P0-03** | **SELESAI** | `b2c49a5` | `FileStorageService.php`, `FileController.php`, `FileStorageIdorTest.php` | `git revert b2c49a5` |
-| **P0-04** | **SELESAI** | `6e15268` | `PresignFileRequest.php`, `FileStorageService.php`, `FileUploadSecurityTest.php` | `git revert 6e15268` |
-| **P0-05** | **SELESAI** | `b9f00ef` | `Student.php`, `Applicant.php`, `NikSerializationProtectionTest.php` | `git revert b9f00ef` |
-| **P0-06** | **SELESAI** | `279cfc3` | `GuardianService.php`, `GuardianListAuthorizationTest.php` | `git revert 279cfc3` |
-| **P0-07** | **SELESAI** | `813400a` | `UserService.php`, `UserPrivilegeEscalationTest.php` | `git revert 813400a` |
-| **P0-16** | **SELESAI (Surgical)** | `66ea9bc` | `TeacherLmsController.php`, `TeacherShowAssignmentRegressionTest.php` | `git revert 66ea9bc` |
+| Gelombang | ID | Status | Commit | File Utama | Rollback Command |
+|---|---|---|---|---|---|
+| **Tier 0** | **P0-01** | **SELESAI** | `7c5903e` | `DocxQuestionParser.php`, `BeCbt13DocxImportSecurityTest.php` | `git revert 7c5903e` |
+| **Tier 0** | **P0-02** | **SELESAI** | `018230e` | `OrphanFileService.php`, `OrphanFilePolymorphicProtectionTest.php` | `git revert 018230e` |
+| **Tier 0** | **P0-03** | **SELESAI** | `b2c49a5` | `FileStorageService.php`, `FileController.php`, `FileStorageIdorTest.php` | `git revert b2c49a5` |
+| **Tier 0** | **P0-04** | **SELESAI** | `6e15268` | `PresignFileRequest.php`, `FileStorageService.php`, `FileUploadSecurityTest.php` | `git revert 6e15268` |
+| **Tier 0** | **P0-05** | **SELESAI** | `b9f00ef` | `Student.php`, `Applicant.php`, `NikSerializationProtectionTest.php` | `git revert b9f00ef` |
+| **Tier 0** | **P0-06** | **SELESAI** | `279cfc3` | `GuardianService.php`, `GuardianListAuthorizationTest.php` | `git revert 279cfc3` |
+| **Tier 0** | **P0-07** | **SELESAI** | `813400a` | `UserService.php`, `UserPrivilegeEscalationTest.php` | `git revert 813400a` |
+| **Surgical** | **P0-16** | **SELESAI** | `66ea9bc` | `TeacherLmsController.php`, `TeacherShowAssignmentRegressionTest.php` | `git revert 66ea9bc` |
+| **Tier 1A** | **P0-18** | **SELESAI** | `9d9dcd3` | `SafeEncryptedCast.php`, `EncryptLegacySensitiveDataCommand.php`, `2026_11_27_000046_widen_counseling_requests_topic_to_text.php`, `CounselingRequestService.php`, `CounselingService.php`, `ComplaintService.php`, `routes/api/guest.php`, `complaint-tracker.tsx`, `BkAndComplaintPrivacyTest.php` | `git revert 9d9dcd3` |
+| **Tier 1A** | **P0-19** | **SELESAI** | `eea5450` | `LmsService.php`, `LmsNotificationPrivacyTest.php` | `git revert eea5450` |
+| **Tier 1A** | **P0-22** | **SELESAI** | `9a488db` | `PPDBResultService.php`, `PPDBAccountService.php`, `PPDBAccountController.php`, `PPDBApplicationService.php`, `routes/api/ppdb.php`, `PpdbSecurityHardeningTest.php` | `git revert 9a488db` |
+| **Tier 1A** | **P0-09** | **SELESAI** | `fc48d99` | `TeachingMaterialService.php`, `TeachingMaterialAuthorizationTest.php` | `git revert fc48d99` |
+| **Tier 1A** | **P0-10** | **SELESAI** | `36c3bb6` | `StaffAttendanceService.php`, `StaffAttendanceController.php`, `UpdateStaffAttendanceSettingsRequest.php`, `StaffAttendanceSecurityTest.php` | `git revert 36c3bb6` |
+| **Tier 1A** | **P0-11** | **SELESAI** | `6ec1be3` | `LibraryService.php`, `LabService.php`, `AssetService.php`, `AssetAuditService.php`, `PartnershipService.php`, `AlumniService.php`, 7 Controllers SAR/HUM, `SarAndHumAuthorizationTest.php` | `git revert 6ec1be3` |
 
-> **Kebijakan E-Rapor (`P1-16` — PENDING SCHOOL APPROVAL):** Alur yang direkomendasikan adalah *Guru Mapel (input & finalisasi nilai) → Wali Kelas (verifikasi kelengkapan rapor) → Kepala Sekolah (pengesahan & penerbitan rapor)*. Permission produksi **belum diubah** dan perilaku eksisting tetap dipertahankan hingga ada konfirmasi resmi dari pihak sekolah.
-> **Tier 1 s/d Tier 3:** Belum dieksekusi — menunggu review & persetujuan pemilik sistem.
+> **Kebijakan E-Rapor (`P1-16` — PENDING SCHOOL APPROVAL):** Alur yang direkomendasikan adalah *Guru Mapel (input & finalisasi nilai) → Wali Kelas (verifikasi kelengkapan rapor) → Kepala Sekolah (pengesahan & penerbitan rapor)*. Permission produksi **belum diubah** dan perilaku eksisting tetap dipertahankan hingga ada konfirmasi resmi dari pihak sekolah.  
+> **Tier 1B & Tier 2A s/d Tier 3:** Belum dieksekusi — menunggu review & persetujuan pemilik sistem.  
+> **Status Push:** Seluruh commit masih berada di branch lokal `develop` (belum di-push ke `origin/develop`).
 
 ---
 

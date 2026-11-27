@@ -36,3 +36,16 @@ Tidak ada satu pun dari 76 ID temuan besar yang 100% `ALREADY_FIXED` secara utuh
 | **P0-06** | `279cfc3` | Terapkan otorisasi deny-by-default pada `GuardianService::listGuardians()`. | `FIXED` |
 | **P0-07** | `813400a` | Wajibkan `auth.role.manage` & blokir eskalasi `super_admin` + `flushPermissionCache()` di `UserService`. | `FIXED` |
 | **P0-16 (showAssignment)** | `66ea9bc` | Kembalikan `grade_component_id`, `grade_component_name`, dan `max_score` pada `TeacherLmsController::showAssignment()` & `storeAssignment()` (tetap menjaga `max(manual, auto)`). | `FIXED` |
+
+---
+
+## Item yang Telah Diperbaiki pada Gelombang Tier 1A (27 Nov 2026)
+
+| ID | Commit | Ringkasan Perbaikan | Status |
+|---|---|---|---|
+| **P0-18** | `9d9dcd3` | `SafeEncryptedCast` (backward-compatible), backfill CLI `security:encrypt-legacy-sensitive-data` (default dry-run), pelebaran non-destruktif `counseling_requests.topic` ke `text`, akses BK eksklusif untuk `CounselingRequestService`, masking `follow_up` kepala sekolah, redaksi isi mentah pada pelacakan pengaduan publik + entropi kode tiket 10 hex + `throttle:10,5`, serta penghapusan teks sensitif dari `audit_logs`. | `FIXED` |
+| **P0-19** | `eea5450` | Hilangkan angka skor siswa (`score`) dan teks feedback privat dari `body` & `data` notifikasi `assignment.graded` di `LmsService::gradeSubmission()` (tetap menjaga sinkronisasi `GradeRecorder` `max(manual, auto)`). | `FIXED` |
+| **P0-22** | `9a488db` | Fail-closed pada `PPDBResultService` saat `result_publish_at` null, hentikan reset rate limiter pada kecocokan valid, lockout 5 kegagalan + `hash_equals()` di `PPDBAccountService::verifyOtp()`, migrasi validasi duplikat NIK ke blind index `nik_hash` (O(1)) tanpa membocorkan `existing_registration_no`/`status` secara publik, hapus penyimpanan NIK plaintext di `step_data` & `audit_logs`, dan perbaiki kolom audit `ip`. | `FIXED` |
+| **P0-09** | `fc48d99` | Otorisasi guru/admin pada upload & revisi `TeachingMaterialService`, verifikasi kepemilikan pada `createVersion()` & `file_id`, dan konsistensi penyimpanan disk `'local'` dengan `visibility = 'privat'` (siswa tetap dapat membaca daftar & detail modul ajar). | `FIXED` |
+| **P0-10** | `36c3bb6` | Wajibkan koordinat GPS (`lat`/`lng`) pada check-in & check-out `StaffAttendanceService` saat geofencing aktif, blokir peran non-staf (`student`/`guardian`/`guest`) dengan 403 di seluruh endpoint presensi pegawai, dan verifikasi kepemilikan `photo_file_id`. | `FIXED` |
+| **P0-11** | `6ec1be3` | Blokir self-return & manipulasi denda peminjam pada `LibraryService::returnLoan()` dan `LabService::returnLoan()`, sembunyikan riwayat `loans.borrower` pada detail buku/alat lab untuk non-petugas, serta batasi akses baca endpoint internal SAR & HUM (`assets*`, `asset-audits*`, `library/summary`, `lab-equipment/summary`, `partnerships*`, `exchange-programs/{id}/participants`, redaksi `tracer-surveys/{id}` & anti-IDOR `submitResponse`). | `FIXED` |
