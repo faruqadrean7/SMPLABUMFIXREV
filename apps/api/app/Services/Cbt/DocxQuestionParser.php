@@ -18,6 +18,11 @@ use ZipArchive;
 class DocxQuestionParser
 {
     /**
+     * Batas ukuran maksimum uncompressed word/document.xml (5 MB) untuk mencegah XML/ZIP bomb.
+     */
+    private const MAX_DOCUMENT_XML_BYTES = 5_242_880;
+
+    /**
      * Parse file DOCX dan kembalikan array draf soal serta daftar kesalahan per butir.
      *
      * @return array{questions: array, errors: array}
@@ -48,6 +53,12 @@ class DocxQuestionParser
             return null;
         }
 
+        $stat = $zip->statName('word/document.xml');
+        if (is_array($stat) && isset($stat['size']) && (int) $stat['size'] > self::MAX_DOCUMENT_XML_BYTES) {
+            $zip->close();
+            throw new \InvalidArgumentException('Ukuran XML dokumen DOCX melebihi batas keamanan maksimum 5 MB.');
+        }
+
         $xml = $zip->getFromName('word/document.xml');
         $zip->close();
 
@@ -55,13 +66,31 @@ class DocxQuestionParser
     }
 
     /**
-     * Parse XML OpenXML Word document.
+     * Parse XML OpenXML Word document secara aman (anti-XXE, anti-XInclude, anti-XML bomb).
      */
     protected function parseXmlContent(string $xmlContent): array
     {
+        if (strlen($xmlContent) > self::MAX_DOCUMENT_XML_BYTES) {
+            throw new \InvalidArgumentException('Ukuran XML dokumen DOCX melebihi batas keamanan maksimum 5 MB.');
+        }
+
+        if (
+            preg_match('/<!\s*(DOCTYPE|ENTITY)\b/i', $xmlContent) === 1
+            || stripos($xmlContent, 'http://www.w3.org/2001/XInclude') !== false
+            || preg_match('/<\s*(?:[a-z0-9_-]+:)?include\b/i', $xmlContent) === 1
+        ) {
+            throw new \InvalidArgumentException('Dokumen DOCX mengandung deklarasi XML berbahaya (DOCTYPE/ENTITY/XInclude) dan ditolak demi keamanan.');
+        }
+
         $dom = new DOMDocument;
-        // Supress warnings for OpenXML namespaces
-        @$dom->loadXML($xmlContent, LIBXML_NOENT | LIBXML_XINCLUDE | LIBXML_NOERROR | LIBXML_NOWARNING);
+        $previousLibxmlState = libxml_use_internal_errors(true);
+        try {
+            // Gunakan LIBXML_NONET tanpa LIBXML_NOENT / LIBXML_XINCLUDE untuk mencegah XXE
+            $dom->loadXML($xmlContent, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousLibxmlState);
+        }
 
         $xpath = new DOMXPath($dom);
         $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
