@@ -22,10 +22,11 @@ class PartnershipService
 
     public function listPartnerships(array $filters, ?Request $request = null): LengthAwarePaginator
     {
+        $user = $request?->user();
+        $this->authorizeStaffOrAdmin($user);
+
         $query = Partnership::with('mouFile')
             ->orderBy('valid_until', 'asc');
-
-        $user = $request?->user();
         if ($user && ! empty($user->school_id)) {
             $query->where(function ($q) use ($user) {
                 $q->where('school_id', $user->school_id)->orWhereNull('school_id');
@@ -64,12 +65,14 @@ class PartnershipService
 
     public function getPartnership(string $id, ?Request $request = null): Partnership
     {
+        $user = $request?->user();
+        $this->authorizeStaffOrAdmin($user);
+
         $partnership = Partnership::with([
             'mouFile',
             'exchangePrograms.participants.student',
         ])->findOrFail($id);
 
-        $user = $request?->user();
         if ($user && ! empty($user->school_id) && ! empty($partnership->school_id) && $partnership->school_id !== $user->school_id) {
             throw new HttpException(403, 'Akses ditolak: Kemitraan berada di luar sekolah penugasan Anda.');
         }
@@ -154,8 +157,12 @@ class PartnershipService
     /**
      * Dapatkan daftar kemitraan yang akan kedaluwarsa dalam X hari (untuk notifikasi/scheduler).
      */
-    public function getExpiringMoUs(int $withinDays = 30): Collection
+    public function getExpiringMoUs(int $withinDays = 30, ?Request $request = null): Collection
     {
+        if ($request !== null) {
+            $this->authorizeStaffOrAdmin($request->user());
+        }
+
         $now = Carbon::now()->startOfDay();
         $future = Carbon::now()->addDays($withinDays)->endOfDay();
 
@@ -198,13 +205,18 @@ class PartnershipService
         return $query->paginate((int) ($filters['per_page'] ?? 15));
     }
 
-    public function getExchangeProgram(string $id): ExchangeProgram
+    public function getExchangeProgram(string $id, ?Request $request = null): ExchangeProgram
     {
-        return ExchangeProgram::with([
-            'partnership.mouFile',
-            'pic',
-            'participants.student',
-        ])->findOrFail($id);
+        $user = $request?->user();
+        $program = ExchangeProgram::with(['partnership', 'pic'])->findOrFail($id);
+
+        // P0-11: Hanya staf Humas/Admin atau Guru PIC program yang boleh melihat daftar peserta & nomor paspor
+        $isPic = $user && $program->pic_teacher_id && $user->teacher?->id === $program->pic_teacher_id;
+        if ($this->isStaffOrAdmin($user) || $isPic) {
+            $program->load(['partnership.mouFile', 'participants.student']);
+        }
+
+        return $program;
     }
 
     public function createExchangeProgram(array $data, Request $request): ExchangeProgram
@@ -283,9 +295,15 @@ class PartnershipService
     // 3. PESERTA PERTUKARAN PELAJAR (PARTICIPANTS)
     // =========================================================================
 
-    public function listParticipants(string $programId): Collection
+    public function listParticipants(string $programId, ?Request $request = null): Collection
     {
-        ExchangeProgram::findOrFail($programId);
+        $user = $request?->user();
+        $program = ExchangeProgram::findOrFail($programId);
+
+        $isPic = $user && $program->pic_teacher_id && $user->teacher?->id === $program->pic_teacher_id;
+        if (! $this->isStaffOrAdmin($user) && ! $isPic) {
+            throw new HttpException(403, 'Akses ditolak: Daftar peserta pertukaran pelajar hanya dapat diakses staf Humas, pembina PIC, atau administrator.');
+        }
 
         return ExchangeParticipant::with('student')
             ->where('program_id', $programId)

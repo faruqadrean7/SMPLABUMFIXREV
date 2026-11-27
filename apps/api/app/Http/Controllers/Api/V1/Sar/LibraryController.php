@@ -35,6 +35,8 @@ class LibraryController extends Controller
             $summary = $this->service->getSummary($request);
 
             return $this->successResponse($summary);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 

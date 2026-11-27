@@ -32,6 +32,8 @@ class PartnershipController extends Controller
             $paginator = $this->service->listPartnerships($request->validated(), $request);
 
             return $this->paginatedResponse($paginator);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -129,9 +131,11 @@ class PartnershipController extends Controller
     {
         try {
             $days = (int) ($request->query('days', 30));
-            $partnerships = $this->service->getExpiringMoUs($days);
+            $partnerships = $this->service->getExpiringMoUs($days, $request);
 
             return $this->successResponse($partnerships);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 

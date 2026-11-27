@@ -58,12 +58,16 @@ class LibraryService
     }
 
     /**
-     * BE-SAR-04: Detail buku perpustakaan.
+     * BE-SAR-04: Detail buku perpustakaan (P0-11: sembunyikan riwayat peminjam dari non-pustakawan).
      */
     public function getBook(string $id, ?Request $request = null): LibraryBook
     {
         $user = $request?->user();
-        $book = LibraryBook::with(['coverFile', 'file', 'loans.borrower'])->findOrFail($id);
+        $relations = $this->isLibrarianOrAdmin($user)
+            ? ['coverFile', 'file', 'loans.borrower']
+            : ['coverFile', 'file'];
+
+        $book = LibraryBook::with($relations)->findOrFail($id);
 
         if ($user && ! empty($user->school_id) && ! empty($book->school_id) && $book->school_id !== $user->school_id) {
             throw new HttpException(403, 'Akses ditolak: Buku perpustakaan berada di luar sekolah penugasan Anda.');
@@ -263,20 +267,18 @@ class LibraryService
 
     /**
      * BE-SAR-04: Pengembalian buku perpustakaan + kalkulasi denda otomatis.
+     * P0-11: Hanya pustakawan/staf berwenang yang boleh memproses pengembalian & status denda.
      */
     public function returnLoan(string $id, array $data, Request $request): Loan
     {
         $user = $request->user();
+        $this->authorizeManageLibrary($user);
 
         return DB::transaction(function () use ($id, $data, $user, $request) {
             $loan = Loan::with('book')->lockForUpdate()->findOrFail($id);
 
             if ($user && ! empty($user->school_id) && $loan->book && ! empty($loan->book->school_id) && $loan->book->school_id !== $user->school_id) {
                 throw new HttpException(403, 'Akses ditolak: Transaksi peminjaman berada di luar sekolah penugasan Anda.');
-            }
-
-            if (! $this->isLibrarianOrAdmin($user) && $loan->borrower_id !== $user->id) {
-                throw new HttpException(403, 'Akses ditolak: Anda tidak berwenang mengembalikan pinjaman ini.');
             }
 
             if ($loan->status === 'dikembalikan') {
@@ -313,11 +315,14 @@ class LibraryService
     }
 
     /**
-     * BE-SAR-04: Ringkasan metrik dashboard perpustakaan.
+     * BE-SAR-04: Ringkasan metrik dashboard perpustakaan (P0-11: khusus staf perpustakaan/pimpinan/admin).
      */
     public function getSummary(Request $request): array
     {
         $user = $request->user();
+        if (! $this->isLibrarianOrAdmin($user) && ! $user?->hasRole(['principal', 'admin_tu'])) {
+            throw new HttpException(403, 'Akses ditolak: Ringkasan perpustakaan hanya dapat diakses petugas atau administrator.');
+        }
         $bookQuery = LibraryBook::query();
         $loanQuery = Loan::query();
 

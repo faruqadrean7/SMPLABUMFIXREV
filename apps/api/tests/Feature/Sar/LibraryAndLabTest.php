@@ -335,7 +335,8 @@ class LibraryAndLabTest extends TestCase
             'status' => 'dipinjam',
         ]);
 
-        $res = $this->actingAs($this->studentUser)
+        // P0-11: Pengembalian buku wajib diverifikasi oleh pustakawan (bukan self-return oleh peminjam)
+        $res = $this->actingAs($this->librarianUser)
             ->postJson("/api/v1/library/loans/{$loan->id}/return", [
                 'returned_at' => Carbon::now()->toDateString(),
             ]);
@@ -401,7 +402,7 @@ class LibraryAndLabTest extends TestCase
             'status' => 'dikembalikan',
         ]);
 
-        $this->actingAs($this->studentUser)
+        $this->actingAs($this->librarianUser)
             ->postJson("/api/v1/library/loans/{$loan->id}/return", [])
             ->assertStatus(422)
             ->assertJsonPath('error.code', 'HTTP_ERROR');

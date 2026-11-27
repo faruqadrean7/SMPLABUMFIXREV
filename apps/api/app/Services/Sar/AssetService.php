@@ -15,13 +15,14 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class AssetService
 {
     /**
-     * BE-SAR-02: Daftar aset berpaginasi.
+     * BE-SAR-02: Daftar aset berpaginasi (P0-11: hanya staf/guru/admin).
      */
     public function listAssets(array $filters, ?Request $request = null): LengthAwarePaginator
     {
-        $query = Asset::with('room')->orderBy('created_at', 'desc');
-
         $user = $request?->user();
+        $this->authorizeAssetRead($user);
+
+        $query = Asset::with('room')->orderBy('created_at', 'desc');
         if ($user && ! empty($user->school_id)) {
             $query->where(function ($q) use ($user) {
                 $q->whereNull('school_id')->orWhere('school_id', $user->school_id);
@@ -54,11 +55,12 @@ class AssetService
     }
 
     /**
-     * BE-SAR-02: Detail aset berdasarkan ID.
+     * BE-SAR-02: Detail aset berdasarkan ID (P0-11: hanya staf/guru/admin).
      */
     public function getAsset(string $id, ?Request $request = null): Asset
     {
         $user = $request?->user();
+        $this->authorizeAssetRead($user);
         $asset = Asset::with([
             'room',
             'auditItems.audit.auditor:id,username',
@@ -74,11 +76,12 @@ class AssetService
     }
 
     /**
-     * BE-SAR-02: Scan / lookup aset berdasarkan kode QR/barcode.
+     * BE-SAR-02: Scan / lookup aset berdasarkan kode QR/barcode (P0-11: hanya staf/guru/admin).
      */
     public function getAssetByCode(string $code, ?Request $request = null): Asset
     {
         $user = $request?->user();
+        $this->authorizeAssetRead($user);
         $query = Asset::with([
             'room',
             'auditItems.audit.auditor:id,username',
@@ -124,11 +127,12 @@ class AssetService
     }
 
     /**
-     * BE-SAR-02: Ringkasan metrik inventaris dan kondisi aset.
+     * BE-SAR-02: Ringkasan metrik inventaris dan kondisi aset (P0-11: hanya staf/guru/admin).
      */
     public function getSummary(Request $request): array
     {
         $user = $request->user();
+        $this->authorizeAssetRead($user);
         $query = Asset::query();
 
         if ($user && ! empty($user->school_id)) {
@@ -245,6 +249,41 @@ class AssetService
         $this->logAudit($user?->id, 'asset.delete', 'assets', $id, $oldValues, null, $request);
 
         return true;
+    }
+
+    /**
+     * P0-11: Akses baca inventaris aset hanya untuk guru, staf sekolah, dan administrator.
+     */
+    protected function authorizeAssetRead(?User $user): void
+    {
+        if (! $user) {
+            throw new HttpException(401, 'Unauthenticated');
+        }
+
+        $canRead = $user->hasRole([
+            'admin',
+            'super_admin',
+            'admin_tu',
+            'principal',
+            'facility_staff',
+            'sarpras',
+            'teacher',
+            'guru',
+            'homeroom',
+            'wali_kelas',
+            'staff',
+            'librarian',
+            'laboran',
+            'lab_assistant',
+            'counselor',
+            'humas',
+            'finance_staff',
+        ]) || $user->hasPermission('facility.asset.manage') || $user->hasPermission('facility.booking.manage')
+            || $user->teacher()->exists() || $user->staff()->exists();
+
+        if (! $canRead) {
+            throw new HttpException(403, 'Akses ditolak: Data inventaris aset hanya dapat diakses guru, staf, dan administrator sekolah.');
+        }
     }
 
     protected function authorizeManage(?User $user): void

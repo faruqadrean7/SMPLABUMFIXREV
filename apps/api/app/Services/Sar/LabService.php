@@ -61,12 +61,16 @@ class LabService
     }
 
     /**
-     * BE-SAR-04: Detail inventaris alat laboratorium.
+     * BE-SAR-04: Detail inventaris alat laboratorium (P0-11: sembunyikan riwayat peminjam dari non-laboran).
      */
     public function getEquipment(string $id, ?Request $request = null): LabEquipment
     {
         $user = $request?->user();
-        $equipment = LabEquipment::with(['room', 'loans.borrower'])->findOrFail($id);
+        $relations = $this->isLabStaffOrAdmin($user)
+            ? ['room', 'loans.borrower']
+            : ['room'];
+
+        $equipment = LabEquipment::with($relations)->findOrFail($id);
 
         if ($user && ! empty($user->school_id) && ! empty($equipment->school_id) && $equipment->school_id !== $user->school_id) {
             throw new HttpException(403, 'Akses ditolak: Alat laboratorium berada di luar sekolah penugasan Anda.');
@@ -253,20 +257,18 @@ class LabService
 
     /**
      * BE-SAR-04: Pengembalian alat laboratorium.
+     * P0-11: Hanya laboran/staf berwenang yang boleh memproses pengembalian alat lab.
      */
     public function returnLoan(string $id, array $data, Request $request): LabLoan
     {
         $user = $request->user();
+        $this->authorizeManageLab($user);
 
         return DB::transaction(function () use ($id, $data, $user, $request) {
             $loan = LabLoan::with(['equipment', 'borrower'])->lockForUpdate()->findOrFail($id);
 
             if ($user && ! empty($user->school_id) && $loan->equipment && ! empty($loan->equipment->school_id) && $loan->equipment->school_id !== $user->school_id) {
                 throw new HttpException(403, 'Akses ditolak: Transaksi peminjaman alat lab berada di luar sekolah penugasan Anda.');
-            }
-
-            if (! $this->isLabStaffOrAdmin($user) && $loan->borrower_id !== $user->id) {
-                throw new HttpException(403, 'Akses ditolak: Anda tidak berwenang mengembalikan pinjaman alat lab ini.');
             }
 
             if ($loan->status === 'dikembalikan') {
@@ -289,11 +291,14 @@ class LabService
     }
 
     /**
-     * BE-SAR-04: Ringkasan metrik dashboard inventaris alat laboratorium.
+     * BE-SAR-04: Ringkasan metrik dashboard inventaris alat laboratorium (P0-11: khusus laboran/pimpinan/admin).
      */
     public function getSummary(Request $request): array
     {
         $user = $request->user();
+        if (! $this->isLabStaffOrAdmin($user) && ! $user?->hasRole(['principal', 'admin_tu'])) {
+            throw new HttpException(403, 'Akses ditolak: Ringkasan inventaris laboratorium hanya dapat diakses petugas atau administrator.');
+        }
         $equipQuery = LabEquipment::query();
         $loanQuery = LabLoan::query();
 

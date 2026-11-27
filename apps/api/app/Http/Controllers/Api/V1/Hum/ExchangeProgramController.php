@@ -45,14 +45,16 @@ class ExchangeProgramController extends Controller
      * BE-HUM-01: Detail program pertukaran beserta daftar siswa peserta.
      * GET /api/v1/exchange-programs/{id}
      */
-    public function show(string $id): JsonResponse
+    public function show(string $id, Request $request): JsonResponse
     {
         try {
-            $program = $this->service->getExchangeProgram($id);
+            $program = $this->service->getExchangeProgram($id, $request);
 
             return $this->successResponse($program);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Program pertukaran tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -127,14 +129,16 @@ class ExchangeProgramController extends Controller
      * BE-HUM-01: Daftar peserta pertukaran pelajar per program.
      * GET /api/v1/exchange-programs/{id}/participants
      */
-    public function indexParticipants(string $id): JsonResponse
+    public function indexParticipants(string $id, Request $request): JsonResponse
     {
         try {
-            $participants = $this->service->listParticipants($id);
+            $participants = $this->service->listParticipants($id, $request);
 
             return $this->successResponse($participants);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Program pertukaran tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 

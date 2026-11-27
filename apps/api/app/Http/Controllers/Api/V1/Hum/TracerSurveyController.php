@@ -44,14 +44,16 @@ class TracerSurveyController extends Controller
      * BE-HUM-02: Detail instrumen kuesioner tracer study.
      * GET /api/v1/tracer-surveys/{id}
      */
-    public function show(string $id): JsonResponse
+    public function show(string $id, Request $request): JsonResponse
     {
         try {
-            $survey = $this->service->getSurvey($id);
+            $survey = $this->service->getSurvey($id, $request->user());
 
             return $this->successResponse($survey);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Kuesioner tracer study tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 

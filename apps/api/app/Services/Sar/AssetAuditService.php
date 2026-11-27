@@ -15,15 +15,16 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class AssetAuditService
 {
     /**
-     * BE-SAR-02: Daftar sesi stok opname aset.
+     * BE-SAR-02: Daftar sesi stok opname aset (P0-11: hanya staf sarpras/pimpinan/admin).
      */
     public function listAudits(array $filters, ?Request $request = null): LengthAwarePaginator
     {
+        $user = $request?->user();
+        $this->authorizeAuditRead($user);
+
         $query = AssetAudit::with(['auditor:id,username', 'room'])
             ->withCount('items')
             ->orderBy('audit_date', 'desc');
-
-        $user = $request?->user();
         if ($user && ! empty($user->school_id)) {
             $query->where(function ($q) use ($user) {
                 $q->whereNull('school_id')->orWhere('school_id', $user->school_id);
@@ -50,11 +51,12 @@ class AssetAuditService
     }
 
     /**
-     * BE-SAR-02: Detail sesi audit aset.
+     * BE-SAR-02: Detail sesi audit aset (P0-11: hanya staf sarpras/pimpinan/admin).
      */
     public function getAudit(string $id, ?Request $request = null): AssetAudit
     {
         $user = $request?->user();
+        $this->authorizeAuditRead($user);
         $audit = AssetAudit::with(['auditor:id,username', 'room', 'items.asset.room'])->findOrFail($id);
 
         if ($user && ! empty($user->school_id) && ! empty($audit->school_id) && $audit->school_id !== $user->school_id) {
@@ -173,6 +175,26 @@ class AssetAuditService
         $this->logAudit($user->id, 'asset_audit.update', 'asset_audits', $audit->id, $oldValues, $audit->fresh()->toArray(), $request);
 
         return $audit->fresh(['auditor:id,username', 'room', 'items.asset']);
+    }
+
+    protected function authorizeAuditRead(?User $user): void
+    {
+        if (! $user) {
+            throw new HttpException(401, 'Unauthenticated');
+        }
+
+        $canRead = $user->hasRole([
+            'admin',
+            'super_admin',
+            'admin_tu',
+            'principal',
+            'facility_staff',
+            'sarpras',
+        ]) || $user->hasPermission('facility.asset.manage') || $user->hasPermission('facility.booking.manage');
+
+        if (! $canRead) {
+            throw new HttpException(403, 'Akses ditolak: Data stok opname aset hanya dapat diakses staf sarpras, pimpinan, dan administrator.');
+        }
     }
 
     protected function authorizeManage(?User $user): void

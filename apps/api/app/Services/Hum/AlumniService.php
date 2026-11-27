@@ -186,9 +186,19 @@ class AlumniService
         return $query->paginate((int) ($filters['per_page'] ?? 15));
     }
 
-    public function getSurvey(string $id): TracerSurvey
+    public function getSurvey(string $id, ?User $currentUser = null): TracerSurvey
     {
-        return TracerSurvey::with(['creator', 'responses.alumni.student'])->findOrFail($id);
+        if ($this->isStaffOrAdmin($currentUser)) {
+            return TracerSurvey::with(['creator', 'responses.alumni.student'])->findOrFail($id);
+        }
+
+        // P0-11: Non-staf hanya melihat instrumen kuesioner aktif tanpa respons/PII alumni lain
+        $survey = TracerSurvey::with(['creator:id,username'])->findOrFail($id);
+        if (! $survey->is_active) {
+            throw new HttpException(403, 'Akses ditolak: Kuesioner tracer study ini belum dipublikasikan atau telah ditutup.');
+        }
+
+        return $survey;
     }
 
     public function createSurvey(array $data, Request $request): TracerSurvey
@@ -272,7 +282,12 @@ class AlumniService
             throw new HttpException(422, 'Data alumni tidak ditemukan untuk mengisi survei ini.');
         }
 
-        $alumni = Alumni::findOrFail($alumniId);
+        $alumni = Alumni::with('student')->findOrFail($alumniId);
+
+        // P0-11: Cegah alumni non-staf mengisi survei atas nama alumni lain (anti-IDOR)
+        if (! $this->isStaffOrAdmin($user) && (string) $alumni->student?->user_id !== (string) $user?->id) {
+            throw new HttpException(403, 'Akses ditolak: Anda hanya dapat mengisi kuesioner tracer study untuk profil alumni Anda sendiri.');
+        }
 
         // Validasi target angkatan jika ditentukan
         if ($survey->target_graduation_year !== null && $alumni->graduation_year !== $survey->target_graduation_year) {
