@@ -1,9 +1,9 @@
 # Rencana Perbaikan Keamanan, Analisis Dampak Kontrak API, & Prosedur Rollback (`SECURITY_FIX_PLAN`)
 
-> **Basis Verifikasi:** Branch `develop` · Commit awal `be6a875` · Push Tier 1B `6f08240` · Update Pasca-Eksekusi Tier 2A (`dad38d3`)  
+> **Basis Verifikasi:** Branch `develop` (`4347113`) · Batch 2B-1 lokal pada `feat/tier2b-1-concurrency-role-grade-queue`  
 > **Prinsip Eksekusi:** Perubahan kecil & terisolasi (*surgical hotfix*, bukan refactoring besar), **non-destruktif terhadap data lama**, menjaga kebijakan bisnis `max(manual, auto)` & perbaikan `grade_component_id`, serta memetakan dampak ke **Web (`apps/web`)** dan **Android (`apps/mobile`)** sebelum eksekusi.
 
-## Status Eksekusi Terkini (Tier 0 + Surgical Fix P0-16 + Tier 1A + Tier 1B + Tier 2A — SELESAI)
+## Status Eksekusi Terkini (Tier 0 → Tier 2A + Batch 2B-S + Batch 2B-1)
 
 | Gelombang | ID | Status | Commit | File Utama | Rollback Command |
 |---|---|---|---|---|---|
@@ -34,10 +34,15 @@
 | **Tier 2A** | **P0-21, P0-23** | **SELESAI** | `a8301c6` | `2026_11_27_000047_add_re_registration_deadline_at_to_applicants.php`, `Applicant.php`, `UpdatePPDBApplicationStepRequest.php`, `PPDBApplicationService.php`, `PPDBSelectionService.php`, `PPDBEnrollmentService.php`, `ppdb/dashboard/page.tsx`, `PpdbAutosaveAndEnrollmentTier2ATest.php` | `git revert a8301c6` *(migrasi aditif nullable aman di-rollback via `migrate:rollback --step=1` jika diperlukan)* |
 | **Tier 2A** | **P0-12, P0-13** | **SELESAI** | `b76d252` | `ExamGradingService.php`, `CbtMultiPackageGradingTier2ATest.php`, `portal/siswa/ujian/[id]/page.tsx`, `cbt-autosave-tier2a.test.tsx` | `git revert b76d252` |
 | **Tier 2A** | **P0-14, P0-26** | **SELESAI** | `dad38d3` | `AttendanceAggregator.php`, `ReportCardService.php`, `ProgressReportService.php`, `EarlyWarningService.php`, `ReportWeightAndAttendanceTier2ATest.php` | `git revert dad38d3` |
+| **Batch 2B-S** | **P1-23, P1-14, P1-11, P1-28, P1-25** | **SELESAI (merged `develop`)** | `4347113` *(merge `3e9f20d..bc27b70`)* | `MeStudentController.php`, `GradeService.php`, `TeacherGradingController.php`, `ExamGradingService.php`, `ProgressReportService.php`, `Exam*Controller/Service`, `ProgramKhususService.php`, `Student.php`, `PPDBEnrollmentService.php`, `GuardianService.php`, 5 file uji hardening | `git revert -m 1 4347113` |
+| **Batch 2B-1** | **T2B-CONC-02** | **SELESAI (lokal)** | `d4a5768` | `Role.php`, `PPDBEnrollmentService.php`, `PPDBAccountService.php`, `GuardianService.php`, `TeacherStaffService.php`, `ProvisionsLoginAccount.php`, `RoleEnsureSystemRoleTest.php` | `git revert d4a5768` |
+| **Batch 2B-1** | **T2B-CONC-03** | **SELESAI (lokal)** | `85acf3b` | `GradeRecorder.php`, `GradeRecorderTransactionTest.php` | `git revert 85acf3b` |
+| **Batch 2B-1** | **P1-39** | **SELESAI (lokal)** | `a516519` | `config/queue.php`, `apps/api/.env.example`, `QueueAfterCommitTest.php` | `git revert a516519` |
+| **Batch 2B-1** | **T2B-CONC-01** | **SELESAI (lokal)** | `66ddf16` | `PostgreSqlConcurrencyTest.php`, `tests/Concurrency/Tier2PostgreSqlConcurrencyTest.php`, `tests/Concurrency/worker.php`, `phpunit.xml`, `.github/workflows/deploy.yml` | `git revert 66ddf16` |
 
 > **Kebijakan E-Rapor (`P1-16` — PENDING SCHOOL APPROVAL):** Alur yang direkomendasikan adalah *Guru Mapel (input & finalisasi nilai) → Wali Kelas (verifikasi kelengkapan rapor) → Kepala Sekolah (pengesahan & penerbitan rapor)*. Permission produksi **belum diubah** dan perilaku eksisting tetap dipertahankan hingga ada konfirmasi resmi dari pihak sekolah.  
-> **Tier 2B & Tier 3:** Belum dieksekusi — menunggu review & persetujuan pemilik sistem.  
-> **Status Push:** Tier 0 + P0-16 + Tier 1A + Tier 1B telah di-push ke `origin/develop` (`6f08240`). Seluruh commit **Tier 2A** masih berada di branch lokal `develop` menunggu review & persetujuan push.  
+> **Batch 2B-2 s/d 2B-7 & Tier 3:** Belum dieksekusi — menunggu review & persetujuan pemilik sistem.  
+> **Status Push:** Tier 0 s/d Tier 2A + Batch 2B-S telah di-push ke `origin/develop` (`4347113`). Seluruh commit **Batch 2B-1** masih berada di branch fitur lokal `feat/tier2b-1-concurrency-role-grade-queue` menunggu review & persetujuan integrasi/push.  
 > **Kontrak Dual-Mode Cookie (`P1-01`) & 2FA (`P1-06`):**
 > - Web mengirim header `X-Auth-Token-Transport: cookie` + `withCredentials: true` sehingga `refreshToken` dikirim eksklusif via cookie HttpOnly `sistlabum_refresh_token` (`SameSite=Lax`, `Path=/api/v1/auth`) tanpa pernah tersimpan di `localStorage` atau body JSON.
 > - Klien Android/iOS (`platform: 'android'|'ios'`) tanpa header `X-Auth-Token-Transport: cookie` **tetap menerima `data.tokens.refreshToken` di JSON** dan me-refresh via JSON body (terverifikasi hijau pada `MobileClientAuthCompatibilityTest` & `DualModeAuthCookieTest`).
