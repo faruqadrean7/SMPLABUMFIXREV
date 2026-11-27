@@ -55,6 +55,29 @@ jobs:
             tests/Feature/Auth/LoginTest.php \
             tests/Feature/Integration
 
+      - name: Backend — PostgreSQL concurrency tests (gerbang wajib)
+        working-directory: apps/api
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5433
+          DB_DATABASE: sistlabum_concurrency_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: ""
+          PG_CONCURRENCY_HOST: 127.0.0.1
+          PG_CONCURRENCY_PORT: 5433
+          PG_CONCURRENCY_DATABASE: sistlabum_concurrency_test
+          PG_CONCURRENCY_USERNAME: postgres
+          PG_CONCURRENCY_PASSWORD: ""
+          PG_CONCURRENCY_REQUIRED: "true"
+        run: |
+          psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS sistlabum_concurrency_test WITH (FORCE);"
+          psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE sistlabum_concurrency_test;"
+          trap 'psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -c "DROP DATABASE IF EXISTS sistlabum_concurrency_test WITH (FORCE);" || true' EXIT
+          php artisan migrate --force
+          php artisan test tests/Feature/Ntf/PostgreSqlConcurrencyTest.php
+          php artisan test --testsuite=Concurrency
+
       # Suite penuh masih punya 26 test merah (seeder & kontrak error).
       # Ditampilkan sebagai informasi supaya tidak memblokir deploy,
       # sampai test-test itu diperbaiki. Hapus continue-on-error setelah hijau.

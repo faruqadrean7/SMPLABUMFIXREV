@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Ntf;
 
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Config;
@@ -12,73 +11,84 @@ use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
- * P0 — PostgreSQL Multi-Connection Concurrency & Integration Tests (Sprint 39)
+ * T2B-CONC-01: PostgreSQL Multi-Connection Concurrency & Integration Tests
  *
  * Menguji skenario konkurensi database nyata menggunakan dua koneksi
- * dan backend server process PostgreSQL terpisah (pg_backend_pid).
+ * dan backend server process PostgreSQL terpisah (pg_backend_pid) berbasis
+ * konfigurasi/environment aktif tanpa kredensial hardcoded.
  */
 class PostgreSqlConcurrencyTest extends TestCase
 {
+    protected const CONN_W1 = 'pgsql_concurrency_w1';
+
+    protected const CONN_W2 = 'pgsql_concurrency_w2';
+
     protected ?string $pgSchoolId = null;
 
     protected ?string $pgUserId = null;
 
     protected bool $postgresAvailable = false;
 
+    protected ?int $worker1Pid = null;
+
+    protected ?int $worker2Pid = null;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Konfigurasi dua koneksi PostgreSQL staging terpisah
-        Config::set('database.connections.pgsql_staging', [
-            'driver' => 'pgsql',
-            'host' => 'localhost',
-            'port' => 5432,
-            'database' => 'sistlabum_staging_test',
-            'username' => 'macbookprom12020',
-            'password' => '',
-            'charset' => 'utf8',
-            'prefix' => '',
-            'schema' => 'public',
-            'sslmode' => 'prefer',
-        ]);
+        $requirePg = filter_var(env('PG_CONCURRENCY_REQUIRED', false), FILTER_VALIDATE_BOOL);
+        $defaultDriver = (string) config('database.default', 'pgsql');
 
-        Config::set('database.connections.pgsql_staging_worker2', [
-            'driver' => 'pgsql',
-            'host' => 'localhost',
-            'port' => 5432,
-            'database' => 'sistlabum_staging_test',
-            'username' => 'macbookprom12020',
-            'password' => '',
-            'charset' => 'utf8',
-            'prefix' => '',
-            'schema' => 'public',
-            'sslmode' => 'prefer',
-        ]);
+        if ($defaultDriver !== 'pgsql' && ! env('PG_CONCURRENCY_HOST') && ! $requirePg) {
+            $this->markTestSkipped('Driver database aktif bukan pgsql dan PG_CONCURRENCY_HOST tidak disetel.');
+        }
 
+        $pgConfig = $this->resolvePgConnectionConfig();
+
+        Config::set('database.connections.'.self::CONN_W1, $pgConfig);
+        Config::set('database.connections.'.self::CONN_W2, $pgConfig);
+        DB::purge(self::CONN_W1);
+        DB::purge(self::CONN_W2);
+
+        $connectionError = null;
         try {
-            $pid1 = DB::connection('pgsql_staging')->select('SELECT pg_backend_pid() as pid')[0]->pid ?? null;
-            $pid2 = DB::connection('pgsql_staging_worker2')->select('SELECT pg_backend_pid() as pid')[0]->pid ?? null;
+            $pid1 = (int) (DB::connection(self::CONN_W1)->selectOne('SELECT pg_backend_pid() AS pid')->pid ?? 0);
+            $pid2 = (int) (DB::connection(self::CONN_W2)->selectOne('SELECT pg_backend_pid() AS pid')->pid ?? 0);
 
-            if ($pid1 && $pid2 && $pid1 !== $pid2) {
+            if ($pid1 > 0 && $pid2 > 0 && $pid1 !== $pid2) {
+                $this->worker1Pid = $pid1;
+                $this->worker2Pid = $pid2;
                 $this->postgresAvailable = true;
             }
         } catch (\Throwable $e) {
+            $connectionError = $e->getMessage();
             $this->postgresAvailable = false;
         }
 
         if (! $this->postgresAvailable) {
-            $this->markTestSkipped('PostgreSQL staging database sistlabum_staging_test tidak tersedia.');
+            $msg = sprintf(
+                'PostgreSQL concurrency database (%s:%s/%s) tidak tersedia%s.',
+                $pgConfig['host'],
+                $pgConfig['port'],
+                $pgConfig['database'],
+                $connectionError ? ': '.$connectionError : ''
+            );
+
+            if ($requirePg) {
+                $this->fail($msg);
+            }
+
+            $this->markTestSkipped($msg);
         }
 
         $this->pgSchoolId = (string) Str::uuid();
         $this->pgUserId = (string) Str::uuid();
 
-        // Buat user penerima di PostgreSQL staging
-        DB::connection('pgsql_staging')->table('users')->insert([
+        DB::connection(self::CONN_W1)->table('users')->insert([
             'id' => $this->pgUserId,
             'school_id' => $this->pgSchoolId,
-            'username' => 'pg_test_user_'.Str::random(6),
+            'username' => 'pg_test_user_'.Str::random(8),
             'email' => 'pg_'.Str::random(8).'@sekolah.sch.id',
             'password_hash' => Hash::make('password'),
             'status' => 'active',
@@ -90,12 +100,43 @@ class PostgreSqlConcurrencyTest extends TestCase
     protected function tearDown(): void
     {
         if ($this->postgresAvailable && $this->pgUserId) {
-            DB::connection('pgsql_staging')->table('notifications')->where('user_id', $this->pgUserId)->delete();
-            DB::connection('pgsql_staging')->table('reminder_dispatches')->where('recipient_id', $this->pgUserId)->delete();
-            DB::connection('pgsql_staging')->table('users')->where('id', $this->pgUserId)->delete();
+            DB::connection(self::CONN_W1)->table('notifications')->where('user_id', $this->pgUserId)->delete();
+            DB::connection(self::CONN_W1)->table('reminder_dispatches')->where('recipient_id', $this->pgUserId)->delete();
+            DB::connection(self::CONN_W1)->table('users')->where('id', $this->pgUserId)->delete();
         }
 
+        DB::disconnect(self::CONN_W1);
+        DB::disconnect(self::CONN_W2);
+
         parent::tearDown();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolvePgConnectionConfig(): array
+    {
+        $base = config('database.connections.pgsql', []);
+
+        $host = env('PG_CONCURRENCY_HOST');
+        $port = env('PG_CONCURRENCY_PORT');
+        $database = env('PG_CONCURRENCY_DATABASE');
+        $username = env('PG_CONCURRENCY_USERNAME');
+        $password = env('PG_CONCURRENCY_PASSWORD');
+        $sslmode = env('PG_CONCURRENCY_SSLMODE');
+
+        return array_merge($base, [
+            'driver' => 'pgsql',
+            'host' => ($host !== null && $host !== '') ? $host : ($base['host'] ?? '127.0.0.1'),
+            'port' => (int) (($port !== null && $port !== '') ? $port : ($base['port'] ?? 5432)),
+            'database' => ($database !== null && $database !== '') ? $database : ($base['database'] ?? 'sistlabum_testing'),
+            'username' => ($username !== null && $username !== '') ? $username : ($base['username'] ?? 'postgres'),
+            'password' => $password !== null ? (string) $password : (string) ($base['password'] ?? ''),
+            'charset' => $base['charset'] ?? 'utf8',
+            'prefix' => '',
+            'search_path' => $base['search_path'] ?? $base['schema'] ?? 'public',
+            'sslmode' => ($sslmode !== null && $sslmode !== '') ? $sslmode : ($base['sslmode'] ?? 'prefer'),
+        ]);
     }
 
     /**
@@ -104,11 +145,12 @@ class PostgreSqlConcurrencyTest extends TestCase
      */
     public function test_two_connections_compete_to_claim_dispatch_atomically(): void
     {
+        $this->assertNotSame($this->worker1Pid, $this->worker2Pid);
+
         $dispatchId = (string) Str::uuid();
         $eventId = (string) Str::uuid();
 
-        // Buat record pending di koneksi 1
-        DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
+        DB::connection(self::CONN_W1)->table('reminder_dispatches')->insert([
             'id' => $dispatchId,
             'school_id' => $this->pgSchoolId,
             'event_type' => 'cbt_exam',
@@ -126,8 +168,7 @@ class PostgreSqlConcurrencyTest extends TestCase
         $token2 = 'worker-2-'.Str::uuid();
         $now = Carbon::now();
 
-        // Worker 1 mengklaim via koneksi 1
-        $claim1 = DB::connection('pgsql_staging')
+        $claim1 = DB::connection(self::CONN_W1)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->whereIn('status', ['pending', 'failed'])
@@ -138,8 +179,7 @@ class PostgreSqlConcurrencyTest extends TestCase
                 'updated_at' => $now,
             ]);
 
-        // Worker 2 mencoba mengklaim dispatch yang sama via koneksi 2
-        $claim2 = DB::connection('pgsql_staging_worker2')
+        $claim2 = DB::connection(self::CONN_W2)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->whereIn('status', ['pending', 'failed'])
@@ -150,12 +190,10 @@ class PostgreSqlConcurrencyTest extends TestCase
                 'updated_at' => $now,
             ]);
 
-        // Verifikasi atomisitas: tepat satu klaim sukses
         $this->assertEquals(1, $claim1);
         $this->assertEquals(0, $claim2);
 
-        // Record di basis data harus memuat token Worker 1
-        $finalRecord = DB::connection('pgsql_staging')
+        $finalRecord = DB::connection(self::CONN_W1)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->first();
@@ -163,8 +201,7 @@ class PostgreSqlConcurrencyTest extends TestCase
         $this->assertEquals('processing', $finalRecord->status);
         $this->assertEquals($token1, $finalRecord->claim_token);
 
-        // Worker 2 memeriksa apakah ia memiliki klaim yang sah
-        $worker2OwnsClaim = DB::connection('pgsql_staging_worker2')
+        $worker2OwnsClaim = DB::connection(self::CONN_W2)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->where('status', 'processing')
@@ -173,13 +210,7 @@ class PostgreSqlConcurrencyTest extends TestCase
 
         $this->assertFalse($worker2OwnsClaim, 'Worker 2 must not own the claim');
 
-        // Worker 2 keluar secara damai tanpa membuat notifikasi
-        if (! $worker2OwnsClaim) {
-            // Worker 2 aborts
-        }
-
-        // Hitung notifikasi di PostgreSQL: tepat 0 karena worker 2 tidak mengirim
-        $notifCount = DB::connection('pgsql_staging')
+        $notifCount = DB::connection(self::CONN_W1)
             ->table('notifications')
             ->where('user_id', $this->pgUserId)
             ->count();
@@ -195,8 +226,7 @@ class PostgreSqlConcurrencyTest extends TestCase
         $eventId = (string) Str::uuid();
         $activeToken = 'active-worker-'.Str::uuid();
 
-        // Buat dispatch yang sedang diproses dengan masa berlaku 14 menit lagi
-        DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
+        DB::connection(self::CONN_W1)->table('reminder_dispatches')->insert([
             'id' => $dispatchId,
             'school_id' => $this->pgSchoolId,
             'event_type' => 'cbt_exam',
@@ -211,11 +241,10 @@ class PostgreSqlConcurrencyTest extends TestCase
             'updated_at' => Carbon::now()->subMinute(),
         ]);
 
-        // Recovery query berjalan di koneksi kedua
         $threshold = Carbon::now()->subMinutes(15);
         $now = Carbon::now();
 
-        $stuckQuery = DB::connection('pgsql_staging_worker2')
+        $stuckQuery = DB::connection(self::CONN_W2)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->where('status', 'processing')
@@ -230,7 +259,7 @@ class PostgreSqlConcurrencyTest extends TestCase
         $stuckIds = $stuckQuery->pluck('id')->all();
         $this->assertCount(0, $stuckIds, 'Recovery query must NOT pick active in-flight worker');
 
-        $record = DB::connection('pgsql_staging')->table('reminder_dispatches')->where('id', $dispatchId)->first();
+        $record = DB::connection(self::CONN_W1)->table('reminder_dispatches')->where('id', $dispatchId)->first();
         $this->assertEquals('processing', $record->status);
         $this->assertEquals($activeToken, $record->claim_token);
     }
@@ -245,8 +274,7 @@ class PostgreSqlConcurrencyTest extends TestCase
         $tokenOldWorker = 'old-worker-'.Str::uuid();
         $tokenNewWorker = 'new-worker-'.Str::uuid();
 
-        // 1. Worker lama mengklaim dispatch
-        DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
+        DB::connection(self::CONN_W1)->table('reminder_dispatches')->insert([
             'id' => $dispatchId,
             'school_id' => $this->pgSchoolId,
             'event_type' => 'cbt_exam',
@@ -256,13 +284,12 @@ class PostgreSqlConcurrencyTest extends TestCase
             'channel' => 'in_app',
             'status' => 'processing',
             'claim_token' => $tokenOldWorker,
-            'claim_expires_at' => Carbon::now()->subMinutes(5), // Sudah expired
+            'claim_expires_at' => Carbon::now()->subMinutes(5),
             'created_at' => Carbon::now()->subMinutes(30),
             'updated_at' => Carbon::now()->subMinutes(25),
         ]);
 
-        // 2. Recovery memulihkan dispatch ke status pending via koneksi 2
-        $recovered = DB::connection('pgsql_staging_worker2')
+        $recovered = DB::connection(self::CONN_W2)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->where('status', 'processing')
@@ -274,8 +301,7 @@ class PostgreSqlConcurrencyTest extends TestCase
             ]);
         $this->assertEquals(1, $recovered);
 
-        // 3. Worker baru mengklaim dispatch dengan Token Baru via koneksi 2
-        $claimedNew = DB::connection('pgsql_staging_worker2')
+        $claimedNew = DB::connection(self::CONN_W2)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->whereIn('status', ['pending', 'failed'])
@@ -287,8 +313,7 @@ class PostgreSqlConcurrencyTest extends TestCase
             ]);
         $this->assertEquals(1, $claimedNew);
 
-        // 4. Worker baru menyelesaikan pengiriman
-        DB::connection('pgsql_staging_worker2')->table('notifications')->insert([
+        DB::connection(self::CONN_W2)->table('notifications')->insert([
             'id' => (string) Str::uuid(),
             'user_id' => $this->pgUserId,
             'notif_type' => 'academic_announcement',
@@ -298,7 +323,7 @@ class PostgreSqlConcurrencyTest extends TestCase
             'created_at' => Carbon::now(),
         ]);
 
-        DB::connection('pgsql_staging_worker2')
+        DB::connection(self::CONN_W2)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->where('claim_token', $tokenNewWorker)
@@ -309,9 +334,8 @@ class PostgreSqlConcurrencyTest extends TestCase
                 'dispatched_at' => Carbon::now(),
             ]);
 
-        // 5. Worker lama (koneksi 1) bangun kembali dan mencoba menyelesaikan transaksi menggunakan Token Lama
-        $fencedOldWorker = DB::connection('pgsql_staging')->transaction(function () use ($dispatchId, $tokenOldWorker) {
-            $current = DB::connection('pgsql_staging')
+        $fencedOldWorker = DB::connection(self::CONN_W1)->transaction(function () use ($dispatchId, $tokenOldWorker) {
+            $current = DB::connection(self::CONN_W1)
                 ->table('reminder_dispatches')
                 ->where('id', $dispatchId)
                 ->where('claim_token', $tokenOldWorker)
@@ -320,25 +344,21 @@ class PostgreSqlConcurrencyTest extends TestCase
                 ->first();
 
             if (! $current) {
-                // Fencing violation: token lama ditolak!
                 return 'ABORTED_BY_FENCING';
             }
 
-            // Jika tidak ada fencing, baris ini akan membuat notifikasi ganda
             return 'SENT';
         });
 
         $this->assertEquals('ABORTED_BY_FENCING', $fencedOldWorker);
 
-        // 6. Verifikasi jumlah notifikasi tepat 1
-        $notifCount = DB::connection('pgsql_staging')
+        $notifCount = DB::connection(self::CONN_W1)
             ->table('notifications')
             ->where('user_id', $this->pgUserId)
             ->count();
         $this->assertEquals(1, $notifCount, 'Must contain exactly 1 notification from worker B');
 
-        // Status dispatch tetap 'dispatched'
-        $finalStatus = DB::connection('pgsql_staging')
+        $finalStatus = DB::connection(self::CONN_W1)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->value('status');
@@ -352,7 +372,7 @@ class PostgreSqlConcurrencyTest extends TestCase
     {
         $dispatchId = (string) Str::uuid();
 
-        DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
+        DB::connection(self::CONN_W1)->table('reminder_dispatches')->insert([
             'id' => $dispatchId,
             'school_id' => $this->pgSchoolId,
             'event_type' => 'cbt_exam',
@@ -367,8 +387,7 @@ class PostgreSqlConcurrencyTest extends TestCase
             'updated_at' => Carbon::now()->subMinutes(25),
         ]);
 
-        // Recovery 1 dan Recovery 2 bersaing mengupdate status dari 'processing' ke 'pending'
-        $rec1 = DB::connection('pgsql_staging')
+        $rec1 = DB::connection(self::CONN_W1)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->where('status', 'processing')
@@ -379,7 +398,7 @@ class PostgreSqlConcurrencyTest extends TestCase
                 'updated_at' => Carbon::now(),
             ]);
 
-        $rec2 = DB::connection('pgsql_staging_worker2')
+        $rec2 = DB::connection(self::CONN_W2)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->where('status', 'processing')
@@ -402,8 +421,7 @@ class PostgreSqlConcurrencyTest extends TestCase
         $eventId = (string) Str::uuid();
         $milestone = '24h';
 
-        // Insert pertama berhasil
-        DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
+        DB::connection(self::CONN_W1)->table('reminder_dispatches')->insert([
             'id' => (string) Str::uuid(),
             'school_id' => $this->pgSchoolId,
             'event_type' => 'cbt_exam',
@@ -418,8 +436,7 @@ class PostgreSqlConcurrencyTest extends TestCase
 
         $duplicateRejected = false;
         try {
-            // Insert kedua dengan kunci identik harus memicu SQLSTATE[23505] di PostgreSQL
-            DB::connection('pgsql_staging_worker2')->table('reminder_dispatches')->insert([
+            DB::connection(self::CONN_W2)->table('reminder_dispatches')->insert([
                 'id' => (string) Str::uuid(),
                 'school_id' => $this->pgSchoolId,
                 'event_type' => 'cbt_exam',
@@ -432,7 +449,6 @@ class PostgreSqlConcurrencyTest extends TestCase
                 'updated_at' => Carbon::now(),
             ]);
         } catch (QueryException $e) {
-            // PostgreSQL Unique Violation SQLSTATE code = 23505
             if (str_contains($e->getMessage(), '23505') || str_contains($e->getMessage(), 'unique') || str_contains($e->getMessage(), 'reminder_dispatches_event_recip_ms_unique')) {
                 $duplicateRejected = true;
             }
@@ -450,7 +466,7 @@ class PostgreSqlConcurrencyTest extends TestCase
         $eventId = (string) Str::uuid();
         $token = 'worker-rollback-'.Str::uuid();
 
-        DB::connection('pgsql_staging')->table('reminder_dispatches')->insert([
+        DB::connection(self::CONN_W1)->table('reminder_dispatches')->insert([
             'id' => $dispatchId,
             'school_id' => $this->pgSchoolId,
             'event_type' => 'cbt_exam',
@@ -467,9 +483,8 @@ class PostgreSqlConcurrencyTest extends TestCase
         $errorCaught = false;
 
         try {
-            DB::connection('pgsql_staging')->transaction(function () use ($eventId) {
-                // 1. Sisipkan notifikasi
-                DB::connection('pgsql_staging')->table('notifications')->insert([
+            DB::connection(self::CONN_W1)->transaction(function () use ($eventId) {
+                DB::connection(self::CONN_W1)->table('notifications')->insert([
                     'id' => (string) Str::uuid(),
                     'user_id' => $this->pgUserId,
                     'notif_type' => 'academic_announcement',
@@ -479,14 +494,12 @@ class PostgreSqlConcurrencyTest extends TestCase
                     'created_at' => Carbon::now(),
                 ]);
 
-                // 2. Simulasi kegagalan runtime (misal unhandled exception / connection drop)
                 throw new \RuntimeException('Simulated worker crash inside transaction');
             });
         } catch (\RuntimeException $e) {
             $errorCaught = true;
 
-            // Worker catch block memperbarui status menjadi 'failed'
-            DB::connection('pgsql_staging')
+            DB::connection(self::CONN_W1)
                 ->table('reminder_dispatches')
                 ->where('id', $dispatchId)
                 ->where('claim_token', $token)
@@ -500,15 +513,13 @@ class PostgreSqlConcurrencyTest extends TestCase
 
         $this->assertTrue($errorCaught);
 
-        // Verifikasi di PostgreSQL: Notifikasi TIDAK ada (ter-rollback sempurna)
-        $notifCount = DB::connection('pgsql_staging')
+        $notifCount = DB::connection(self::CONN_W1)
             ->table('notifications')
             ->where('user_id', $this->pgUserId)
             ->count();
         $this->assertEquals(0, $notifCount, 'Notification must be rolled back by PostgreSQL');
 
-        // Status dispatch adalah 'failed' dan claim_token bersih
-        $record = DB::connection('pgsql_staging')
+        $record = DB::connection(self::CONN_W1)
             ->table('reminder_dispatches')
             ->where('id', $dispatchId)
             ->first();
