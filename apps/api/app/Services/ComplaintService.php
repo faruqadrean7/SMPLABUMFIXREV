@@ -37,8 +37,11 @@ class ComplaintService
                 $ticketCode = 'ASP-'.$datePrefix.'-'.strtoupper(bin2hex(random_bytes(5)));
             }
 
+            // P0-20: Pengguna terautentikasi selalu terikat ke school_id miliknya (cegah spoofing tenant)
+            $resolvedSchoolId = $currentUser?->school_id ?? ($data['school_id'] ?? null);
+
             $complaint = Complaint::create([
-                'school_id' => $data['school_id'] ?? null,
+                'school_id' => $resolvedSchoolId,
                 'reporter_user_id' => $reporterUserId,
                 'ticket_code' => $ticketCode,
                 'category' => $data['category'],

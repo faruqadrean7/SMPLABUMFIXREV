@@ -31,7 +31,7 @@ class MessagingController extends Controller
     public function indexTemplates(ListNotificationTemplateRequest $request): JsonResponse
     {
         try {
-            $paginator = $this->service->listTemplates($request->validated());
+            $paginator = $this->service->listTemplates($request->validated(), $request);
 
             return $this->paginatedResponse($paginator);
         } catch (Throwable $e) {
@@ -45,14 +45,16 @@ class MessagingController extends Controller
      * BE-NTF-02: Detail template notifikasi.
      * GET /api/v1/notification-templates/{id}
      */
-    public function showTemplate(string $id): JsonResponse
+    public function showTemplate(string $id, Request $request): JsonResponse
     {
         try {
-            $template = $this->service->getTemplate($id);
+            $template = $this->service->getTemplate($id, $request);
 
             return $this->successResponse($template);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Template notifikasi tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'HTTP_ERROR', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -147,7 +149,7 @@ class MessagingController extends Controller
     public function indexLogs(ListNotificationLogRequest $request): JsonResponse
     {
         try {
-            $paginator = $this->service->listLogs($request->validated());
+            $paginator = $this->service->listLogs($request->validated(), $request);
 
             return $this->paginatedResponse($paginator);
         } catch (Throwable $e) {
@@ -161,14 +163,16 @@ class MessagingController extends Controller
      * BE-NTF-02: Detail log pengiriman notifikasi.
      * GET /api/v1/notification-logs/{id}
      */
-    public function showLog(string $id): JsonResponse
+    public function showLog(string $id, Request $request): JsonResponse
     {
         try {
-            $log = $this->service->getLog($id);
+            $log = $this->service->getLog($id, $request);
 
             return $this->successResponse($log);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Log notifikasi tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'HTTP_ERROR', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 

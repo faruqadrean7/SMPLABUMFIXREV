@@ -42,9 +42,10 @@ class ExamSyncService
 
         $participants = $participantsQuery->get();
 
-        $hmacSecret = (string) ($exam->sync_node_token ?: config('services.cbt.master_sync_token') ?: config('app.key'));
-
-        $questionsPayload = $exam->questions->map(function ($eq) use ($hmacSecret, $exam) {
+        // P1-08 & AGENTS.md §6.6: Kunci jawaban (is_correct, is_correct_hash, match_key)
+        // DILARANG keras dikirim dalam paket sinkronisasi node lokal. Penilaian resmi
+        // tetap dilakukan terpusat saat push via ExamGradingService.
+        $questionsPayload = $exam->questions->map(function ($eq) {
             $q = $eq->question;
             if (! $q) {
                 return null;
@@ -57,13 +58,11 @@ class ExamSyncService
                 'package_code' => $eq->package_code,
                 'question_type' => $q->question_type,
                 'body' => $q->body,
-                'options' => $q->options->map(function ($opt) use ($hmacSecret, $exam) {
+                'options' => $q->options->map(function ($opt) {
                     return [
                         'id' => $opt->id,
                         'label' => $opt->label,
                         'body' => $opt->body,
-                        'match_key' => $opt->match_key,
-                        'is_correct_hash' => hash_hmac('sha256', ($opt->is_correct ? 'CORRECT_' : 'INCORRECT_').$exam->id.':'.$opt->id, $hmacSecret),
                     ];
                 })->all(),
             ];

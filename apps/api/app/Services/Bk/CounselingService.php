@@ -165,7 +165,8 @@ class CounselingService
         $user = $request->user();
         $this->authorizeCounselorOrAdmin($user);
 
-        $case = CounselingCase::findOrFail($id);
+        $case = CounselingCase::with('student')->findOrFail($id);
+        $this->assertSameSchool($user, $case->student?->school_id, 'Akses ditolak: Kasus konseling ini berada di luar sekolah penugasan Anda.');
 
         if (! empty($data['category'])) {
             $case->category = $data['category'];
@@ -202,7 +203,8 @@ class CounselingService
         $user = $request->user();
         $this->authorizeCounselorOrAdmin($user);
 
-        $case = CounselingCase::findOrFail($caseId);
+        $case = CounselingCase::with('student')->findOrFail($caseId);
+        $this->assertSameSchool($user, $case->student?->school_id, 'Akses ditolak: Kasus konseling ini berada di luar sekolah penugasan Anda.');
 
         if ($case->status === 'selesai') {
             throw new HttpException(422, 'Tidak dapat menambahkan sesi pada kasus konseling yang telah selesai atau ditutup. Buka kembali kasus (ubah status ke aktif) terlebih dahulu.');
@@ -237,6 +239,7 @@ class CounselingService
         $this->authorizeCounselorOrAdminOrPrincipal($user);
 
         $session = CounselingSession::with('case.student')->findOrFail($id);
+        $this->assertSameSchool($user, $session->case?->student?->school_id, 'Akses ditolak: Sesi konseling ini berada di luar sekolah penugasan Anda.');
 
         $this->logAudit(
             $user->id,
@@ -369,7 +372,8 @@ class CounselingService
         $user = $request->user();
         $this->authorizeCounselorOrAdmin($user);
 
-        $referral = CounselingReferral::findOrFail($id);
+        $referral = CounselingReferral::with('student')->findOrFail($id);
+        $this->assertSameSchool($user, $referral->student?->school_id, 'Akses ditolak: Rujukan konseling ini berada di luar sekolah penugasan Anda.');
 
         if (in_array($referral->status, ['ditolak', 'selesai']) && $data['status'] === 'pending') {
             throw new HttpException(422, "Status rujukan konseling sudah final ({$referral->status}) dan tidak dapat dikembalikan ke status pending.");
@@ -390,6 +394,13 @@ class CounselingService
         );
 
         return $referral->fresh(['student.classes', 'referrer.teacher']);
+    }
+
+    protected function assertSameSchool(?User $user, ?string $resourceSchoolId, string $message): void
+    {
+        if (! empty($user?->school_id) && ! empty($resourceSchoolId) && $resourceSchoolId !== $user->school_id) {
+            throw new HttpException(403, $message);
+        }
     }
 
     protected function isCounselorOrAdmin(?User $user): bool

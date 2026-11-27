@@ -25,6 +25,13 @@ class AnnouncementService
 
         $query = Announcement::with(['author:id,username', 'attachment']);
 
+        // P0-20: Isolasi multi-tenant berdasarkan school_id pengguna
+        if (! empty($user?->school_id)) {
+            $query->where(function ($q) use ($user) {
+                $q->where('school_id', $user->school_id)->orWhereNull('school_id');
+            });
+        }
+
         if ($user) {
             $query->withExists(['reads as is_read' => fn ($q) => $q->where('user_id', $user->id)]);
         }
@@ -129,6 +136,8 @@ class AnnouncementService
         $announcement = Announcement::with(['author:id,username', 'attachment'])
             ->findOrFail($id);
 
+        $this->assertSameSchool($user, $announcement->school_id);
+
         if (! $isStaff && $announcement->author_id !== $user?->id) {
             // Harus sudah terbit & belum kedaluwarsa
             $now = Carbon::now();
@@ -156,8 +165,9 @@ class AnnouncementService
         $user = $request->user();
         $this->authorizeStaffOrAdmin($user);
 
+        // P0-20: Jangan pernah mempercayai school_id dari payload klien; gunakan school_id pengguna terautentikasi
         $announcement = Announcement::create([
-            'school_id' => $data['school_id'] ?? null,
+            'school_id' => $user->school_id,
             'author_id' => $user->id,
             'title' => $data['title'],
             'body' => $data['body'],
@@ -184,8 +194,10 @@ class AnnouncementService
         $this->authorizeStaffOrAdmin($user);
 
         $announcement = Announcement::findOrFail($id);
+        $this->assertSameSchool($user, $announcement->school_id);
         $this->authorizeAuthorOrAdmin($user, $announcement);
 
+        unset($data['school_id']);
         $oldValues = $announcement->toArray();
         $announcement->update($data);
 
@@ -203,6 +215,7 @@ class AnnouncementService
         $this->authorizeStaffOrAdmin($user);
 
         $announcement = Announcement::findOrFail($id);
+        $this->assertSameSchool($user, $announcement->school_id);
         $this->authorizeAuthorOrAdmin($user, $announcement);
 
         $oldValues = $announcement->toArray();
@@ -224,6 +237,7 @@ class AnnouncementService
         }
 
         $announcement = Announcement::findOrFail($id);
+        $this->assertSameSchool($user, $announcement->school_id);
         $isStaff = $this->isStaffOrAdmin($user);
 
         // Pastikan pengguna berhak melihat pengumuman ini
@@ -261,6 +275,7 @@ class AnnouncementService
         $this->authorizeStaffOrAdmin($user);
 
         $announcement = Announcement::findOrFail($id);
+        $this->assertSameSchool($user, $announcement->school_id);
         $this->authorizeAuthorOrAdmin($user, $announcement);
 
         $reads = AnnouncementRead::where('announcement_id', $id)
@@ -284,6 +299,13 @@ class AnnouncementService
     // =========================================================================
     // HELPER & OTORISASI
     // =========================================================================
+
+    protected function assertSameSchool(?User $user, ?string $resourceSchoolId): void
+    {
+        if (! empty($user?->school_id) && ! empty($resourceSchoolId) && $resourceSchoolId !== $user->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Pengumuman ini berada di luar sekolah penugasan Anda.');
+        }
+    }
 
     public function isStaffOrAdmin(?User $user): bool
     {

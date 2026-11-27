@@ -18,9 +18,17 @@ class MessagingService
     // 1. PENGELOLAAN TEMPLATE NOTIFIKASI
     // =========================================================================
 
-    public function listTemplates(array $filters): LengthAwarePaginator
+    public function listTemplates(array $filters, ?Request $request = null): LengthAwarePaginator
     {
+        $user = $request?->user();
         $query = NotificationTemplate::orderBy('code', 'asc');
+
+        // P0-20: Isolasi multi-tenant template notifikasi berdasarkan school_id
+        if (! empty($user?->school_id)) {
+            $query->where(function ($q) use ($user) {
+                $q->where('school_id', $user->school_id)->orWhereNull('school_id');
+            });
+        }
 
         if (! empty($filters['channel'])) {
             $query->where('channel', $filters['channel']);
@@ -42,9 +50,12 @@ class MessagingService
         return $query->paginate((int) ($filters['per_page'] ?? 15));
     }
 
-    public function getTemplate(string $id): NotificationTemplate
+    public function getTemplate(string $id, ?Request $request = null): NotificationTemplate
     {
-        return NotificationTemplate::with('logs')->findOrFail($id);
+        $template = NotificationTemplate::with('logs')->findOrFail($id);
+        $this->assertSameSchool($request?->user(), $template->school_id);
+
+        return $template;
     }
 
     public function createTemplate(array $data, Request $request): NotificationTemplate
@@ -52,8 +63,9 @@ class MessagingService
         $user = $request->user();
         $this->authorizeStaffOrAdmin($user);
 
+        // P0-20: Gunakan school_id milik pengguna terautentikasi, jangan percaya payload klien
         $template = NotificationTemplate::create([
-            'school_id' => $data['school_id'] ?? null,
+            'school_id' => $user->school_id,
             'code' => strtoupper($data['code']),
             'name' => $data['name'],
             'channel' => $data['channel'],
@@ -74,6 +86,8 @@ class MessagingService
         $this->authorizeStaffOrAdmin($user);
 
         $template = NotificationTemplate::findOrFail($id);
+        $this->assertSameSchool($user, $template->school_id);
+        unset($data['school_id']);
         $oldValues = $template->toArray();
 
         if (isset($data['code'])) {
@@ -93,6 +107,7 @@ class MessagingService
         $this->authorizeStaffOrAdmin($user);
 
         $template = NotificationTemplate::findOrFail($id);
+        $this->assertSameSchool($user, $template->school_id);
         $oldValues = $template->toArray();
 
         $template->delete();
@@ -116,7 +131,17 @@ class MessagingService
         if (! empty($data['template_id'])) {
             $template = NotificationTemplate::findOrFail($data['template_id']);
         } elseif (! empty($data['template_code'])) {
-            $template = NotificationTemplate::where('code', strtoupper($data['template_code']))->firstOrFail();
+            $templateQuery = NotificationTemplate::where('code', strtoupper($data['template_code']));
+            if (! empty($user?->school_id)) {
+                $templateQuery->where(function ($q) use ($user) {
+                    $q->where('school_id', $user->school_id)->orWhereNull('school_id');
+                });
+            }
+            $template = $templateQuery->firstOrFail();
+        }
+
+        if ($template) {
+            $this->assertSameSchool($user, $template->school_id);
         }
 
         if ($template && ! $template->is_active) {
@@ -176,7 +201,9 @@ class MessagingService
         $user = $request->user();
         $this->authorizeStaffOrAdmin($user);
 
-        $log = NotificationLog::findOrFail($logId);
+        $log = NotificationLog::with(['template', 'user'])->findOrFail($logId);
+        $this->assertSameSchool($user, $log->template?->school_id);
+        $this->assertSameSchool($user, $log->user?->school_id);
 
         if ($log->status === 'sent') {
             throw new HttpException(422, "Hanya notifikasi dengan status 'failed' yang dapat dikirim ulang.");
@@ -205,10 +232,17 @@ class MessagingService
     // 3. RIWAYAT & LOG PENGIRIMAN NOTIFIKASI
     // =========================================================================
 
-    public function listLogs(array $filters): LengthAwarePaginator
+    public function listLogs(array $filters, ?Request $request = null): LengthAwarePaginator
     {
+        $user = $request?->user();
         $query = NotificationLog::with(['template', 'user'])
             ->orderBy('created_at', 'desc');
+
+        if (! empty($user?->school_id)) {
+            $schoolId = $user->school_id;
+            $query->whereDoesntHave('template', fn ($tq) => $tq->whereNotNull('school_id')->where('school_id', '!=', $schoolId))
+                ->whereDoesntHave('user', fn ($uq) => $uq->whereNotNull('school_id')->where('school_id', '!=', $schoolId));
+        }
 
         if (! empty($filters['channel'])) {
             $query->where('channel', $filters['channel']);
@@ -225,9 +259,13 @@ class MessagingService
         return $query->paginate((int) ($filters['per_page'] ?? 15));
     }
 
-    public function getLog(string $id): NotificationLog
+    public function getLog(string $id, ?Request $request = null): NotificationLog
     {
-        return NotificationLog::with(['template', 'user'])->findOrFail($id);
+        $log = NotificationLog::with(['template', 'user'])->findOrFail($id);
+        $this->assertSameSchool($request?->user(), $log->template?->school_id);
+        $this->assertSameSchool($request?->user(), $log->user?->school_id);
+
+        return $log;
     }
 
     // =========================================================================
@@ -270,6 +308,13 @@ class MessagingService
             if (strlen($cleanNumber) < 8 && ! str_contains($recipient, 'fail')) {
                 throw new HttpException(422, 'Format nomor WhatsApp penerima tidak valid.');
             }
+        }
+    }
+
+    protected function assertSameSchool(?User $user, ?string $resourceSchoolId): void
+    {
+        if (! empty($user?->school_id) && ! empty($resourceSchoolId) && $resourceSchoolId !== $user->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Data notifikasi ini berada di luar sekolah penugasan Anda.');
         }
     }
 
