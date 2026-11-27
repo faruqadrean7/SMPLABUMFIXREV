@@ -10,7 +10,7 @@ class ChangeUserStatusRequest extends BaseApiRequest
     public function rules(): array
     {
         return [
-            'status' => ['required', 'string', Rule::in(['active', 'inactive', 'suspended'])],
+            'status' => ['required', 'string', Rule::in(['active', 'inactive', 'suspended', 'locked'])],
             'reason' => ['nullable', 'string', 'max:255'],
         ];
     }
@@ -19,7 +19,7 @@ class ChangeUserStatusRequest extends BaseApiRequest
     {
         return [
             'status.required' => 'Status baru wajib ditentukan',
-            'status.in' => 'Status pengguna harus berupa active, inactive, atau suspended',
+            'status.in' => 'Status pengguna harus berupa active, inactive, suspended, atau locked',
         ];
     }
 }

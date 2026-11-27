@@ -12,6 +12,7 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -339,9 +340,21 @@ class AuthService
             throw new HttpException(400, 'Kata sandi baru tidak boleh sama dengan kata sandi saat ini.', null, [], 400);
         }
 
-        $user->password_hash = Hash::make($newPassword);
-        $user->must_change_password = false;
-        $user->save();
+        DB::transaction(function () use ($user, $newPassword) {
+            $user->password_hash = Hash::make($newPassword);
+            $user->must_change_password = false;
+            $user->save();
+
+            // P1-03: Cabut seluruh token Sanctum perangkat lain & seluruh refresh token aktif
+            $currentTokenId = $user->currentAccessToken()?->id;
+            $user->tokens()
+                ->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))
+                ->delete();
+
+            RefreshToken::where('user_id', $user->id)
+                ->whereNull('revoked_at')
+                ->update(['revoked_at' => now()]);
+        });
 
         $this->logAudit($user->id, 'auth.password_changed', 'User', $user->id, null, null, $request);
     }

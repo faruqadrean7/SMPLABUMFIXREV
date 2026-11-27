@@ -156,15 +156,15 @@ class UserService
                 'roles' => $user->roles->pluck('code')->all(),
             ];
 
-            // Protect against self-deactivation/suspension
+            // Protect against self-deactivation/suspension/locking (P1-03)
             if (isset($data['status']) && $data['status'] !== $user->status) {
-                if ($user->id === $request->user()?->id && in_array($data['status'], ['inactive', 'suspended'], true)) {
-                    throw new HttpException(400, 'Tidak dapat menonaktifkan atau menangguhkan akun Anda sendiri demi menjaga akses administratif.');
+                if ($user->id === $request->user()?->id && in_array($data['status'], ['inactive', 'suspended', 'locked'], true)) {
+                    throw new HttpException(400, 'Tidak dapat menonaktifkan, menangguhkan, atau mengunci akun Anda sendiri demi menjaga akses administratif.');
                 }
                 $user->status = $data['status'];
 
-                // Revoke active sessions if deactivated or suspended
-                if (in_array($data['status'], ['inactive', 'suspended'], true)) {
+                // Revoke active sessions if deactivated, suspended, or locked
+                if (in_array($data['status'], ['inactive', 'suspended', 'locked'], true)) {
                     $this->revokeUserSessions($user->id);
                 }
             }
@@ -229,15 +229,15 @@ class UserService
     {
         $user = User::with('roles:id,code,name')->findOrFail($id);
 
-        if ($user->id === $request->user()?->id && in_array($status, ['inactive', 'suspended'], true)) {
-            throw new HttpException(400, 'Tidak dapat menonaktifkan atau menangguhkan akun Anda sendiri demi menjaga akses administratif.');
+        if ($user->id === $request->user()?->id && in_array($status, ['inactive', 'suspended', 'locked'], true)) {
+            throw new HttpException(400, 'Tidak dapat menonaktifkan, menangguhkan, atau mengunci akun Anda sendiri demi menjaga akses administratif.');
         }
 
         $oldStatus = $user->status;
         $user->status = $status;
         $user->save();
 
-        if (in_array($status, ['inactive', 'suspended'], true)) {
+        if (in_array($status, ['inactive', 'suspended', 'locked'], true)) {
             $this->revokeUserSessions($user->id);
         }
 
