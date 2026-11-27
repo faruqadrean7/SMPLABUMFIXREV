@@ -5,12 +5,57 @@ import {
   QuestionBankItem,
   QuestionItem,
   ExamRoomItem,
+  ExamMonitorResponse,
   ExamMonitorSessionItem,
   ExamResultItem,
+  EssaySubmissionItem,
   ItemAnalysisItem,
   StudentSessionData,
   StudentSessionQuestionItem,
 } from '@/types/cbt';
+
+const CBT_LOCK_TOKEN_PREFIX = 'sistlabum_cbt_lock_';
+const CBT_DEVICE_FP_KEY = 'sistlabum_cbt_device_fp';
+
+export const cbtSessionLock = {
+  getDeviceFingerprint(): string {
+    if (typeof window === 'undefined') return 'ssr-client';
+    try {
+      let fp = window.sessionStorage.getItem(CBT_DEVICE_FP_KEY);
+      if (!fp) {
+        const rand =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+        fp = `web-${rand}`.slice(0, 96);
+        window.sessionStorage.setItem(CBT_DEVICE_FP_KEY, fp);
+      }
+      return fp;
+    } catch {
+      return 'web-ephemeral';
+    }
+  },
+  setLockToken(examOrSessionId: string, token?: string | null): void {
+    if (typeof window === 'undefined' || !examOrSessionId) return;
+    try {
+      if (token) {
+        window.sessionStorage.setItem(`${CBT_LOCK_TOKEN_PREFIX}${examOrSessionId}`, token);
+      } else {
+        window.sessionStorage.removeItem(`${CBT_LOCK_TOKEN_PREFIX}${examOrSessionId}`);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  },
+  getLockToken(examOrSessionId: string): string | null {
+    if (typeof window === 'undefined' || !examOrSessionId) return null;
+    try {
+      return window.sessionStorage.getItem(`${CBT_LOCK_TOKEN_PREFIX}${examOrSessionId}`);
+    } catch {
+      return null;
+    }
+  },
+};
 
 export const cbtApi = {
   // =========================================================================
@@ -34,9 +79,11 @@ export const cbtApi = {
 
   createQuestionBank: async (data: {
     subject_id: string;
-    title: string;
-    code: string;
+    name?: string;
+    title?: string;
+    code?: string;
     grade_level?: number | string;
+    grade_level_id?: string;
   }): Promise<ApiResponse<QuestionBankItem>> => {
     const res = await apiClient.post<ApiResponse<QuestionBankItem>>('/question-banks', data);
     return res.data;
@@ -176,8 +223,12 @@ export const cbtApi = {
   assignExamQuestions: async (
     id: string,
     payload: {
-      question_ids: string[];
-      weight_overrides?: Record<string, number>;
+      questions: Array<{
+        question_id: string;
+        sort_order?: number;
+        weight_override?: number | null;
+        package_code?: string | null;
+      }>;
     }
   ): Promise<ApiResponse<any>> => {
     const res = await apiClient.post<ApiResponse<any>>(`/exams/${id}/questions`, payload);
@@ -200,8 +251,11 @@ export const cbtApi = {
   enrollExamParticipants: async (
     id: string,
     payload: {
+      exam_room_id?: string;
+      class_id?: string;
       student_ids?: string[];
       class_ids?: string[];
+      package_code?: string;
     }
   ): Promise<ApiResponse<any>> => {
     const res = await apiClient.post<ApiResponse<any>>(`/exams/${id}/participants`, payload);
@@ -219,26 +273,8 @@ export const cbtApi = {
   getExamMonitor: async (
     id: string,
     params?: { room_id?: string; status?: string }
-  ): Promise<
-    ApiResponse<{
-      exam_id: string;
-      total_participants: number;
-      active_count: number;
-      submitted_count: number;
-      blocked_count: number;
-      sessions: ExamMonitorSessionItem[];
-    }>
-  > => {
-    const res = await apiClient.get<
-      ApiResponse<{
-        exam_id: string;
-        total_participants: number;
-        active_count: number;
-        submitted_count: number;
-        blocked_count: number;
-        sessions: ExamMonitorSessionItem[];
-      }>
-    >(`/exams/${id}/monitor`, { params });
+  ): Promise<ApiResponse<ExamMonitorResponse>> => {
+    const res = await apiClient.get<ApiResponse<ExamMonitorResponse>>(`/exams/${id}/monitor`, { params });
     return res.data;
   },
 
@@ -266,8 +302,34 @@ export const cbtApi = {
     return res.data;
   },
 
-  getExamResults: async (id: string, filters?: { status?: string }): Promise<ApiResponse<ExamResultItem[]>> => {
-    const res = await apiClient.get<ApiResponse<ExamResultItem[]>>(`/exams/${id}/results`, { params: filters });
+  getExamResults: async (
+    id: string,
+    filters?: { status?: string }
+  ): Promise<ApiResponse<ExamResultItem[] | { results: ExamResultItem[]; summary?: any }>> => {
+    const res = await apiClient.get<ApiResponse<ExamResultItem[] | { results: ExamResultItem[]; summary?: any }>>(
+      `/exams/${id}/results`,
+      { params: filters }
+    );
+    return res.data;
+  },
+
+  getEssaySubmissions: async (
+    id: string,
+    filters?: { question_id?: string; status?: 'graded' | 'ungraded' }
+  ): Promise<ApiResponse<{ exam_id: string; total_essays: number; ungraded_count: number; submissions: EssaySubmissionItem[] }>> => {
+    const res = await apiClient.get<
+      ApiResponse<{ exam_id: string; total_essays: number; ungraded_count: number; submissions: EssaySubmissionItem[] }>
+    >(`/exams/${id}/essay-submissions`, { params: filters });
+    return res.data;
+  },
+
+  gradeEssay: async (
+    id: string,
+    payload: { answer_id: string; score: number }
+  ): Promise<ApiResponse<{ answer_id: string; session_id: string; score: number; max_score: number; session_total_score: number }>> => {
+    const res = await apiClient.post<
+      ApiResponse<{ answer_id: string; session_id: string; score: number; max_score: number; session_total_score: number }>
+    >(`/exams/${id}/grade-essay`, payload);
     return res.data;
   },
 
@@ -348,7 +410,12 @@ export const cbtApi = {
 
   sendStudentHeartbeat: async (
     sessionId: string,
-    payload?: { client_timestamp?: string }
+    payload?: {
+      client_timestamp?: string;
+      device_fingerprint?: string;
+      screen_state?: 'fullscreen' | 'windowed' | 'blur';
+      active_tab?: boolean;
+    }
   ): Promise<ApiResponse<any>> => {
     const res = await apiClient.post<ApiResponse<any>>(`/exam-sessions/${sessionId}/heartbeat`, payload || {});
     return res.data;

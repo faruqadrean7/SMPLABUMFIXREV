@@ -33,8 +33,13 @@ class ExamSessionService
 
         $exam = Exam::with('rooms')->findOrFail($examId);
 
-        if (in_array($exam->status, ['arsip', 'selesai'])) {
-            throw new HttpException(422, 'Ujian ini sudah ditutup atau diarsipkan.');
+        if (in_array($exam->status, ['draft', 'dibatalkan', 'cancelled', 'batal', 'arsip', 'archived', 'selesai', 'completed'], true)) {
+            throw new HttpException(422, 'Ujian ini belum dibuka, dibatalkan, atau sudah ditutup.');
+        }
+
+        $now = Carbon::now();
+        if ($exam->start_at && $now->lessThan(Carbon::parse($exam->start_at))) {
+            throw new HttpException(422, 'Waktu pelaksanaan ujian belum dimulai.');
         }
 
         // Cari data pendaftaran peserta ujian
@@ -64,7 +69,7 @@ class ExamSessionService
             throw new HttpException(422, 'Token ruang ujian tidak valid atau tidak cocok.');
         }
 
-        if ($examRoom->token_expires_at && Carbon::now()->greaterThan($examRoom->token_expires_at)) {
+        if ($examRoom->token_expires_at && $now->greaterThan($examRoom->token_expires_at)) {
             throw new HttpException(422, 'Token ruang ujian telah kedaluwarsa. Silakan minta pengawas untuk me-regenerate token.');
         }
 
@@ -73,7 +78,14 @@ class ExamSessionService
             $participant->update(['exam_room_id' => $examRoom->id]);
         }
 
-        $now = Carbon::now();
+        $existingSession = ExamSession::where('exam_id', $exam->id)
+            ->where('student_id', $student->id)
+            ->first();
+
+        if ((! $existingSession || $existingSession->status === 'belum') && $exam->end_at && $now->greaterThan(Carbon::parse($exam->end_at))) {
+            throw new HttpException(422, 'Jadwal pelaksanaan ujian telah berakhir.');
+        }
+
         $durationMinutes = (int) ($exam->duration_min ?? 90);
         $calculatedEndsAt = $now->copy()->addMinutes($durationMinutes);
         if ($exam->end_at) {
@@ -82,6 +94,10 @@ class ExamSessionService
                 $calculatedEndsAt = $examEndAt;
             }
         }
+
+        $incomingLockToken = $request->header('X-Exam-Session-Token') ?: ($data['session_lock_token'] ?? null);
+        $incomingFingerprint = $request->header('X-Device-Fingerprint') ?: ($data['device_fingerprint'] ?? null);
+        $incomingUa = substr((string) $request->userAgent(), 0, 500);
 
         // Cari atau buat sesi ujian siswa secara aman terhadap konkurensi
         try {
@@ -98,6 +114,10 @@ class ExamSessionService
                     'seed' => Str::random(16),
                     'extra_minutes' => 0,
                     'violation_count' => 0,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $incomingUa ?: null,
+                    'device_fingerprint' => $incomingFingerprint ?: null,
+                    'session_lock_token' => Str::random(64),
                 ]
             );
         } catch (UniqueConstraintViolationException) {
@@ -113,11 +133,51 @@ class ExamSessionService
             $endsAtWithExtra = $calculatedEndsAt->copy()->addMinutes($session->extra_minutes);
             $session->ends_at = $endsAtWithExtra;
             $session->deadline_at = $endsAtWithExtra;
+            $session->ip_address = $request->ip();
+            $session->user_agent = $incomingUa ?: null;
+            $session->device_fingerprint = $incomingFingerprint ?: null;
+            $session->session_lock_token = Str::random(64);
             $session->save();
         } elseif ($session->status === 'selesai') {
             throw new HttpException(422, 'Ujian telah Anda selesaikan sebelumnya dan tidak dapat diakses kembali.');
         } elseif ($session->status === 'terkunci') {
             throw new HttpException(403, 'Sesi ujian Anda sedang terkunci: '.($session->locked_reason ?? 'Pelanggaran anti-cheat atau aturan ujian').'. Hubungi pengawas ruang.');
+        } elseif (! $session->wasRecentlyCreated && $session->status === 'mengerjakan') {
+            // SEC-CBT-07: Verifikasi penguncian perangkat tunggal pada resume sesi aktif (cek token DAN fingerprint/UA secara independen)
+            if (! empty($incomingLockToken)) {
+                if (! empty($session->session_lock_token) && ! hash_equals($session->session_lock_token, (string) $incomingLockToken)) {
+                    $this->recordConcurrentDeviceViolation($session, $incomingFingerprint, $incomingUa, $request->ip());
+                    throw new HttpException(403, 'Sesi ujian sedang aktif di perangkat lain. Hubungi pengawas ruang untuk membuka kunci sesi.');
+                }
+            } elseif (! empty($session->device_fingerprint)) {
+                $this->recordConcurrentDeviceViolation($session, $incomingFingerprint, $incomingUa, $request->ip());
+                throw new HttpException(403, 'Sesi ujian sedang aktif di perangkat lain. Hubungi pengawas ruang untuk membuka kunci sesi.');
+            }
+
+            $fingerprintConflict = ! empty($session->device_fingerprint) && ! empty($incomingFingerprint) && $session->device_fingerprint !== $incomingFingerprint;
+            $uaConflict = empty($incomingLockToken) && ! empty($session->user_agent) && ! empty($incomingUa) && $session->user_agent !== $incomingUa;
+            if ($fingerprintConflict || $uaConflict) {
+                $this->recordConcurrentDeviceViolation($session, $incomingFingerprint, $incomingUa, $request->ip());
+                throw new HttpException(403, 'Sesi ujian sedang aktif di perangkat atau peramban lain. Hubungi pengawas ruang untuk reset/buka kunci sesi.');
+            }
+
+            // Pastikan sesi memiliki session_lock_token (mis. setelah dibuka kunci oleh proktor)
+            $dirty = false;
+            if (empty($session->session_lock_token)) {
+                $session->session_lock_token = Str::random(64);
+                $dirty = true;
+            }
+            if (! empty($incomingFingerprint) && empty($session->device_fingerprint)) {
+                $session->device_fingerprint = $incomingFingerprint;
+                $dirty = true;
+            }
+            if (! empty($incomingUa) && empty($session->user_agent)) {
+                $session->user_agent = $incomingUa;
+                $dirty = true;
+            }
+            if ($dirty) {
+                $session->save();
+            }
         }
 
         if (! $session->ends_at && $session->deadline_at) {
@@ -138,7 +198,7 @@ class ExamSessionService
             ]);
         }
 
-        $remainingSeconds = max(0, $now->diffInSeconds($effectiveEndsAt, false));
+        $remainingSeconds = (int) max(0, floor($now->diffInSeconds($effectiveEndsAt, false)));
 
         // Ambil jawaban yang sudah tersimpan untuk memulihkan state klien pada resume
         $savedAnswers = ExamAnswer::where('session_id', $session->id)
@@ -165,6 +225,7 @@ class ExamSessionService
 
         return [
             'session_id' => $session->id,
+            'session_lock_token' => $session->session_lock_token,
             'exam_id' => $exam->id,
             'exam_title' => $exam->title,
             'student_id' => $student->id,
@@ -197,6 +258,7 @@ class ExamSessionService
             ->firstOrFail();
 
         $this->ensureSessionActive($session);
+        $this->verifySessionDeviceLock($session, $request);
 
         $exam = Exam::findOrFail($examId);
         $participant = ExamParticipant::where('exam_id', $exam->id)
@@ -234,7 +296,7 @@ class ExamSessionService
 
         $now = Carbon::now();
         $effectiveEndsAt = $session->ends_at ?? $session->deadline_at;
-        $remainingSeconds = max(0, $now->diffInSeconds($effectiveEndsAt, false));
+        $remainingSeconds = (int) max(0, floor($now->diffInSeconds($effectiveEndsAt, false)));
 
         // Format butir soal yang aman (STRIP jawaban yang benar)
         $formattedQuestions = [];
@@ -347,6 +409,7 @@ class ExamSessionService
 
         return [
             'session_id' => $session->id,
+            'session_lock_token' => $session->session_lock_token,
             'exam_id' => $exam->id,
             'title' => $exam->title,
             'status' => $session->status,
@@ -373,19 +436,35 @@ class ExamSessionService
             ->firstOrFail();
 
         $this->ensureSessionActive($session);
+        $this->verifySessionDeviceLock($session, $request);
 
         $questionId = $data['question_id'];
 
-        // SEC-DATA-01: Validasi kepemilikan butir soal terhadap ujian
-        $isQuestionInExam = ExamQuestion::where('exam_id', $examId)
-            ->where('question_id', $questionId)
-            ->exists();
+        $participant = ExamParticipant::where('exam_id', $examId)
+            ->where('student_id', $student->id)
+            ->first();
+        $packageCode = $participant?->package_code;
 
-        if (! $isQuestionInExam) {
+        // SEC-DATA-01: Validasi kepemilikan butir soal terhadap ujian & paket soal peserta
+        $examQuestionQuery = ExamQuestion::where('exam_id', $examId)
+            ->where('question_id', $questionId);
+
+        if ($packageCode) {
+            $examQuestionQuery->where(function ($q) use ($packageCode) {
+                $q->where('package_code', $packageCode)
+                    ->orWhereNull('package_code')
+                    ->orWhere('package_code', '');
+            });
+        }
+
+        if (! $examQuestionQuery->exists()) {
             throw new HttpException(422, 'Butir soal tidak terdaftar pada paket ujian ini.');
         }
 
         $answerData = $data['answer'] ?? null;
+        if ($answerData !== null) {
+            $this->validateAnswerOptions($questionId, $answerData);
+        }
         $isFlagged = (bool) ($data['is_flagged'] ?? false);
 
         $now = Carbon::now();
@@ -560,6 +639,8 @@ class ExamSessionService
                 throw new HttpException(403, 'Sesi sedang terkunci: '.$session->locked_reason.'. Hubungi pengawas untuk membuka sesi.');
             }
 
+            $this->verifySessionDeviceLock($session, $request);
+
             $now = Carbon::now();
             $session->status = 'selesai';
             $session->submitted_at = $now;
@@ -647,6 +728,9 @@ class ExamSessionService
             if ($action === 'unlock') {
                 $session->status = 'mengerjakan';
                 $session->locked_reason = null;
+                $session->session_lock_token = null;
+                $session->device_fingerprint = null;
+                $session->user_agent = null;
 
                 // Jika deadline telah lewat, tambah waktu otomatis minimal sisa atau extra_minutes
                 if ($extraMinutes > 0) {
@@ -676,6 +760,9 @@ class ExamSessionService
                 $session->submitted_at = null;
                 $session->locked_reason = null;
                 $session->violation_count = 0;
+                $session->session_lock_token = null;
+                $session->device_fingerprint = null;
+                $session->user_agent = null;
                 $session->save();
             } elseif ($action === 'force_submit') {
                 if ($session->status !== 'selesai') {
@@ -915,8 +1002,9 @@ class ExamSessionService
             $totalViolations += $violationCount;
 
             $remainingSeconds = 0;
-            if ($session && $sessionStatus === 'mengerjakan' && $session->deadline_at) {
-                $remainingSeconds = max(0, $now->diffInSeconds($session->deadline_at, false));
+            if ($session && $sessionStatus === 'mengerjakan' && ($session->ends_at || $session->deadline_at)) {
+                $targetEnd = $session->ends_at ?? $session->deadline_at;
+                $remainingSeconds = (int) max(0, floor($now->diffInSeconds($targetEnd, false)));
             }
 
             $answeredCount = $session ? $session->answers_count : 0;
@@ -997,6 +1085,9 @@ class ExamSessionService
             throw new HttpException(422, 'Sesi ujian sedang tidak dalam status aktif pengerjaan.');
         }
 
+        $this->ensureSessionActive($session);
+        $this->verifySessionDeviceLock($session, $request);
+
         $now = Carbon::now();
         $incomingIp = $request->ip();
         $incomingUa = (string) $request->userAgent();
@@ -1021,15 +1112,20 @@ class ExamSessionService
             $anomaliesDetected[] = 'anomaly_ip_change';
         }
 
-        // 2. Deteksi pergantian browser / User-Agent
-        if (! empty($session->user_agent) && $session->user_agent !== $incomingUa) {
+        // 2. Deteksi pergantian browser / User-Agent atau Device Fingerprint
+        if (
+            (! empty($session->user_agent) && $session->user_agent !== $incomingUa)
+            || (! empty($session->device_fingerprint) && ! empty($deviceFingerprint) && $session->device_fingerprint !== $deviceFingerprint)
+        ) {
             ExamViolation::create([
                 'session_id' => $session->id,
                 'violation_type' => 'anomaly_device_change',
                 'meta' => [
                     'previous_ua' => $session->user_agent,
                     'new_ua' => $incomingUa,
-                    'description' => 'Perubahan User-Agent / peramban terdeteksi',
+                    'previous_fingerprint' => $session->device_fingerprint,
+                    'new_fingerprint' => $deviceFingerprint,
+                    'description' => 'Perubahan User-Agent atau fingerprint perangkat terdeteksi',
                 ],
                 'occurred_at' => $now,
             ]);
@@ -1078,15 +1174,20 @@ class ExamSessionService
         }
         $session->save();
 
-        $remainingSeconds = max(0, $now->diffInSeconds($session->deadline_at, false));
+        $effectiveEndsAt = $session->ends_at ?? $session->deadline_at;
+        $remainingSeconds = $effectiveEndsAt ? (int) max(0, floor($now->diffInSeconds($effectiveEndsAt, false))) : 0;
 
         return [
             'session_id' => $session->id,
             'status' => $session->status,
             'server_time' => $now->toIso8601String(),
+            'ends_at' => $effectiveEndsAt?->toIso8601String(),
+            'deadline_at' => $effectiveEndsAt?->toIso8601String(),
+            'extra_minutes' => $session->extra_minutes ?? 0,
             'remaining_seconds' => $remainingSeconds,
             'anomalies_detected' => $anomaliesDetected,
             'blur_count' => $session->blur_count,
+            'violation_count' => $session->violation_count ?? 0,
         ];
     }
 
@@ -1314,6 +1415,10 @@ class ExamSessionService
             }
         }
 
+        $hasUngradedEssay = collect($reviewedQuestions)->contains(
+            fn (array $item) => $item['question_type'] === 'uraian' && $item['is_graded'] === false
+        );
+
         return [
             'exam' => [
                 'id' => $exam->id,
@@ -1334,11 +1439,98 @@ class ExamSessionService
                 'is_passed' => $isPassed,
                 'total_questions' => count($questionItems),
                 'total_answered' => $totalAnswered,
-                'has_ungraded_essay' => $hasEssay && ($totalScore === null),
+                'has_ungraded_essay' => $hasUngradedEssay,
             ],
             'remedial' => $remedialExam,
             'questions' => $reviewedQuestions,
         ];
+    }
+
+    /**
+     * SEC-CBT-07: Verifikasi penguncian sesi pada satu perangkat/peramban.
+     */
+    protected function verifySessionDeviceLock(ExamSession $session, Request $request): void
+    {
+        $user = $request->user();
+        if ($user && $user->hasRole(['admin', 'super_admin'])) {
+            return;
+        }
+
+        $incomingLockToken = $request->header('X-Exam-Session-Token');
+        $incomingFingerprint = $request->header('X-Device-Fingerprint') ?: $request->input('device_fingerprint');
+
+        if ($incomingLockToken !== null && $incomingLockToken !== '') {
+            if (! empty($session->session_lock_token) && ! hash_equals($session->session_lock_token, (string) $incomingLockToken)) {
+                $this->recordConcurrentDeviceViolation($session, $incomingFingerprint, (string) $request->userAgent(), $request->ip());
+                throw new HttpException(403, 'Sesi ujian terkunci pada perangkat lain. Hubungi pengawas ruang.');
+            }
+        }
+
+        if ($incomingFingerprint !== null && $incomingFingerprint !== '') {
+            if (! empty($session->device_fingerprint) && $session->device_fingerprint !== (string) $incomingFingerprint) {
+                $this->recordConcurrentDeviceViolation($session, $incomingFingerprint, (string) $request->userAgent(), $request->ip());
+                throw new HttpException(403, 'Perangkat tidak cocok dengan sesi ujian aktif. Hubungi pengawas ruang.');
+            }
+        }
+
+        // Jika sesi dimulai dari peramban yang mengikat device_fingerprint, tolak permintaan tanpa token kunci perangkat maupun fingerprint
+        if (! empty($session->device_fingerprint) && empty($incomingLockToken) && empty($incomingFingerprint)) {
+            $this->recordConcurrentDeviceViolation($session, null, (string) $request->userAgent(), $request->ip());
+            throw new HttpException(403, 'Token kunci perangkat sesi ujian tidak valid atau hilang.');
+        }
+    }
+
+    protected function recordConcurrentDeviceViolation(ExamSession $session, ?string $fingerprint, ?string $userAgent, ?string $ip): void
+    {
+        try {
+            ExamViolation::create([
+                'session_id' => $session->id,
+                'violation_type' => 'anomaly_concurrent_device',
+                'meta' => [
+                    'expected_fingerprint' => $session->device_fingerprint,
+                    'incoming_fingerprint' => $fingerprint,
+                    'incoming_ua' => substr((string) $userAgent, 0, 250),
+                    'incoming_ip' => $ip,
+                ],
+                'occurred_at' => Carbon::now(),
+            ]);
+        } catch (\Throwable) {
+            // Non-blocking
+        }
+    }
+
+    /**
+     * SEC-CBT-10: Validasi opsi jawaban yang dikirim benar-benar milik butir soal terkait.
+     */
+    protected function validateAnswerOptions(string $questionId, mixed $answerData): void
+    {
+        $question = Question::with('options')->find($questionId);
+        if (! $question || ! in_array($question->question_type, ['pg', 'pg_kompleks', 'bs'], true)) {
+            return;
+        }
+
+        $validIds = $question->options->pluck('id')->map(fn ($id) => (string) $id)->all();
+        if (empty($validIds)) {
+            return;
+        }
+
+        if (is_array($answerData)) {
+            $singleUuid = $answerData['selected_option_id'] ?? $answerData['option_id'] ?? null;
+            if (is_string($singleUuid) && Str::isUuid($singleUuid) && ! in_array($singleUuid, $validIds, true)) {
+                throw new HttpException(422, 'Pilihan jawaban tidak terdaftar pada butir soal ini.');
+            }
+
+            $multiIds = $answerData['selected_option_ids'] ?? $answerData['option_ids'] ?? (array_is_list($answerData) ? $answerData : null);
+            if (is_array($multiIds)) {
+                foreach ($multiIds as $candidateId) {
+                    if (is_string($candidateId) && Str::isUuid($candidateId) && ! in_array($candidateId, $validIds, true)) {
+                        throw new HttpException(422, 'Terdapat pilihan jawaban yang bukan milik butir soal ini.');
+                    }
+                }
+            }
+        } elseif (is_string($answerData) && Str::isUuid($answerData) && ! in_array($answerData, $validIds, true)) {
+            throw new HttpException(422, 'Pilihan jawaban tidak terdaftar pada butir soal ini.');
+        }
     }
 
     protected function logAudit(

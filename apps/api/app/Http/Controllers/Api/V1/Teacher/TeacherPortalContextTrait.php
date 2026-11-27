@@ -230,7 +230,14 @@ trait TeacherPortalContextTrait
      */
     protected function resolveStudentProgram(Student $student, ?SchoolClass $class = null): array
     {
-        $type = $student->program_type ?? $class?->program_type ?? 'reguler';
+        $studentProg = $student->program_type;
+        $classProg = $class?->program_type ?? $student->classes->first()?->program_type;
+
+        if (empty($studentProg) || ($studentProg === 'reguler' && in_array($classProg, ['tahfidz', 'icp', 'inklusi'], true))) {
+            $type = $classProg ?? 'reguler';
+        } else {
+            $type = $studentProg;
+        }
 
         $labels = [
             'reguler' => 'Reguler',

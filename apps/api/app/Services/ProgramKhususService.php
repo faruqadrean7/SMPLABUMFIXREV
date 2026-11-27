@@ -24,15 +24,20 @@ class ProgramKhususService
 
     /**
      * Resolusi program belajar efektif siswa.
-     * Prioritas: student.program_type -> class.program_type -> 'reguler'.
+     * Prioritas: student.program_type khusus -> class.program_type khusus -> 'reguler'.
      */
     public function resolveEffectiveProgram(Student $student): string
     {
         $student->loadMissing('classes');
 
-        $prog = $student->program_type ?? $student->classes->first()?->program_type ?? 'reguler';
+        $studentProg = $student->program_type;
+        $classProg = $student->classes->first()?->program_type;
 
-        return $prog;
+        if (empty($studentProg) || ($studentProg === 'reguler' && in_array($classProg, ['tahfidz', 'icp', 'inklusi'], true))) {
+            return $classProg ?? 'reguler';
+        }
+
+        return $studentProg;
     }
 
     /**
@@ -344,12 +349,59 @@ class ProgramKhususService
     }
 
     /**
+     * Mengembalikan cakupan kelas dan program guru non-admin, atau null jika user memiliki akses penuh.
+     *
+     * @return array{class_ids: array<int, string>, programs: array<int, string>}|null
+     */
+    protected function getTeacherProgramScope(User $user): ?array
+    {
+        $user->loadMissing(['roles', 'teacher']);
+
+        if ($user->hasRole(['super_admin', 'admin', 'admin_tu', 'admin_kurikulum', 'principal']) || $user->can('program.manage')) {
+            return null;
+        }
+
+        $teacher = $user->teacher;
+        if (! $teacher) {
+            return ['class_ids' => [], 'programs' => []];
+        }
+
+        $homeroomClassIds = SchoolClass::where('homeroom_teacher_id', $teacher->id)->pluck('id')->toArray();
+        $teachingClassIds = TeachingAssignment::where('teacher_id', $teacher->id)->pluck('class_id')->toArray();
+        $allTaughtClassIds = array_values(array_unique(array_merge($homeroomClassIds, $teachingClassIds)));
+
+        $taughtPrograms = empty($allTaughtClassIds)
+            ? []
+            : SchoolClass::whereIn('id', $allTaughtClassIds)->pluck('program_type')->filter()->unique()->values()->toArray();
+
+        return [
+            'class_ids' => $allTaughtClassIds,
+            'programs' => $taughtPrograms,
+        ];
+    }
+
+    /**
      * Guru/Admin: Daftar materi program khusus dengan filter dan paginasi (bebas N+1).
      */
     public function listMaterialsForTeacher(User $user, array $filters = []): LengthAwarePaginator
     {
         $query = ProgramMaterial::with(['creator:id,username', 'file', 'schoolClass:id,name,program_type', 'assignedStudent:id,full_name,nis'])
             ->orderBy('created_at', 'desc');
+
+        $scope = $this->getTeacherProgramScope($user);
+        if ($scope !== null) {
+            $query->where(function ($q) use ($scope, $user) {
+                $q->where('created_by', $user->id);
+                if (! empty($scope['class_ids'])) {
+                    $q->orWhereIn('class_id', $scope['class_ids']);
+                }
+                if (! empty($scope['programs'])) {
+                    $q->orWhere(function ($sub) use ($scope) {
+                        $sub->whereNull('class_id')->whereIn('program_type', $scope['programs']);
+                    });
+                }
+            });
+        }
 
         if (! empty($user->school_id)) {
             $query->where(function ($q) use ($user) {
@@ -494,6 +546,18 @@ class ProgramKhususService
     {
         $query = ProgramTarget::with(['student:id,full_name,nis', 'student.classes:id,name', 'setter:id,username'])
             ->orderBy('created_at', 'desc');
+
+        $scope = $this->getTeacherProgramScope($user);
+        if ($scope !== null) {
+            $query->where(function ($q) use ($scope, $user) {
+                $q->where('set_by', $user->id);
+                if (! empty($scope['class_ids'])) {
+                    $q->orWhereHas('student.classes', function ($cq) use ($scope) {
+                        $cq->whereIn('classes.id', $scope['class_ids']);
+                    });
+                }
+            });
+        }
 
         if (! empty($user->school_id)) {
             $query->where(function ($q) use ($user) {
@@ -640,6 +704,21 @@ class ProgramKhususService
         $query = ProgramTask::with(['creator:id,username', 'file', 'schoolClass:id,name,program_type'])
             ->withCount('submissions')
             ->orderBy('created_at', 'desc');
+
+        $scope = $this->getTeacherProgramScope($user);
+        if ($scope !== null) {
+            $query->where(function ($q) use ($scope, $user) {
+                $q->where('created_by', $user->id);
+                if (! empty($scope['class_ids'])) {
+                    $q->orWhereIn('class_id', $scope['class_ids']);
+                }
+                if (! empty($scope['programs'])) {
+                    $q->orWhere(function ($sub) use ($scope) {
+                        $sub->whereNull('class_id')->whereIn('program_type', $scope['programs']);
+                    });
+                }
+            });
+        }
 
         if (! empty($user->school_id)) {
             $query->where(function ($q) use ($user) {

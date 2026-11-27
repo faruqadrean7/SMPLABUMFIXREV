@@ -50,7 +50,14 @@ class MeStudentController extends Controller
     {
         $student->loadMissing('classes');
 
-        return $student->program_type ?? $student->classes->first()?->program_type ?? 'reguler';
+        $studentProg = $student->program_type;
+        $classProg = $student->classes->first()?->program_type;
+
+        if (empty($studentProg) || ($studentProg === 'reguler' && in_array($classProg, ['tahfidz', 'icp', 'inklusi'], true))) {
+            return $classProg ?? 'reguler';
+        }
+
+        return $studentProg;
     }
 
     /**
@@ -387,19 +394,29 @@ class MeStudentController extends Controller
                 $status = $exam?->status ?? 'aktif';
             }
 
+            $showResultMode = $exam?->show_result_mode ?? 'after_release';
+            $canShowScore = false;
+            if ($session && $session->status === 'selesai' && $session->score !== null) {
+                if ($showResultMode === 'immediate') {
+                    $canShowScore = true;
+                } elseif ($showResultMode === 'after_release' && in_array($exam?->status, ['selesai', 'arsip'], true)) {
+                    $canShowScore = true;
+                }
+            }
+
             return [
                 'id' => $p->exam_id,
                 'title' => $exam?->title ?? 'Ujian CBT',
                 'subjectName' => $exam?->subject?->name ?? 'Mata Pelajaran',
                 'durationMinutes' => $exam?->duration_min ?? 60,
-                'totalQuestions' => $exam?->questions?->count() ?: 30,
+                'totalQuestions' => $exam?->questions?->count() ?: 0,
                 'startTime' => $exam?->start_at?->toISOString() ?? now()->toISOString(),
                 'endTime' => $exam?->end_at?->toISOString() ?? now()->addHours(1)->toISOString(),
                 'status' => $status,
                 'roomName' => $p->examRoom?->room?->name ?? 'Lab Komputer 1',
                 'kktp' => (float) ($exam?->passing_grade ?? 75),
-                'tokenRequired' => $p->examRoom?->token ?? 'LAB-CBT',
-                'score' => $session?->score !== null ? (float) $session->score : null,
+                'requiresToken' => true,
+                'score' => $canShowScore ? (float) $session->score : null,
             ];
         });
 

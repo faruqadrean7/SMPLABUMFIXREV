@@ -46,8 +46,13 @@ class ExamSession extends Model
         'ip_address',
         'user_agent',
         'device_fingerprint',
+        'session_lock_token',
         'blur_count',
         'violation_count',
+    ];
+
+    protected $hidden = [
+        'session_lock_token',
     ];
 
     protected function casts(): array

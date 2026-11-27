@@ -162,6 +162,10 @@ class CbtStudentE2EFlowTest extends TestCase
     public function test_server_authoritative_remaining_time_and_tampered_client_timestamp(): void
     {
         Carbon::setTestNow('2026-10-22 08:00:00');
+        $this->exam->update([
+            'start_at' => Carbon::parse('2026-10-22 07:00:00'),
+            'end_at' => Carbon::parse('2026-10-22 10:00:00'),
+        ]);
 
         $startRes = $this->actingAs($this->studentUser)
             ->postJson("/api/v1/exams/{$this->exam->id}/start-session", [
@@ -288,6 +292,10 @@ class CbtStudentE2EFlowTest extends TestCase
     public function test_action_after_deadline_is_rejected_with_timeout_lock(): void
     {
         Carbon::setTestNow('2026-10-22 08:00:00');
+        $this->exam->update([
+            'start_at' => Carbon::parse('2026-10-22 07:00:00'),
+            'end_at' => Carbon::parse('2026-10-22 10:00:00'),
+        ]);
 
         $this->actingAs($this->studentUser)
             ->postJson("/api/v1/exams/{$this->exam->id}/start-session", [

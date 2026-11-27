@@ -25,9 +25,28 @@ class ExamReportService
     public function getExamReport(string $examId, array $filters, Request $request): array
     {
         $exam = Exam::with(['subject', 'rooms.room', 'rooms.proctor.teacher', 'participants.student'])->findOrFail($examId);
-        $this->authorizeProctorOrAdmin($exam, $request->user());
+        $currentUser = $request->user();
+        $this->authorizeProctorOrAdmin($exam, $currentUser);
 
         $roomFilter = $filters['room_id'] ?? null;
+
+        // SEC-CBT-09: Isolasi ruangan untuk pengawas non-admin pada laporan dan berita acara
+        $isGlobalAdmin = $currentUser && (
+            $currentUser->hasRole(['admin', 'super_admin'])
+            || $currentUser->hasPermission('cbt.exam.manage')
+            || $exam->created_by === $currentUser->id
+        );
+        $assignedRoomIds = [];
+        if (! $isGlobalAdmin) {
+            $assignedRoomIds = ExamRoom::where('exam_id', $examId)
+                ->where('proctor_id', $currentUser->id)
+                ->pluck('id')
+                ->all();
+
+            if ($roomFilter && ! in_array($roomFilter, $assignedRoomIds, true)) {
+                throw new HttpException(403, 'Anda tidak berwenang mengakses laporan untuk ruangan ujian ini.');
+            }
+        }
 
         // Peserta terdaftar
         $participantsQuery = ExamParticipant::with(['student', 'examRoom.room', 'examRoom.proctor.teacher'])
@@ -35,6 +54,8 @@ class ExamReportService
 
         if ($roomFilter) {
             $participantsQuery->where('exam_room_id', $roomFilter);
+        } elseif (! $isGlobalAdmin) {
+            $participantsQuery->whereIn('exam_room_id', $assignedRoomIds);
         }
 
         $participants = $participantsQuery->get();
@@ -99,6 +120,8 @@ class ExamReportService
         $roomsQuery = $exam->rooms;
         if ($roomFilter) {
             $roomsQuery = $roomsQuery->where('id', $roomFilter);
+        } elseif (! $isGlobalAdmin) {
+            $roomsQuery = $roomsQuery->whereIn('id', $assignedRoomIds);
         }
 
         foreach ($roomsQuery as $room) {
@@ -202,23 +225,29 @@ class ExamReportService
         $absentStudents = array_filter($participants, fn ($p) => $p['attendance_status'] === 'tidak_hadir');
 
         $schoolNameSetting = SiteSetting::where('setting_key', 'school_name')->value('setting_value');
-        $schoolName = is_array($schoolNameSetting) ? ($schoolNameSetting['value'] ?? 'SMA LAB UM MALANG') : ($schoolNameSetting ?? 'SMA LABORATORIUM UNIVERSITAS NEGERI MALANG');
+        $schoolName = e((string) (is_array($schoolNameSetting) ? ($schoolNameSetting['value'] ?? 'SMA LAB UM MALANG') : ($schoolNameSetting ?? 'SMA LABORATORIUM UNIVERSITAS NEGERI MALANG')));
 
         $schoolAddressSetting = SiteSetting::where('setting_key', 'school_address')->value('setting_value');
-        $schoolAddress = is_array($schoolAddressSetting) ? ($schoolAddressSetting['value'] ?? 'Jl. Bromo No. 16') : ($schoolAddressSetting ?? 'Jl. Bromo No. 16, Kota Malang, Jawa Timur');
+        $schoolAddress = e((string) (is_array($schoolAddressSetting) ? ($schoolAddressSetting['value'] ?? 'Jl. Bromo No. 16') : ($schoolAddressSetting ?? 'Jl. Bromo No. 16, Kota Malang, Jawa Timur')));
 
         $npsnSetting = SiteSetting::where('setting_key', 'school_npsn')->value('setting_value');
-        $npsn = is_array($npsnSetting) ? ($npsnSetting['value'] ?? '20533814') : ($npsnSetting ?? '20533814');
+        $npsn = e((string) (is_array($npsnSetting) ? ($npsnSetting['value'] ?? '20533814') : ($npsnSetting ?? '20533814')));
 
-        $examDate = Carbon::parse($exam['start_at'])->translatedFormat('l, d F Y');
-        $printedDate = Carbon::now()->translatedFormat('d F Y');
-        $baNumber = 'BA-CBT/'.Carbon::now()->format('Y/m').'/'.substr($exam['id'], 0, 8);
+        $examDate = e(Carbon::parse($exam['start_at'])->translatedFormat('l, d F Y'));
+        $printedDate = e(Carbon::now()->translatedFormat('d F Y'));
+        $baNumber = e('BA-CBT/'.Carbon::now()->format('Y/m').'/'.substr($exam['id'], 0, 8));
+        $safeExamTitle = e((string) ($exam['title'] ?? '-'));
+        $safeSubjectName = e((string) ($exam['subject_name'] ?? '-'));
+        $safeExamType = e((string) ($exam['exam_type'] ?? '-'));
 
         $absentRowsHtml = '';
         if (! empty($absentStudents)) {
             $no = 1;
             foreach ($absentStudents as $abs) {
-                $absentRowsHtml .= "<tr><td>{$no}</td><td>{$abs['student_nis']}</td><td>{$abs['student_name']}</td><td>{$abs['room_name']}</td><td>Tanpa Keterangan</td></tr>";
+                $safeNis = e((string) ($abs['student_nis'] ?? '-'));
+                $safeName = e((string) ($abs['student_name'] ?? '-'));
+                $safeRoom = e((string) ($abs['room_name'] ?? '-'));
+                $absentRowsHtml .= "<tr><td>{$no}</td><td>{$safeNis}</td><td>{$safeName}</td><td>{$safeRoom}</td><td>Tanpa Keterangan</td></tr>";
                 $no++;
             }
         } else {
@@ -228,20 +257,22 @@ class ExamReportService
         $violationRowsHtml = '';
         if (! empty($violations)) {
             foreach ($violations as $type => $count) {
-                $violationRowsHtml .= "<li>Jenis Kejadian: <strong>{$type}</strong> — Frekuensi: {$count} kali</li>";
+                $safeType = e((string) $type);
+                $safeCount = (int) $count;
+                $violationRowsHtml .= "<li>Jenis Kejadian: <strong>{$safeType}</strong> — Frekuensi: {$safeCount} kali</li>";
             }
         } else {
             $violationRowsHtml = '<li>Tidak ada catatan pelanggaran khusus selama sesi ujian.</li>';
         }
 
-        $proctorName = $rooms[0]['proctor_name'] ?? 'Pengawas Ruang Terdaftar';
+        $proctorName = e((string) ($rooms[0]['proctor_name'] ?? 'Pengawas Ruang Terdaftar'));
 
         $html = <<<HTML
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Berita Acara Pelaksanaan Ujian - {$exam['title']}</title>
+    <title>Berita Acara Pelaksanaan Ujian - {$safeExamTitle}</title>
     <style>
         body { font-family: 'Times New Roman', serif; margin: 30px; font-size: 14px; color: #111; line-height: 1.5; }
         .header { text-align: center; border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 20px; }
@@ -279,8 +310,8 @@ class ExamReportService
     <p>Pada hari ini <strong>{$examDate}</strong>, telah diselenggarakan Ujian Berbasis Komputer (CBT) dengan rincian sebagai berikut:</p>
 
     <table class="meta-table">
-        <tr><td style="width: 25%;"><strong>Mata Pelajaran</strong></td><td>: {$exam['subject_name']}</td></tr>
-        <tr><td><strong>Judul Ujian</strong></td><td>: {$exam['title']} ({$exam['exam_type']})</td></tr>
+        <tr><td style="width: 25%;"><strong>Mata Pelajaran</strong></td><td>: {$safeSubjectName}</td></tr>
+        <tr><td><strong>Judul Ujian</strong></td><td>: {$safeExamTitle} ({$safeExamType})</td></tr>
         <tr><td><strong>Waktu Pelaksanaan</strong></td><td>: {$exam['duration_min']} Menit</td></tr>
         <tr><td><strong>Standar Kelulusan (KKTP)</strong></td><td>: {$exam['passing_grade']}</td></tr>
     </table>
@@ -344,8 +375,10 @@ HTML;
 
         return response($html, 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
-            'Content-Disposition' => 'inline; filename="berita-acara-cbt-'.$examId.'.html"',
+            'Content-Disposition' => 'inline; filename="berita-acara-cbt-'.preg_replace('/[^a-zA-Z0-9_-]/', '', $examId).'.html"',
             'X-Document-Type' => 'cbt-minutes-pdf',
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
         ]);
     }
 

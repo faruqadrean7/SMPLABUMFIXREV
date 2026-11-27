@@ -24,11 +24,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { cbtApi } from '@/features/cbt/cbt-api';
+import { cbtApi, cbtSessionLock } from '@/features/cbt/cbt-api';
 import { StudentSessionQuestionItem, QuestionType } from '@/types/cbt';
 import { useAuth } from '@/providers/auth-provider';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { toast } from '@/components/ui/toast';
+import { MathText } from '@/components/cbt/math-text';
 import { Confetti } from '@/features/portal/mascot/confetti';
 import { Labi } from '@/features/portal/mascot/labi';
 
@@ -55,6 +56,7 @@ export default function StudentCbtPlayerPage() {
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [autosaveStatus, setAutosaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [fontScale, setFontScale] = useState<'sm' | 'base' | 'lg'>('base');
 
   // Anti-Cheat & Lock Status (Enforced by server)
   const [violationCount, setViolationCount] = useState<number>(0);
@@ -81,6 +83,8 @@ export default function StudentCbtPlayerPage() {
   const memoryPendingAnswersRef = useRef<Record<string, any>>({});
   const memoryPendingViolationsRef = useRef<any[]>([]);
   const isDrainingRef = useRef<boolean>(false);
+  const lastViolationAtRef = useRef<number>(0);
+  const textSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   useEffect(() => {
     isFinishedRef.current = isFinished;
@@ -328,20 +332,21 @@ export default function StudentCbtPlayerPage() {
     return () => window.removeEventListener('online', handleOnline);
   }, [flushPendingOfflineData]);
 
-  // Force Submit saat waktu server habis
+  // Force Submit saat waktu server habis (pastikan antrean offline di-flush lebih dulu)
   const handleForceSubmitTimeout = useCallback(async () => {
     if (isFinishedRef.current) return;
     setIsSubmitting(true);
     try {
+      await flushPendingOfflineData();
       await cbtApi.finishStudentSession(examId);
+      clearOfflineQueues();
     } catch (err) {
       console.error('Force submit failed:', err);
     } finally {
       setIsSubmitting(false);
       setIsFinished(true);
-      clearOfflineQueues();
     }
-  }, [examId, clearOfflineQueues]);
+  }, [examId, clearOfflineQueues, flushPendingOfflineData]);
 
   // Load Session Questions & Server State
   useEffect(() => {
@@ -358,6 +363,12 @@ export default function StudentCbtPlayerPage() {
         setQuestions(loadedQuestions);
         if (sessionData.session_id) {
           sessionIdRef.current = sessionData.session_id;
+        }
+        if (sessionData.session_lock_token) {
+          cbtSessionLock.setLockToken(examId, sessionData.session_lock_token);
+          if (sessionData.session_id) {
+            cbtSessionLock.setLockToken(sessionData.session_id, sessionData.session_lock_token);
+          }
         }
 
         // 1. Sinkronisasi offset waktu server (Date.now() clock skew handling)
@@ -466,7 +477,16 @@ export default function StudentCbtPlayerPage() {
     setTokenSubmitting(true);
     setTokenModalError(null);
     try {
-      await cbtApi.startStudentSession(examId, { token: trimmed });
+      const startRes = await cbtApi.startStudentSession(examId, {
+        token: trimmed,
+        device_fingerprint: cbtSessionLock.getDeviceFingerprint(),
+      });
+      if (startRes.data?.session_lock_token) {
+        cbtSessionLock.setLockToken(examId, startRes.data.session_lock_token);
+        if (startRes.data.session_id) {
+          cbtSessionLock.setLockToken(startRes.data.session_id, startRes.data.session_lock_token);
+        }
+      }
       setTokenModalOpen(false);
       // Reload session
       setIsLoading(true);
@@ -478,6 +498,12 @@ export default function StudentCbtPlayerPage() {
       setQuestions(loadedQuestions);
       if (sessionData.session_id) {
         sessionIdRef.current = sessionData.session_id;
+      }
+      if (sessionData.session_lock_token) {
+        cbtSessionLock.setLockToken(examId, sessionData.session_lock_token);
+        if (sessionData.session_id) {
+          cbtSessionLock.setLockToken(sessionData.session_id, sessionData.session_lock_token);
+        }
       }
       const endsAtStr = sessionData.ends_at || sessionData.deadline_at;
       if (endsAtStr) {
@@ -516,21 +542,52 @@ export default function StudentCbtPlayerPage() {
     };
   }, [computeRemaining, handleForceSubmitTimeout]);
 
-  // Heartbeat Presence Ping (every 30 seconds)
+  // Heartbeat Presence Ping (every 30 seconds) + Live Server Time/Lock Sync
   useEffect(() => {
-    heartbeatIntervalRef.current = setInterval(() => {
-      const targetId = sessionIdRef.current || examId;
+    heartbeatIntervalRef.current = setInterval(async () => {
+      const targetId = sessionIdRef.current;
       if (targetId && !isFinishedRef.current) {
-        cbtApi.sendStudentHeartbeat(targetId).catch(() => {});
+        try {
+          const hbRes = await cbtApi.sendStudentHeartbeat(targetId, {
+            client_timestamp: new Date().toISOString(),
+            device_fingerprint: cbtSessionLock.getDeviceFingerprint(),
+            screen_state: document.fullscreenElement ? 'fullscreen' : 'windowed',
+            active_tab: !document.hidden,
+          });
+          const hbData = hbRes?.data;
+          if (hbData) {
+            if (hbData.server_time) {
+              serverOffsetMsRef.current = new Date(hbData.server_time).getTime() - Date.now();
+            }
+            const nextEndsAt = hbData.ends_at || hbData.deadline_at;
+            if (nextEndsAt) {
+              endsAtMsRef.current = new Date(nextEndsAt).getTime();
+              setRemainingSeconds(computeRemaining());
+            }
+            if (typeof hbData.violation_count === 'number') {
+              setViolationCount(hbData.violation_count);
+            }
+            if (hbData.status === 'terkunci') {
+              setIsLocked(true);
+            } else if (hbData.status === 'selesai') {
+              setIsFinished(true);
+            }
+          }
+        } catch (hbErr: any) {
+          if (hbErr?.code === 'EXAM_TIME_OVER') {
+            setRemainingSeconds(0);
+            setIsFinished(true);
+          }
+        }
       }
     }, 30000);
 
     return () => {
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
     };
-  }, [examId]);
+  }, [examId, computeRemaining]);
 
-  // Anti-Cheat Window Blur / Tab Switch Listener & VisibilityChange Skew Recalculation
+  // Anti-Cheat Window Blur / Tab Switch / Fullscreen Exit / BeforeUnload Listener
   useEffect(() => {
     const handleVisibilityChange = () => {
       // Hitung ulang timer segera saat kembali ke tab (kebal tab throttling background browser)
@@ -552,17 +609,39 @@ export default function StudentCbtPlayerPage() {
       }
     };
 
+    const handleFullscreenChange = () => {
+      const nowFull = Boolean(document.fullscreenElement);
+      setIsFullscreen(nowFull);
+    };
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isFinishedRef.current && questions.length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [computeRemaining, handleForceSubmitTimeout]);
+  }, [computeRemaining, handleForceSubmitTimeout, questions.length]);
 
   const triggerViolation = async (violationType: string) => {
+    // Debounce 1500ms agar satu aksi pindah tab (visibilitychange + window.blur) tidak dihitung ganda
+    const nowMs = Date.now();
+    if (nowMs - lastViolationAtRef.current < 1500) {
+      return;
+    }
+    lastViolationAtRef.current = nowMs;
     setShowViolationModal(true);
 
     const idempotencyKey = `${violationType}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -646,34 +725,13 @@ export default function StudentCbtPlayerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, questions, isFinished, isLocked, showConfirmModal, showViolationModal]);
 
-  // Save Answer to Server with Offline Queue
-  const handleAnswerChange = async (questionId: string, answerValue: any) => {
-    const updated = { ...answers, [questionId]: answerValue };
-    setAnswers(updated);
-    setAutosaveStatus('saving');
-
-    const timestamp = Date.now();
-    const idempotencyKey = `${questionId}_${timestamp}_${Math.random().toString(36).substring(2, 7)}`;
-    const entry = {
-      value: answerValue,
-      timestamp,
-      idempotency_key: idempotencyKey,
-    };
-
-    // 1. Simpan ke local storage terlebih dahulu agar tidak hilang bila koneksi putus atau reload mendadak
-    const currentQueue = readStoredAnswers();
-    currentQueue[questionId] = answerValue;
-
-    const metaMap = readStoredAnswersMeta();
-    metaMap[questionId] = { timestamp, idempotency_key: idempotencyKey };
-
-    writeStoredAnswers(currentQueue, metaMap);
-
+  // Save Answer to Server with Offline Queue & Optional Debounce (untuk isian/uraian)
+  const persistAnswerToServer = async (questionId: string, answerValue: any, timestamp: number, idempotencyKey: string) => {
     try {
       await cbtApi.saveStudentAnswer(examId, {
         question_id: questionId,
         answer: answerValue,
-        is_flagged: doubts.includes(questionId),
+        is_flagged: doubtsRef.current.includes(questionId),
         answered_at: new Date(timestamp).toISOString(),
         idempotency_key: idempotencyKey,
       } as any);
@@ -692,7 +750,6 @@ export default function StudentCbtPlayerPage() {
       setAutosaveStatus('saved');
     } catch (err: any) {
       setAutosaveStatus('error');
-      // Server-side timing lock rejection (mendukung EXAM_TIME_OVER dan BUSINESS_RULE_VIOLATION backward compatible)
       if (
         err?.code === 'EXAM_TIME_OVER' ||
         err?.code === 'BUSINESS_RULE_VIOLATION' ||
@@ -703,6 +760,39 @@ export default function StudentCbtPlayerPage() {
         setIsFinished(true);
       }
     }
+  };
+
+  const handleAnswerChange = async (questionId: string, answerValue: any, debounceMs = 0) => {
+    const updated = { ...answers, [questionId]: answerValue };
+    setAnswers(updated);
+    setAutosaveStatus('saving');
+
+    const timestamp = Date.now();
+    const idempotencyKey = `${questionId}_${timestamp}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // 1. Simpan ke local storage terlebih dahulu agar tidak hilang bila koneksi putus atau reload mendadak
+    const currentQueue = readStoredAnswers();
+    currentQueue[questionId] = answerValue;
+
+    const metaMap = readStoredAnswersMeta();
+    metaMap[questionId] = { timestamp, idempotency_key: idempotencyKey };
+
+    writeStoredAnswers(currentQueue, metaMap);
+
+    if (textSaveTimersRef.current[questionId]) {
+      clearTimeout(textSaveTimersRef.current[questionId]);
+      delete textSaveTimersRef.current[questionId];
+    }
+
+    if (debounceMs > 0) {
+      textSaveTimersRef.current[questionId] = setTimeout(() => {
+        delete textSaveTimersRef.current[questionId];
+        persistAnswerToServer(questionId, answerValue, timestamp, idempotencyKey);
+      }, debounceMs);
+      return;
+    }
+
+    await persistAnswerToServer(questionId, answerValue, timestamp, idempotencyKey);
   };
 
   // Toggle Doubt (Ragu-ragu)
@@ -738,6 +828,11 @@ export default function StudentCbtPlayerPage() {
   const handleConfirmFinish = async () => {
     setIsSubmitting(true);
     try {
+      // Hentikan debounce timer yang masih tertunda dan flush seluruh jawaban offline ke server sebelum submit final
+      Object.values(textSaveTimersRef.current).forEach((t) => clearTimeout(t));
+      textSaveTimersRef.current = {};
+      await flushPendingOfflineData();
+
       await cbtApi.finishStudentSession(examId);
       setShowConfirmModal(false);
       setIsFinished(true);
@@ -970,7 +1065,7 @@ export default function StudentCbtPlayerPage() {
 
         {/* Center: Autosave Indicator & Timer */}
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-300">
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-300" aria-live="polite">
             {autosaveStatus === 'saving' ? (
               <span className="flex items-center gap-1 text-amber-300">
                 <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" /> Menyimpan...
@@ -987,6 +1082,8 @@ export default function StudentCbtPlayerPage() {
           </div>
 
           <div
+            aria-live="polite"
+            aria-label={`Sisa waktu ujian ${timerDisplay}`}
             className={`flex items-center gap-2 px-3 py-1 rounded-lg border font-mono font-bold text-sm tracking-wider ${
               isUrgentTime
                 ? 'bg-rose-950/80 border-rose-500 text-rose-300 animate-pulse'
@@ -1000,6 +1097,22 @@ export default function StudentCbtPlayerPage() {
 
         {/* User Meta & Actions */}
         <div className="flex items-center gap-2.5">
+          {/* Kontrol Ukuran Teks (Aksesibilitas Inklusi) */}
+          <div className="hidden md:flex items-center bg-slate-800 rounded-lg border border-slate-700 p-0.5" role="group" aria-label="Ukuran huruf soal">
+            {(['sm', 'base', 'lg'] as const).map((sz) => (
+              <button
+                key={sz}
+                type="button"
+                onClick={() => setFontScale(sz)}
+                aria-label={`Ukuran huruf ${sz === 'sm' ? 'kecil' : sz === 'base' ? 'normal' : 'besar'}`}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                  fontScale === sz ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {sz === 'sm' ? 'A-' : sz === 'base' ? 'A' : 'A+'}
+              </button>
+            ))}
+          </div>
           <div className="hidden lg:block text-right">
             <div className="text-xs font-semibold text-slate-100">
               {user?.profile?.fullName || user?.profile?.name || user?.username || 'Siswa CBT'}
@@ -1061,10 +1174,30 @@ export default function StudentCbtPlayerPage() {
                   </span>
                 </div>
 
-                {/* Question Stem Text */}
-                <div className="text-sm font-medium text-slate-900 leading-relaxed whitespace-pre-line">
-                  {currentQ.stem}
+                {/* Question Stem Text + Math Formula */}
+                <div
+                  className={`font-medium text-slate-900 leading-relaxed whitespace-pre-line ${
+                    fontScale === 'lg' ? 'text-base sm:text-lg' : fontScale === 'sm' ? 'text-xs' : 'text-sm'
+                  }`}
+                >
+                  <MathText text={currentQ.stem} />
                 </div>
+
+                {currentQ.body?.formula && (
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-900">
+                    <MathText text={`$$${currentQ.body.formula}$$`} />
+                  </div>
+                )}
+
+                {/* Question Stimulus Audio */}
+                {currentQ.body?.audio_url && (
+                  <div className="my-2 p-3 rounded-xl border border-slate-200 bg-slate-50 max-w-xl">
+                    <p className="text-[11px] font-semibold text-slate-600 mb-1.5">Stimulus Audio Soal:</p>
+                    <audio controls className="w-full" src={currentQ.body.audio_url}>
+                      Browser Anda tidak mendukung pemutar audio.
+                    </audio>
+                  </div>
+                )}
 
                 {/* Question Stimulus Media / Image */}
                 {(currentQ.body?.media_url || currentQ.body?.image_url || (currentQ as any).media_url) && (
@@ -1081,16 +1214,19 @@ export default function StudentCbtPlayerPage() {
                 <div className="space-y-3 pt-2">
                   {/* Model 1: Pilihan Ganda Tunggal (PG) */}
                   {currentQ.question_type === 'pg' && currentQ.options && (
-                    <div className="space-y-2.5">
+                    <div className="space-y-2.5" role="radiogroup" aria-label={`Pilihan jawaban soal nomor ${currentIndex + 1}`}>
                       {currentQ.options.map((opt) => {
                         const isSelected =
                           answers[currentQ.question_id] === opt.id ||
                           answers[currentQ.question_id]?.selected_option_id === opt.id;
+                        const optImg = (opt as any).body?.media_url || (opt as any).body?.image_url;
 
                         return (
                           <button
                             key={opt.id}
                             type="button"
+                            role="radio"
+                            aria-checked={isSelected}
                             onClick={() => handleAnswerChange(currentQ.question_id, opt.id)}
                             className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-start gap-3 ${
                               isSelected
@@ -1107,9 +1243,22 @@ export default function StudentCbtPlayerPage() {
                             >
                               {opt.label}
                             </span>
-                            <span className="text-xs text-slate-800 font-medium mt-0.5">
-                              {opt.text}
-                            </span>
+                            <div className="flex-1 space-y-2 mt-0.5">
+                              <span
+                                className={`text-slate-800 font-medium block ${
+                                  fontScale === 'lg' ? 'text-sm sm:text-base' : 'text-xs'
+                                }`}
+                              >
+                                <MathText text={opt.text} />
+                              </span>
+                              {optImg && (
+                                <img
+                                  src={optImg}
+                                  alt={`Gambar opsi ${opt.label}`}
+                                  className="max-h-40 rounded-lg border border-slate-200 object-contain"
+                                />
+                              )}
+                            </div>
                           </button>
                         );
                       })}
@@ -1128,6 +1277,7 @@ export default function StudentCbtPlayerPage() {
                           ? currentRaw
                           : (Array.isArray(currentRaw?.selected_option_ids) ? currentRaw.selected_option_ids : []);
                         const isSelected = currentArr.includes(opt.id);
+                        const optImg = (opt as any).body?.media_url || (opt as any).body?.image_url;
 
                         return (
                           <button
@@ -1154,9 +1304,22 @@ export default function StudentCbtPlayerPage() {
                             >
                               {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
                             </div>
-                            <span className="text-xs text-slate-800 font-medium">
-                              <b className="mr-1">{opt.label}.</b> {opt.text}
-                            </span>
+                            <div className="flex-1 space-y-2">
+                              <span
+                                className={`text-slate-800 font-medium block ${
+                                  fontScale === 'lg' ? 'text-sm sm:text-base' : 'text-xs'
+                                }`}
+                              >
+                                <b className="mr-1">{opt.label}.</b> <MathText text={opt.text} />
+                              </span>
+                              {optImg && (
+                                <img
+                                  src={optImg}
+                                  alt={`Gambar opsi ${opt.label}`}
+                                  className="max-h-40 rounded-lg border border-slate-200 object-contain"
+                                />
+                              )}
+                            </div>
                           </button>
                         );
                       })}
@@ -1251,7 +1414,7 @@ export default function StudentCbtPlayerPage() {
                       <label className="text-xs font-semibold text-slate-700">Tulis Jawaban Singkat:</label>
                       <Input
                         value={typeof answers[currentQ.question_id] === 'object' ? (answers[currentQ.question_id]?.text ?? '') : (answers[currentQ.question_id] || '')}
-                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value })}
+                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value }, 800)}
                         placeholder="Ketikkan jawaban Anda di sini..."
                         className="text-xs h-10 max-w-md"
                       />
@@ -1267,7 +1430,7 @@ export default function StudentCbtPlayerPage() {
                       <Textarea
                         rows={6}
                         value={typeof answers[currentQ.question_id] === 'object' ? (answers[currentQ.question_id]?.text ?? '') : (answers[currentQ.question_id] || '')}
-                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value })}
+                        onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value }, 800)}
                         placeholder="Tuliskan penjelasan dan argumen jawaban Anda di sini..."
                         className="text-xs leading-relaxed"
                       />

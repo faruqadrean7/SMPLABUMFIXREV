@@ -360,4 +360,44 @@ class ProgramKhususStudentTest extends TestCase
 
         $this->assertCount(2, $response->json('data'));
     }
+
+    /**
+     * BE-PROG-01: Siswa dengan nilai bawaan 'reguler' yang berada di kelas khusus mengikuti program kelas.
+     */
+    public function test_be_prog_01_student_with_default_reguler_in_special_class_resolves_to_class_program(): void
+    {
+        [$user, $student] = $this->createStudentWithProgram('reguler');
+
+        $tahfidzClass = SchoolClass::create([
+            'academic_year_id' => $this->academicYear->id,
+            'grade_level_id' => $this->gradeLevel->id,
+            'name' => 'VII-Tahfidz-Fallback',
+            'capacity' => 30,
+            'program_type' => 'tahfidz',
+        ]);
+
+        ClassStudent::where('student_id', $student->id)->delete();
+        ClassStudent::create([
+            'class_id' => $tahfidzClass->id,
+            'student_id' => $student->id,
+            'joined_at' => '2024-07-15',
+        ]);
+
+        ProgramMaterial::create([
+            'program_type' => 'tahfidz',
+            'title' => 'Materi Tahfidz Kelas Fallback',
+            'material_type' => 'murottal',
+            'target_scope' => 'all',
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/me/student-dashboard')
+            ->assertOk()
+            ->assertJsonPath('data.programType', 'tahfidz');
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/me/program/materials')
+            ->assertOk()
+            ->assertJsonPath('data.0.title', 'Materi Tahfidz Kelas Fallback');
+    }
 }
