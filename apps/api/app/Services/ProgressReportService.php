@@ -553,7 +553,7 @@ class ProgressReportService
                 'month' => (int) $period->month,
                 'semester_name' => $period->semester?->name,
                 'academic_year' => $period->semester?->academicYear?->name,
-                'is_locked' => (bool) $period->is_locked,
+                'is_locked' => $period->status === 'locked',
             ],
             'students' => $studentRows,
             'summary' => $counts,

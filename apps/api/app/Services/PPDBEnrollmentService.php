@@ -34,9 +34,14 @@ class PPDBEnrollmentService
 
         $applicant = Applicant::with(['reRegistration', 'wave', 'track'])->findOrFail($applicantId);
 
-        // IDOR Protection: only owner or staff with ppdb.applicant.verify permission
-        if ($applicant->user_id !== $currentUser->id && ! $currentUser->hasPermission('ppdb.applicant.verify')) {
-            throw new HttpException(403, 'Anda tidak memiliki hak akses untuk mengonfirmasi daftar ulang pendaftaran ini');
+        // IDOR Protection: only owner or staff with ppdb.applicant.verify permission (same school)
+        if ($applicant->user_id !== $currentUser->id) {
+            if (! $currentUser->hasPermission('ppdb.applicant.verify')) {
+                throw new HttpException(403, 'Anda tidak memiliki hak akses untuk mengonfirmasi daftar ulang pendaftaran ini');
+            }
+            if (! $currentUser->hasRole('super_admin') && ! empty($currentUser->school_id) && ! empty($applicant->wave?->school_id) && (string) $applicant->wave->school_id !== (string) $currentUser->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Pendaftar berada di luar sekolah penugasan Anda.');
+            }
         }
 
         // Acceptance validation
@@ -123,6 +128,11 @@ class PPDBEnrollmentService
             $applicant = Applicant::with(['wave', 'track', 'parents', 'reRegistration', 'user', 'documents'])
                 ->lockForUpdate()
                 ->findOrFail($applicantId);
+
+            // P1-25: Isolasi school_id pada enrollment oleh staf/panitia non-super_admin
+            if ($currentUser && ! $currentUser->hasRole('super_admin') && ! empty($currentUser->school_id) && ! empty($applicant->wave?->school_id) && (string) $applicant->wave->school_id !== (string) $currentUser->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Pendaftar berada di luar sekolah penugasan Anda.');
+            }
 
             // 1. Idempotency Check di bawah row lock eksklusif
             if ($applicant->student_id !== null || $applicant->status === 'enrolled') {
@@ -277,61 +287,57 @@ class PPDBEnrollmentService
             ]);
 
             // G. Process Guardians from Applicant Parents
+            // P1-25: DILARANG auto-attach ke akun Guardian eksisting hanya dari nomor HP yang diinput bebas
+            // oleh pendaftar (mencegah cross-family & cross-school IDOR). Setiap keluarga baru mendapat
+            // akun Guardian terisolasi; tautan saudara kandung dilakukan eksplisit oleh admin sekolah.
             $activationLinks = [];
             if ($applicant->parents->isNotEmpty()) {
                 $isFirst = true;
                 foreach ($applicant->parents as $parent) {
-                    $guardian = null;
-                    if (! empty($parent->phone)) {
-                        $guardian = Guardian::where('phone', $parent->phone)->first();
-                    }
-
-                    if (! $guardian) {
-                        $parentBase = Str::slug($parent->name, '_') ?: 'ortu';
+                    $parentBase = Str::slug($parent->name, '_') ?: 'ortu';
+                    $guardianUsername = 'ortu_'.$parentBase.'_'.random_int(1000, 9999);
+                    while (User::where('username', $guardianUsername)->exists()) {
                         $guardianUsername = 'ortu_'.$parentBase.'_'.random_int(1000, 9999);
-                        while (User::where('username', $guardianUsername)->exists()) {
-                            $guardianUsername = 'ortu_'.$parentBase.'_'.random_int(1000, 9999);
-                        }
-
-                        // Decision #6: Aman, tidak menggunakan default password terbuka.
-                        // Menggunakan unguessable secret hash + tautan aktivasi mandiri portal.
-                        $activationToken = Str::random(48);
-                        $randomSecret = Str::random(32);
-
-                        $guardianUser = User::create([
-                            'school_id' => $applicant->wave?->school_id,
-                            'username' => $guardianUsername,
-                            'email' => $guardianUsername.'@wali.sistlabum.sch.id',
-                            'phone' => $parent->phone ?? ('08'.random_int(10000000, 99999999)),
-                            'password_hash' => Hash::make($randomSecret),
-                            'status' => 'active',
-                            'must_change_password' => true,
-                        ]);
-
-                        $guardianUser->roles()->attach($roleGuardian->id);
-
-                        // Simpan token aktivasi di cache selama 7 hari
-                        Cache::put("guardian_activation:{$guardianUser->id}", $activationToken, 86400 * 7);
-                        Cache::put("guardian_activation_token:{$activationToken}", $guardianUser->id, 86400 * 7);
-
-                        $guardian = Guardian::create([
-                            'school_id' => $applicant->wave?->school_id,
-                            'user_id' => $guardianUser->id,
-                            'full_name' => $parent->name,
-                            'phone' => $parent->phone ?? $guardianUser->phone,
-                            'occupation' => $parent->occupation,
-                            'address' => $address,
-                        ]);
-
-                        $activationLinks[] = [
-                            'guardian_id' => $guardian->id,
-                            'user_id' => $guardianUser->id,
-                            'full_name' => $parent->name,
-                            'phone' => $parent->phone,
-                            'activation_token' => $activationToken,
-                            'activation_url' => url('/auth/activate-guardian?token='.$activationToken),
-                        ];
                     }
+
+                    // Decision #6: Aman, tidak menggunakan default password terbuka.
+                    // Menggunakan unguessable secret hash + tautan aktivasi mandiri portal.
+                    $activationToken = Str::random(48);
+                    $randomSecret = Str::random(32);
+
+                    $guardianUser = User::create([
+                        'school_id' => $applicant->wave?->school_id,
+                        'username' => $guardianUsername,
+                        'email' => $guardianUsername.'@wali.sistlabum.sch.id',
+                        'phone' => $parent->phone ?? ('08'.random_int(10000000, 99999999)),
+                        'password_hash' => Hash::make($randomSecret),
+                        'status' => 'active',
+                        'must_change_password' => true,
+                    ]);
+
+                    $guardianUser->roles()->attach($roleGuardian->id);
+
+                    // Simpan token aktivasi di cache selama 7 hari
+                    Cache::put("guardian_activation:{$guardianUser->id}", $activationToken, 86400 * 7);
+                    Cache::put("guardian_activation_token:{$activationToken}", $guardianUser->id, 86400 * 7);
+
+                    $guardian = Guardian::create([
+                        'school_id' => $applicant->wave?->school_id,
+                        'user_id' => $guardianUser->id,
+                        'full_name' => $parent->name,
+                        'phone' => $parent->phone ?? $guardianUser->phone,
+                        'occupation' => $parent->occupation,
+                        'address' => $address,
+                    ]);
+
+                    $activationLinks[] = [
+                        'guardian_id' => $guardian->id,
+                        'user_id' => $guardianUser->id,
+                        'full_name' => $parent->name,
+                        'phone' => $parent->phone,
+                        'activation_token' => $activationToken,
+                        'activation_url' => url('/auth/activate-guardian?token='.$activationToken),
+                    ];
 
                     $student->guardians()->syncWithoutDetaching([
                         $guardian->id => [

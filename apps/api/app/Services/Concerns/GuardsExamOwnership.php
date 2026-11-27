@@ -18,19 +18,52 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  */
 trait GuardsExamOwnership
 {
-    protected function assertCanManage(Exam $exam, ?User $user): void
+    protected function isCbtAdmin(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return $user->hasRole(['super_admin', 'admin', 'admin_tu', 'admin_kurikulum', 'principal', 'cbt_operator']);
+    }
+
+    protected function assertExamSchoolAccess(Exam $exam, ?User $user): void
     {
         if (! $user) {
             throw new HttpException(401, 'Unauthenticated');
         }
 
-        // Peran pengawas/administratif boleh mengelola semua ujian.
-        // Yang dibatasi adalah GURU: hanya ujian miliknya sendiri.
-        if ($user->hasRole(['super_admin', 'admin', 'admin_tu', 'admin_kurikulum', 'principal'])) {
+        if ($user->hasRole('super_admin')) {
             return;
         }
 
-        if ((string) $exam->created_by === (string) $user->id) {
+        if (! empty($user->school_id) && ! empty($exam->school_id) && (string) $exam->school_id !== (string) $user->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Ujian CBT berada di luar sekolah penugasan Anda.');
+        }
+    }
+
+    protected function canManageExam(Exam $exam, ?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if (! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($exam->school_id) && (string) $exam->school_id !== (string) $user->school_id) {
+            return false;
+        }
+
+        if ($this->isCbtAdmin($user)) {
+            return true;
+        }
+
+        return $exam->created_by !== null && (string) $exam->created_by === (string) $user->id;
+    }
+
+    protected function assertCanManage(Exam $exam, ?User $user): void
+    {
+        $this->assertExamSchoolAccess($exam, $user);
+
+        if ($this->canManageExam($exam, $user)) {
             return;
         }
 

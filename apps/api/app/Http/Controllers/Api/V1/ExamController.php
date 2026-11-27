@@ -10,6 +10,7 @@ use App\Http\Requests\Cbt\ListExamRequest;
 use App\Http\Requests\Cbt\StoreExamRequest;
 use App\Http\Requests\Cbt\UpdateExamRequest;
 use App\Models\Exam;
+use App\Services\Concerns\GuardsExamOwnership;
 use App\Services\ExamService;
 use App\Traits\ApiResponse;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -21,6 +22,7 @@ use Throwable;
 class ExamController extends Controller
 {
     use ApiResponse;
+    use GuardsExamOwnership;
 
     public function __construct(
         protected ExamService $service
@@ -35,12 +37,12 @@ class ExamController extends Controller
         try {
             $filters = $request->validated();
             $user = $request->user();
-            $isPrivileged = $user && ($user->hasRole(['super_admin', 'admin']) || $user->hasPermission('cbt.exam.manage') || $user->hasRole('teacher'));
+            $isPrivileged = $user && ($this->isCbtAdmin($user) || $user->hasRole('teacher') || $user->hasPermission('cbt.exam.manage'));
             if (! $isPrivileged) {
                 $filters['exclude_draft_archived'] = true;
             }
 
-            $paginator = $this->service->listExams($filters);
+            $paginator = $this->service->listExams($filters, $user);
 
             return $this->paginatedResponse($paginator);
         } catch (Throwable $e) {
@@ -81,11 +83,10 @@ class ExamController extends Controller
             $exam = $this->service->getExam($id);
 
             $user = $request->user();
-            $isPrivileged = $user && (
-                $user->hasRole(['super_admin', 'admin'])
-                || $user->hasPermission('cbt.exam.manage')
-                || $exam->created_by === $user->id
-            );
+            $this->assertExamSchoolAccess($exam, $user);
+
+            // P1-11: Hanya admin CBT atau pembuat ujian yang boleh melihat soal/kunci/token/peserta lengkap
+            $isPrivileged = $this->canManageExam($exam, $user);
 
             if (! $isPrivileged) {
                 if (in_array($exam->status, ['draft', 'dibatalkan'], true)) {
@@ -106,6 +107,8 @@ class ExamController extends Controller
             return $this->successResponse($exam);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Ujian CBT tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -180,14 +183,17 @@ class ExamController extends Controller
      * BE-CBT-02: Lihat daftar butir soal ujian.
      * GET /api/v1/exams/{id}/questions
      */
-    public function getQuestions(string $id): JsonResponse
+    public function getQuestions(string $id, Request $request): JsonResponse
     {
         try {
             $exam = Exam::with(['questions.question.options'])->findOrFail($id);
+            $this->assertCanManage($exam, $request->user());
 
             return $this->successResponse($exam->questions);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Ujian CBT tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         }
     }
 
@@ -203,6 +209,8 @@ class ExamController extends Controller
             return $this->successResponse($rooms, 201);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Ujian CBT tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -214,14 +222,17 @@ class ExamController extends Controller
      * BE-CBT-02: Lihat daftar ruang ujian.
      * GET /api/v1/exams/{id}/rooms
      */
-    public function getRooms(string $id): JsonResponse
+    public function getRooms(string $id, Request $request): JsonResponse
     {
         try {
             $exam = Exam::with(['rooms.room', 'rooms.proctor'])->findOrFail($id);
+            $this->assertCanManage($exam, $request->user());
 
             return $this->successResponse($exam->rooms);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Ujian CBT tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         }
     }
 
@@ -254,14 +265,17 @@ class ExamController extends Controller
      * BE-CBT-02: Lihat daftar peserta ujian.
      * GET /api/v1/exams/{id}/participants
      */
-    public function getParticipants(string $id): JsonResponse
+    public function getParticipants(string $id, Request $request): JsonResponse
     {
         try {
             $exam = Exam::with(['participants.student', 'participants.examRoom.room'])->findOrFail($id);
+            $this->assertCanManage($exam, $request->user());
 
             return $this->successResponse($exam->participants);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Ujian CBT tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         }
     }
 

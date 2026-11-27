@@ -18,6 +18,7 @@ use App\Models\Room;
 use App\Models\User;
 use App\Services\Concerns\GuardsExamOwnership;
 use App\Services\GradeRecorder;
+use App\Services\GradeService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -901,14 +902,33 @@ class ExamGradingService
             throw new HttpException(422, 'Mata pelajaran komponen nilai tidak sesuai dengan mata pelajaran ujian CBT.');
         }
 
+        // P1-14: Pastikan pengguna berwenang menulis nilai pada komponen target (termasuk isolasi sekolah & kelas)
+        if ($request->user()) {
+            app(GradeService::class)->checkGradeEntryAuthorization($request->user(), $component->id);
+        }
+
         $period = GradePeriod::findOrFail($data['period_id']);
+        if ($component->semester_id && $period->semester_id && $component->semester_id !== $period->semester_id) {
+            throw new HttpException(422, 'Komponen nilai tidak sesuai dengan semester pada periode penilaian yang dipilih.');
+        }
         if ($period->status === 'locked') {
             throw new HttpException(422, 'Periode penilaian telah dikunci. Pengiriman nilai CBT tidak diizinkan tanpa membuka kunci periode terlebih dahulu.');
         }
 
-        $sessions = ExamSession::where('exam_id', $exam->id)
-            ->whereNotNull('score')
-            ->get();
+        $sessionsQuery = ExamSession::where('exam_id', $exam->id)
+            ->whereNotNull('score');
+
+        // P1-14: Jika komponen spesifik kelas, hanya sinkronkan siswa yang aktif di kelas tersebut
+        if ($component->class_id) {
+            $activeClassStudentIds = DB::table('class_students')
+                ->where('class_id', $component->class_id)
+                ->whereNull('left_at')
+                ->pluck('student_id')
+                ->all();
+            $sessionsQuery->whereIn('student_id', $activeClassStudentIds);
+        }
+
+        $sessions = $sessionsQuery->get();
 
         if ($sessions->isEmpty()) {
             throw new HttpException(422, 'Belum ada sesi ujian siswa dengan nilai yang dapat dipublikasikan ke buku nilai.');

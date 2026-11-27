@@ -16,17 +16,18 @@ use App\Models\ExamSession;
 use App\Models\Extracurricular;
 use App\Models\ExtracurricularMember;
 use App\Models\Grade;
-use App\Models\PointType;
 use App\Models\Schedule;
 use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\StudentProgramProfile;
 use App\Models\TeachingAssignment;
+use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\LmsService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class MeStudentController extends Controller
 {
@@ -48,10 +49,10 @@ class MeStudentController extends Controller
      */
     protected function resolveProgramType(Student $student): string
     {
-        $student->loadMissing('classes');
+        $student->loadMissing('activeClasses');
 
         $studentProg = $student->program_type;
-        $classProg = $student->classes->first()?->program_type;
+        $classProg = $student->activeClasses->first()?->program_type;
 
         if (empty($studentProg) || ($studentProg === 'reguler' && in_array($classProg, ['tahfidz', 'icp', 'inklusi'], true))) {
             return $classProg ?? 'reguler';
@@ -174,11 +175,17 @@ class MeStudentController extends Controller
         }
 
         $meta = $profile->meta_data ?? [];
-        $meta['daily_mood'] = [
+        $todayKey = now()->toDateString();
+        $moodEntry = [
             'mood' => $validated['mood'],
             'note' => $validated['note'] ?? null,
+            'date' => $todayKey,
             'timestamp' => now()->toISOString(),
         ];
+        $meta['daily_mood'] = $moodEntry;
+        $history = is_array($meta['daily_mood_history'] ?? null) ? $meta['daily_mood_history'] : [];
+        $history[$todayKey] = $moodEntry;
+        $meta['daily_mood_history'] = $history;
         $profile->meta_data = $meta;
         $profile->save();
 
@@ -222,13 +229,19 @@ class MeStudentController extends Controller
         }
 
         $meta = $profile->meta_data ?? [];
-        $meta['mutabaah_today'] = [
+        $todayKey = now()->toDateString();
+        $mutabaahEntry = [
             'sholat_fardhu' => (int) $validated['sholat_fardhu'],
             'tilawah_pages' => (int) $validated['tilawah_pages'],
             'dhuha' => (bool) $validated['dhuha'],
             'tahajud' => (bool) $validated['tahajud'],
+            'date' => $todayKey,
             'updated_at' => now()->toISOString(),
         ];
+        $meta['mutabaah_today'] = $mutabaahEntry;
+        $history = is_array($meta['mutabaah_history'] ?? null) ? $meta['mutabaah_history'] : [];
+        $history[$todayKey] = $mutabaahEntry;
+        $meta['mutabaah_history'] = $history;
         $profile->meta_data = $meta;
         $profile->save();
 
@@ -503,19 +516,50 @@ class MeStudentController extends Controller
 
     /**
      * GET /api/v1/me/counseling-requests
-     * Daftar permohonan konseling siswa yang login.
+     * Daftar permohonan konseling siswa atau orang tua/wali yang login.
+     * P1-23: Orang tua hanya melihat permintaan yang diajukan sendiri (konsisten P0-18, tidak membaca curhat mandiri siswa).
      */
     public function counselingRequests(Request $request): JsonResponse
     {
-        $student = $this->resolveCounselingSubject($request);
-        if (! $student) {
-            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 'UNAUTHORIZED', 401);
         }
 
-        $counselings = CounselingRequest::with(['counselor', 'preferredCounselor'])
-            ->where('student_id', $student->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        if ($user->student) {
+            $student = $this->resolveCounselingSubject($request);
+            if (! $student) {
+                return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+            }
+
+            $counselings = CounselingRequest::with(['counselor', 'preferredCounselor'])
+                ->where('student_id', $student->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+        } elseif ($user->guardian) {
+            $requestedChildId = $request->input('student_id');
+            if ($requestedChildId !== null && $requestedChildId !== '') {
+                $student = $this->resolveCounselingSubject($request);
+                if (! $student) {
+                    return $this->errorResponse('Akses ditolak: Anda tidak berwenang mengakses permohonan konseling siswa ini.', 'FORBIDDEN', 403);
+                }
+                $wardIds = [$student->id];
+            } else {
+                $wardIds = $this->resolveGuardianWardIds($user);
+                if (empty($wardIds)) {
+                    return $this->errorResponse('Akses ditolak: Profil anak perwalian tidak ditemukan.', 'FORBIDDEN', 403);
+                }
+            }
+
+            // P1-23: Guardian hanya boleh melihat permintaan yang diajukannya sendiri
+            $counselings = CounselingRequest::with(['counselor', 'preferredCounselor'])
+                ->whereIn('student_id', $wardIds)
+                ->where('requested_by', $user->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+        } else {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
 
         $data = $counselings->map(function (CounselingRequest $c) {
             $prefSchedule = '';
@@ -528,6 +572,8 @@ class MeStudentController extends Controller
 
             return [
                 'id' => $c->id,
+                'student_id' => $c->student_id,
+                'requester_role' => $c->requester_role,
                 'topic' => $c->topic,
                 'category' => 'Pengembangan Diri',
                 'requestDate' => $c->created_at?->format('Y-m-d') ?? now()->toDateString(),
@@ -551,7 +597,7 @@ class MeStudentController extends Controller
 
     /**
      * POST /api/v1/me/counseling-requests
-     * Pengajuan permohonan konseling mandiri siswa.
+     * Pengajuan permohonan konseling mandiri siswa atau konsultasi orang tua/wali.
      */
     public function storeCounselingRequest(Request $request): JsonResponse
     {
@@ -560,12 +606,18 @@ class MeStudentController extends Controller
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        // Support both camelCase and snake_case
+        // Support both camelCase, snake_case, dan preferred_schedule dari portal orang tua
         if ($request->has('preferredDate') && ! $request->has('preferred_date')) {
             $request->merge(['preferred_date' => $request->input('preferredDate')]);
         }
         if ($request->has('preferredTime') && ! $request->has('preferred_time')) {
             $request->merge(['preferred_time' => $request->input('preferredTime')]);
+        }
+        if (! $request->filled('preferred_date') && ! $request->filled('preferred_time')) {
+            $prefSchedule = $request->input('preferred_schedule') ?? $request->input('preferredSchedule');
+            if (is_string($prefSchedule) && trim($prefSchedule) !== '') {
+                $request->merge(['preferred_date' => trim($prefSchedule)]);
+            }
         }
 
         // Support notes or topic as fallback for reason
@@ -638,7 +690,7 @@ class MeStudentController extends Controller
 
     /**
      * Resolve subjek konseling: siswa sendiri, atau anak milik wali (ortu).
-     * Wali hanya dapat mengakses anak yang benar-benar miliknya (anti-IDOR),
+     * Wali hanya dapat mengakses anak yang benar-benar miliknya pada sekolah yang sama (anti-IDOR),
      * opsional difilter student_id; default anak pertama.
      */
     protected function resolveCounselingSubject(Request $request): ?Student
@@ -648,19 +700,59 @@ class MeStudentController extends Controller
             return null;
         }
         if ($user->student) {
-            return $user->student;
+            $student = $user->student;
+            if (! empty($user->school_id) && ! empty($student->school_id) && $student->school_id !== $user->school_id) {
+                return null;
+            }
+
+            return $student;
         }
         $guardian = $user->guardian;
         if ($guardian) {
             $childId = $request->input('student_id');
-            if ($childId) {
-                return $guardian->students()->where('students.id', $childId)->first();
+            $query = $guardian->students();
+            if (! empty($user->school_id)) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('students.school_id', $user->school_id)
+                        ->orWhereNull('students.school_id');
+                });
             }
 
-            return $guardian->students()->first();
+            if ($childId !== null && $childId !== '') {
+                if (! is_string($childId) || ! Str::isUuid($childId)) {
+                    return null;
+                }
+
+                return $query->where('students.id', $childId)->first();
+            }
+
+            return $query->first();
         }
 
         return null;
+    }
+
+    /**
+     * Ambil daftar ID anak perwalian sah pada sekolah yang sama untuk guardian.
+     *
+     * @return array<int, string>
+     */
+    protected function resolveGuardianWardIds(User $user): array
+    {
+        $guardian = $user->guardian;
+        if (! $guardian) {
+            return [];
+        }
+
+        $query = $guardian->students();
+        if (! empty($user->school_id)) {
+            $query->where(function ($q) use ($user) {
+                $q->where('students.school_id', $user->school_id)
+                    ->orWhereNull('students.school_id');
+            });
+        }
+
+        return $query->pluck('students.id')->all();
     }
 
     /**
@@ -688,7 +780,7 @@ class MeStudentController extends Controller
         foreach ($achievements as $ach) {
             $dateStr = $ach->achieved_at ? $ach->achieved_at->format('d M Y') : $ach->created_at->format('d M Y');
             $items->push([
-                'id' => 'ach-' . $ach->id,
+                'id' => 'ach-'.$ach->id,
                 'student_id' => $student->id,
                 'kind' => 'prestasi',
                 'title' => $ach->title,
@@ -704,7 +796,7 @@ class MeStudentController extends Controller
             $isViolation = ($sp->pointType?->kind === 'pelanggaran');
             $dateStr = $sp->point_date ? $sp->point_date->format('d M Y') : $sp->created_at->format('d M Y');
             $items->push([
-                'id' => 'pt-' . $sp->id,
+                'id' => 'pt-'.$sp->id,
                 'student_id' => $student->id,
                 'kind' => $isViolation ? 'pelanggaran' : 'prestasi',
                 'title' => $sp->pointType?->name ?: ($isViolation ? 'Pelanggaran Kedisiplinan' : 'Apresiasi Karakter'),
@@ -756,7 +848,7 @@ class MeStudentController extends Controller
 
         $myExtracurriculars = $memberships->map(function (ExtracurricularMember $m) {
             $ekskul = $m->extracurricular;
-            $sched = trim(($ekskul?->schedule_day ?? '') . ($ekskul?->schedule_time ? ', ' . $ekskul->schedule_time : ''));
+            $sched = trim(($ekskul?->schedule_day ?? '').($ekskul?->schedule_time ? ', '.$ekskul->schedule_time : ''));
 
             return [
                 'id' => $m->extracurricular_id,
@@ -782,7 +874,7 @@ class MeStudentController extends Controller
         $availableExtracurriculars = $available->map(function (Extracurricular $e) {
             $memberCount = $e->members()->count();
             $remainingQuota = max(0, ($e->quota ?? 30) - $memberCount);
-            $sched = trim(($e->schedule_day ?? '') . ($e->schedule_time ? ', ' . $e->schedule_time : ''));
+            $sched = trim(($e->schedule_day ?? '').($e->schedule_time ? ', '.$e->schedule_time : ''));
 
             return [
                 'id' => $e->id,

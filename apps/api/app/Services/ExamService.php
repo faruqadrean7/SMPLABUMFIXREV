@@ -8,6 +8,7 @@ use App\Models\Exam;
 use App\Models\ExamParticipant;
 use App\Models\ExamQuestion;
 use App\Models\ExamRoom;
+use App\Models\Room;
 use App\Models\User;
 use App\Services\Concerns\GuardsExamOwnership;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -23,11 +24,17 @@ class ExamService
     /**
      * BE-CBT-02: Daftar ujian CBT dengan filter.
      */
-    public function listExams(array $filters): LengthAwarePaginator
+    public function listExams(array $filters, ?User $user = null): LengthAwarePaginator
     {
         $query = Exam::with(['subject', 'creator', 'parentExam'])
             ->withCount(['questions', 'rooms', 'participants'])
             ->orderBy('created_at', 'desc');
+
+        if ($user && ! $user->hasRole('super_admin') && ! empty($user->school_id)) {
+            $query->where(function ($q) use ($user) {
+                $q->where('school_id', $user->school_id)->orWhereNull('school_id');
+            });
+        }
 
         if (! empty($filters['subject_id'])) {
             $query->where('subject_id', $filters['subject_id']);
@@ -37,10 +44,13 @@ class ExamService
             $query->where('exam_type', $filters['exam_type']);
         }
 
+        // P1-11: Terapkan filter status dan exclude_draft_archived secara independen (AND) agar ?status=draft tidak membypass guard
+        if (! empty($filters['exclude_draft_archived'])) {
+            $query->whereNotIn('status', ['draft', 'arsip', 'dibatalkan']);
+        }
+
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
-        } elseif (! empty($filters['exclude_draft_archived'])) {
-            $query->whereNotIn('status', ['draft', 'arsip', 'dibatalkan']);
         }
 
         if (! empty($filters['search'])) {
@@ -264,9 +274,9 @@ class ExamService
         } else {
             $examRoom = ExamRoom::where('exam_id', $exam->id)->orderBy('session_no')->first();
             if (! $examRoom) {
-                $defaultRoom = \App\Models\Room::first();
+                $defaultRoom = Room::first();
                 if (! $defaultRoom) {
-                    $defaultRoom = \App\Models\Room::create([
+                    $defaultRoom = Room::create([
                         'school_id' => $exam->school_id ?? $request->user()?->school_id,
                         'code' => 'LAB-CBT-01',
                         'name' => 'Lab Komputer 1',

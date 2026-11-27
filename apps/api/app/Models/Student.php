@@ -76,6 +76,17 @@ class Student extends Model
             ->withTimestamps();
     }
 
+    /**
+     * Relasi kelas aktif siswa (hanya penempatan dengan left_at IS NULL).
+     */
+    public function activeClasses(): BelongsToMany
+    {
+        return $this->belongsToMany(SchoolClass::class, 'class_students', 'student_id', 'class_id')
+            ->withPivot(['joined_at', 'left_at'])
+            ->wherePivotNull('left_at')
+            ->withTimestamps();
+    }
+
     public function programProfile(): HasOne
     {
         return $this->hasOne(StudentProgramProfile::class);

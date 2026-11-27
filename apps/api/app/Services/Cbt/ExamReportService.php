@@ -11,6 +11,7 @@ use App\Models\ExamSession;
 use App\Models\ExamViolation;
 use App\Models\SiteSetting;
 use App\Models\User;
+use App\Services\Concerns\GuardsExamOwnership;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -18,6 +19,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ExamReportService
 {
+    use GuardsExamOwnership;
+
     /**
      * BE-CBT-10: Ambil Rekapitulasi Lengkap Pelaksanaan & Hasil Ujian CBT.
      * GET /api/v1/exams/{id}/report
@@ -30,12 +33,8 @@ class ExamReportService
 
         $roomFilter = $filters['room_id'] ?? null;
 
-        // SEC-CBT-09: Isolasi ruangan untuk pengawas non-admin pada laporan dan berita acara
-        $isGlobalAdmin = $currentUser && (
-            $currentUser->hasRole(['admin', 'super_admin'])
-            || $currentUser->hasPermission('cbt.exam.manage')
-            || $exam->created_by === $currentUser->id
-        );
+        // SEC-CBT-09 & P1-11: Isolasi ruangan untuk pengawas non-pemilik/non-admin CBT pada laporan dan berita acara
+        $isGlobalAdmin = $this->canManageExam($exam, $currentUser);
         $assignedRoomIds = [];
         if (! $isGlobalAdmin) {
             $assignedRoomIds = ExamRoom::where('exam_id', $examId)
@@ -388,15 +387,10 @@ HTML;
             throw new HttpException(401, 'Unauthenticated');
         }
 
-        if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
-            return;
-        }
+        $this->assertExamSchoolAccess($exam, $user);
 
-        if ($user->hasPermission('cbt.exam.manage')) {
-            return;
-        }
-
-        if ($exam->created_by === $user->id) {
+        // P1-11: Admin CBT atau pembuat ujian berwenang; cbt.exam.manage tidak bypass kepemilikan
+        if ($this->canManageExam($exam, $user)) {
             return;
         }
 

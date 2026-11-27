@@ -7,6 +7,7 @@ use App\Models\ExamQuestion;
 use App\Models\Question;
 use App\Models\QuestionBank;
 use App\Models\QuestionOption;
+use App\Models\TeachingAssignment;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -437,7 +438,12 @@ class QuestionBankService
      */
     protected function verifyBankAccess(QuestionBank $bank, User $user, bool $requireWriteOwnership = false): void
     {
-        if ($user->hasRole(['admin', 'super_admin', 'cbt_operator']) || $user->hasPermission('cbt.exam.manage')) {
+        if (! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($bank->school_id) && (string) $bank->school_id !== (string) $user->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Bank soal berada di luar sekolah penugasan Anda.');
+        }
+
+        // P1-11: Hanya role administratif/operator CBT yang boleh akses global; cbt.exam.manage milik guru tidak bypass kepemilikan
+        if ($user->hasRole(['admin', 'super_admin', 'admin_tu', 'admin_kurikulum', 'principal', 'cbt_operator'])) {
             return;
         }
 
@@ -446,7 +452,7 @@ class QuestionBankService
         }
 
         if (! $requireWriteOwnership && $user->teacher) {
-            $teachesSubject = \App\Models\TeachingAssignment::where('teacher_id', $user->teacher->id)
+            $teachesSubject = TeachingAssignment::where('teacher_id', $user->teacher->id)
                 ->where('subject_id', $bank->subject_id)
                 ->exists();
             if ($teachesSubject) {
