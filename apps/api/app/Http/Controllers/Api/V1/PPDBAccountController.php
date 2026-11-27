@@ -64,6 +64,7 @@ class PPDBAccountController extends Controller
             $code = match ($e->getStatusCode()) {
                 400 => 'INVALID_OTP',
                 404 => 'NOT_FOUND',
+                429 => 'RATE_LIMITED',
                 default => 'BUSINESS_RULE_VIOLATION',
             };
 

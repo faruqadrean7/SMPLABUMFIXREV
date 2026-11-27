@@ -25,7 +25,7 @@ Route::get('/public/ppdb/tracks/{id}', [PPDBTrackController::class, 'publicShow'
 // =========================================================================
 // BE-PPDB-07: PPDB - Pengumuman Hasil Seleksi Publik
 // =========================================================================
-Route::post('/public/ppdb/results/check', [PPDBResultController::class, 'check']);
+Route::post('/public/ppdb/results/check', [PPDBResultController::class, 'check'])->middleware('throttle:30,5');
 Route::get('/public/ppdb/stats', [PPDBReceiptAndStatsController::class, 'stats']);
 
 Route::middleware(['auth:sanctum', 'permission:ppdb.wave.manage'])->group(function () {
@@ -54,11 +54,11 @@ Route::middleware(['auth:sanctum', 'permission:ppdb.wave.manage'])->group(functi
 // =========================================================================
 // BE-PPDB-02: PPDB - Akun Calon Siswa & Verifikasi OTP
 // =========================================================================
-Route::post('/ppdb/register', [PPDBAccountController::class, 'register'])->middleware('throttle:60,1');
-Route::post('/ppdb/verify-otp', [PPDBAccountController::class, 'verifyOtp'])->middleware('throttle:60,1');
-Route::post('/ppdb/resend-otp', [PPDBAccountController::class, 'resendOtp'])->middleware('throttle:60,1');
-Route::post('/ppdb/check-nik', [PPDBAccountController::class, 'checkNik'])->middleware('throttle:60,1');
-Route::post('/ppdb/login', [PPDBAccountController::class, 'login'])->middleware('throttle:60,1');
+Route::post('/ppdb/register', [PPDBAccountController::class, 'register'])->middleware('throttle:20,5');
+Route::post('/ppdb/verify-otp', [PPDBAccountController::class, 'verifyOtp'])->middleware('throttle:15,5');
+Route::post('/ppdb/resend-otp', [PPDBAccountController::class, 'resendOtp'])->middleware('throttle:10,5');
+Route::post('/ppdb/check-nik', [PPDBAccountController::class, 'checkNik'])->middleware('throttle:15,5');
+Route::post('/ppdb/login', [PPDBAccountController::class, 'login'])->middleware('throttle:20,5');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/ppdb/me', [PPDBAccountController::class, 'me']);

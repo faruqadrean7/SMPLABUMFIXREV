@@ -88,7 +88,7 @@ class PPDBAccountService
         try {
             Mail::to($email)->send(new PpdbOtpMail($otp, $data['full_name']));
         } catch (\Throwable $e) {
-            Log::warning('Gagal mengirimkan email OTP PPDB ke ' . $email . ': ' . $e->getMessage());
+            Log::warning('Gagal mengirimkan email OTP PPDB ke '.$email.': '.$e->getMessage());
         }
 
         // 4. Log audit
@@ -125,15 +125,53 @@ class PPDBAccountService
     }
 
     /**
+     * Batas maksimal kegagalan verifikasi OTP sebelum lockout (P0-22).
+     */
+    protected const MAX_OTP_ATTEMPTS = 5;
+
+    /**
+     * Durasi lockout kegagalan OTP (detik).
+     */
+    protected const OTP_LOCKOUT_SECONDS = 900;
+
+    /**
      * BE-PPDB-02: Verify OTP and activate user account.
      */
     public function verifyOtp(string $email, string $otp, Request $request): array
     {
         $normalizedEmail = strtolower(trim($email));
         $cacheKey = 'ppdb_otp:'.$normalizedEmail;
-        $cached = Cache::get($cacheKey);
+        $attemptsKey = 'ppdb_otp_attempts:'.$normalizedEmail;
+        $lockoutKey = 'ppdb_otp_lockout:'.$normalizedEmail;
 
-        if (! $cached || ! isset($cached['otp']) || $cached['otp'] !== $otp) {
+        // P0-22: Blokir bila akun sedang dalam masa lockout akibat brute-force OTP
+        if (Cache::has($lockoutKey)) {
+            throw new HttpException(
+                429,
+                'Terlalu banyak percobaan verifikasi OTP yang gagal. Silakan tunggu 15 menit atau minta kode OTP baru.'
+            );
+        }
+
+        $cached = Cache::get($cacheKey);
+        $isValidOtp = is_array($cached)
+            && isset($cached['otp'])
+            && hash_equals((string) $cached['otp'], trim($otp));
+
+        if (! $isValidOtp) {
+            $attempts = (int) Cache::get($attemptsKey, 0) + 1;
+            Cache::put($attemptsKey, $attempts, self::OTP_LOCKOUT_SECONDS);
+
+            if ($attempts >= self::MAX_OTP_ATTEMPTS) {
+                // Invalidasi OTP aktif dan aktifkan lockout 15 menit
+                Cache::forget($cacheKey);
+                Cache::put($lockoutKey, true, self::OTP_LOCKOUT_SECONDS);
+
+                throw new HttpException(
+                    429,
+                    'Terlalu banyak percobaan verifikasi OTP yang gagal. Kode OTP telah dibatalkan, silakan minta kode baru setelah 15 menit.'
+                );
+            }
+
             throw new HttpException(400, 'Kode OTP tidak valid atau sudah kedaluwarsa');
         }
 
@@ -144,9 +182,11 @@ class PPDBAccountService
         $user->status = 'active';
         $user->save();
 
-        // Hapus OTP dari cache
+        // Hapus OTP dan penghitung kegagalan dari cache
         Cache::forget($cacheKey);
         Cache::forget('ppdb_otp_cooldown:'.$normalizedEmail);
+        Cache::forget($attemptsKey);
+        Cache::forget($lockoutKey);
 
         // Terbitkan token otentikasi Sanctum
         $token = $user->createToken('ppdb_applicant_token')->plainTextToken;
@@ -216,13 +256,15 @@ class PPDBAccountService
 
         Cache::put('ppdb_otp:'.$normalizedEmail, $cachePayload, 900);
         Cache::put($cooldownKey, true, 60);
+        Cache::forget('ppdb_otp_attempts:'.$normalizedEmail);
+        Cache::forget('ppdb_otp_lockout:'.$normalizedEmail);
 
         // Kirim email OTP baru
         try {
             $fullName = $oldCache['full_name'] ?? $user->username;
             Mail::to($normalizedEmail)->send(new PpdbOtpMail($newOtp, $fullName));
         } catch (\Throwable $e) {
-            Log::warning('Gagal mengirim ulang email OTP PPDB ke ' . $normalizedEmail . ': ' . $e->getMessage());
+            Log::warning('Gagal mengirim ulang email OTP PPDB ke '.$normalizedEmail.': '.$e->getMessage());
         }
 
         // Log audit
@@ -250,15 +292,18 @@ class PPDBAccountService
     }
 
     /**
-     * BE-PPDB-02: Check 1 NIK = 1 pendaftaran aktif.
+     * BE-PPDB-02: Check 1 NIK = 1 pendaftaran aktif (P0-22: blind index nik_hash tanpa kebocoran data pendaftar).
      */
     public function checkNikAvailability(string $nik, ?string $waveId = null): array
     {
-        $query = Applicant::query()
+        $trimmedNik = trim($nik);
+        $nikHash = Applicant::hashNik($trimmedNik);
+
+        $baseQuery = Applicant::query()
             ->whereNotIn('status', ['rejected', 'cancelled']);
 
         if ($waveId) {
-            $query->where('wave_id', $waveId);
+            $baseQuery->where('wave_id', $waveId);
         } else {
             // Ambil semua gelombang yang berstatus aktif atau rentang tanggal berjalan
             $activeWaveIds = PPDBWave::where('status', 'aktif')
@@ -267,29 +312,34 @@ class PPDBAccountService
                 ->pluck('id');
 
             if ($activeWaveIds->isNotEmpty()) {
-                $query->whereIn('wave_id', $activeWaveIds);
+                $baseQuery->whereIn('wave_id', $activeWaveIds);
             }
         }
 
-        $applicants = $query->get();
+        // O(1) indexed lookup menggunakan blind index nik_hash
+        $hasActiveRegistration = (clone $baseQuery)
+            ->where('nik_hash', $nikHash)
+            ->exists();
 
-        $hasActiveRegistration = false;
-        $matchedApplicant = null;
+        // Fallback aman hanya untuk baris legacy sebelum migrasi nik_hash
+        if (! $hasActiveRegistration) {
+            $legacyRows = (clone $baseQuery)
+                ->whereNull('nik_hash')
+                ->select(['id', 'nik_enc'])
+                ->get();
 
-        foreach ($applicants as $applicant) {
-            if ($applicant->nik_enc === $nik) {
-                $hasActiveRegistration = true;
-                $matchedApplicant = $applicant;
-                break;
+            foreach ($legacyRows as $legacyApplicant) {
+                if ((string) $legacyApplicant->nik_enc === $trimmedNik) {
+                    $hasActiveRegistration = true;
+                    break;
+                }
             }
         }
 
+        // P0-22: Jangan membocorkan nomor registrasi maupun status pendaftar lain ke endpoint publik
         return [
-            'nik' => $nik,
             'is_available' => ! $hasActiveRegistration,
             'has_active_registration' => $hasActiveRegistration,
-            'existing_registration_no' => $matchedApplicant ? $matchedApplicant->registration_no : null,
-            'status' => $matchedApplicant ? $matchedApplicant->status : null,
         ];
     }
 
@@ -414,7 +464,7 @@ class PPDBAccountService
                 'entity_id' => $entityId,
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
-                'ip_address' => $request->ip(),
+                'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
             ]);
         } catch (\Throwable $e) {

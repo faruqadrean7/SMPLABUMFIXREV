@@ -290,7 +290,7 @@ class PPDBAccountTest extends TestCase
             'status' => 'verified',
         ]);
 
-        // 3. Now check again
+        // 3. Now check again (P0-22: tidak boleh membocorkan existing_registration_no/status pendaftar lain)
         $resUnavailable = $this->postJson('/api/v1/ppdb/check-nik', [
             'nik' => '3579012345679999',
             'wave_id' => $wave->id,
@@ -298,7 +298,8 @@ class PPDBAccountTest extends TestCase
         $resUnavailable->assertOk()
             ->assertJsonPath('data.is_available', false)
             ->assertJsonPath('data.has_active_registration', true)
-            ->assertJsonPath('data.existing_registration_no', 'REG-2026-9999');
+            ->assertJsonMissingPath('data.existing_registration_no')
+            ->assertJsonMissingPath('data.status');
     }
 
     public function test_be_ppdb_02_authenticated_applicant_can_access_me(): void

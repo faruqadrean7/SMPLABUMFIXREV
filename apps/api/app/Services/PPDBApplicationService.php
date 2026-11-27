@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -113,7 +114,7 @@ class PPDBApplicationService
             'birth_place' => $personal['birth_place'] ?? null,
             'birth_date' => $a->birth_date,
             'nisn' => $personal['nisn'] ?? null,
-            'nik' => $personal['nik'] ?? null,
+            'nik' => $a->nik_enc ?: ($personal['nik'] ?? null),
             'school_origin' => $school['origin_school'] ?? ($personal['school_origin'] ?? null),
             'phone' => $personal['phone'] ?? ($a->user?->phone ?? ($school['phone'] ?? null)),
             'address' => $personal['address'] ?? null,
@@ -210,15 +211,9 @@ class PPDBApplicationService
                 throw new HttpException(400, 'Jalur pendaftaran yang dipilih tidak terdaftar pada gelombang ini');
             }
 
-            // 3. Check 1 NIK = 1 active registration in wave
-            $activeApplicants = Applicant::where('wave_id', $wave->id)
-                ->whereNotIn('status', ['rejected', 'cancelled'])
-                ->get();
-
-            foreach ($activeApplicants as $existing) {
-                if ($existing->nik_enc === $data['nik']) {
-                    throw new HttpException(400, 'NIK ini sudah terdaftar dalam pendaftaran PPDB yang aktif');
-                }
+            // 3. Check 1 NIK = 1 active registration in wave (P0-22: blind index nik_hash)
+            if ($this->hasDuplicateActiveNik($wave->id, (string) $data['nik'])) {
+                throw new HttpException(400, 'NIK ini sudah terdaftar dalam pendaftaran PPDB yang aktif');
             }
 
             // Check if user already has active registration in this wave
@@ -234,20 +229,19 @@ class PPDBApplicationService
             // 4. Draft Registration Number
             $draftRegNo = 'DFT-'.Carbon::now()->format('Ymd').'-'.strtoupper(Str::random(5));
 
-            // 5. Create Applicant
+            // 5. Create Applicant (P0-22: jangan simpan NIK plaintext di JSON step_data)
             $applicant = Applicant::create([
                 'wave_id' => $wave->id,
                 'track_id' => $track->id,
                 'user_id' => $user->id,
                 'registration_no' => $draftRegNo,
-                'nik_enc' => $data['nik'],
+                'nik_enc' => trim((string) $data['nik']),
                 'full_name' => $data['full_name'],
                 'birth_date' => $data['birth_date'],
                 'status' => 'draft',
                 'step_data' => [
                     'current_step' => 1,
                     'personal' => [
-                        'nik' => $data['nik'],
                         'full_name' => $data['full_name'],
                         'birth_date' => $data['birth_date'],
                     ],
@@ -304,7 +298,10 @@ class PPDBApplicationService
                 throw new HttpException(400, 'Data pendaftaran telah dikunci dan tidak dapat diubah kecuali dalam status revisi');
             }
 
-            $oldValue = $applicant->toArray();
+            $oldAuditMeta = [
+                'status' => $applicant->status,
+                'track_id' => $applicant->track_id,
+            ];
             $stepData = $applicant->step_data ?? [];
 
             // Step dispatching
@@ -318,7 +315,11 @@ class PPDBApplicationService
                         $applicant->birth_date = $data['birth_date'];
                     }
                     if (isset($data['nik'])) {
-                        $applicant->nik_enc = $data['nik'];
+                        $trimmedNik = trim((string) $data['nik']);
+                        if ($this->hasDuplicateActiveNik($applicant->wave_id, $trimmedNik, $applicant->id)) {
+                            throw new HttpException(400, 'NIK ini sudah terdaftar dalam pendaftaran PPDB yang aktif');
+                        }
+                        $applicant->nik_enc = $trimmedNik;
                     }
                     if (isset($data['track_id']) && $data['track_id'] !== $applicant->track_id) {
                         $track = PPDBTrack::where('id', $data['track_id'])
@@ -328,7 +329,9 @@ class PPDBApplicationService
                             $applicant->track_id = $track->id;
                         }
                     }
-                    $stepData['personal'] = array_merge($stepData['personal'] ?? [], $data);
+                    $existingPersonal = is_array($stepData['personal'] ?? null) ? $stepData['personal'] : [];
+                    unset($existingPersonal['nik']);
+                    $stepData['personal'] = array_merge($existingPersonal, Arr::except($data, ['nik']));
                     break;
 
                 case '2':
@@ -378,8 +381,13 @@ class PPDBApplicationService
                 'ppdb_application.step_updated',
                 'Applicant',
                 $applicant->id,
-                $oldValue,
-                $applicant->fresh()->toArray(),
+                $oldAuditMeta,
+                [
+                    'step' => $step,
+                    'status' => $applicant->status,
+                    'track_id' => $applicant->track_id,
+                    'updated_fields' => array_values(array_keys($data)),
+                ],
                 $request
             );
 
@@ -495,6 +503,40 @@ class PPDBApplicationService
     }
 
     /**
+     * P0-22: Deteksi duplikasi NIK aktif dalam gelombang menggunakan blind index nik_hash (O(1))
+     * dengan fallback aman hanya untuk baris legacy sebelum kolom nik_hash terisi.
+     */
+    protected function hasDuplicateActiveNik(string $waveId, string $nik, ?string $excludeApplicantId = null): bool
+    {
+        $trimmedNik = trim($nik);
+        $nikHash = Applicant::hashNik($trimmedNik);
+
+        $baseQuery = Applicant::where('wave_id', $waveId)
+            ->whereNotIn('status', ['rejected', 'cancelled']);
+
+        if ($excludeApplicantId !== null) {
+            $baseQuery->where('id', '!=', $excludeApplicantId);
+        }
+
+        if ((clone $baseQuery)->where('nik_hash', $nikHash)->exists()) {
+            return true;
+        }
+
+        $legacyRows = (clone $baseQuery)
+            ->whereNull('nik_hash')
+            ->select(['id', 'nik_enc'])
+            ->get();
+
+        foreach ($legacyRows as $legacy) {
+            if ((string) $legacy->nik_enc === $trimmedNik) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Helper to write an audit log entry.
      */
     protected function logAudit(
@@ -514,7 +556,7 @@ class PPDBApplicationService
                 'entity_id' => $entityId,
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
-                'ip_address' => $request->ip(),
+                'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
             ]);
         } catch (\Throwable $e) {

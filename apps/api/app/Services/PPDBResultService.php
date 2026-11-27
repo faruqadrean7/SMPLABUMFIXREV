@@ -19,7 +19,7 @@ class PPDBResultService
         $regNo = trim($data['registration_no']);
         $birthDate = trim($data['birth_date']);
 
-        // 1. Rate Limiting anti-brute force (10 requests per minute)
+        // 1. Rate Limiting anti-brute force (10 permintaan per 5 menit per IP; tidak di-reset saat cocok)
         $rateLimitKey = 'ppdb_result_check:'.$request->ip();
         if (RateLimiter::tooManyAttempts($rateLimitKey, 10)) {
             $seconds = RateLimiter::availableIn($rateLimitKey);
@@ -30,24 +30,29 @@ class PPDBResultService
             );
         }
 
+        // Hitung setiap percobaan pengecekan (P0-22: cegah bypass rate limit via valid match)
+        RateLimiter::hit($rateLimitKey, 300);
+
         // 2. Find applicant
         $applicant = Applicant::with(['wave', 'track'])
             ->where('registration_no', $regNo)
             ->first();
 
         if (! $applicant || $applicant->birth_date?->format('Y-m-d') !== $birthDate) {
-            RateLimiter::hit($rateLimitKey, 60);
-
             throw new HttpException(404, 'Data pendaftaran dengan nomor dan tanggal lahir tersebut tidak ditemukan');
         }
 
-        // Clear rate limiter on valid match
-        RateLimiter::clear($rateLimitKey);
-
         $wave = $applicant->wave;
 
-        // 3. Time Gate: must be after result_publish_at
-        if ($wave && Carbon::now()->lt($wave->result_publish_at)) {
+        // 3. Time Gate (P0-22 fail-closed): wajib memiliki gelombang & jadwal publikasi yang sudah tiba
+        if (! $wave || $wave->result_publish_at === null) {
+            throw new HttpException(
+                400,
+                'Jadwal pengumuman hasil seleksi belum ditetapkan oleh panitia PPDB.'
+            );
+        }
+
+        if (Carbon::now()->lt($wave->result_publish_at)) {
             $publishTimeStr = $wave->result_publish_at->translatedFormat('d F Y H:i');
 
             throw new HttpException(
