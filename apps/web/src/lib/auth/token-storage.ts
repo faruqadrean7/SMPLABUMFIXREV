@@ -43,17 +43,6 @@ export const tokenStorage = {
         // Fallback
       }
     }
-    // Fallback defensif untuk sesi pendaftar PPDB atau legacy local storage
-    if (hasLocalStorage()) {
-      try {
-        const localToken =
-          window.localStorage.getItem(ACCESS_TOKEN_KEY) ||
-          window.localStorage.getItem('auth_token');
-        if (localToken) return localToken;
-      } catch {
-        // Fallback
-      }
-    }
     return memoryAccessToken;
   },
 
@@ -70,12 +59,14 @@ export const tokenStorage = {
         // Fallback to memory
       }
     }
-    // Keamanan (AGENTS.md §4): access token TIDAK BOLEH disimpan di localStorage.
-    // Bersihkan kunci legacy ('auth_token' & ACCESS_TOKEN_KEY) agar sesi lama ikut termigrasi.
+    // Keamanan (AGENTS.md §4 & P1-01): access & refresh token TIDAK BOLEH disimpan di localStorage.
+    // Bersihkan seluruh kunci token legacy agar sesi lama ikut termigrasi.
     if (hasLocalStorage()) {
       try {
         window.localStorage.removeItem('auth_token');
         window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+        window.localStorage.removeItem('sistlabum_tdt');
       } catch {
         // Fallback
       }
@@ -83,27 +74,18 @@ export const tokenStorage = {
   },
 
   getRefreshToken(): string | null {
-    if (!hasLocalStorage()) {
-      return memoryRefreshToken;
-    }
-    try {
-      return memoryRefreshToken || window.localStorage.getItem(REFRESH_TOKEN_KEY);
-    } catch {
-      return memoryRefreshToken;
-    }
+    // P1-01: Refresh token web dikelola lewat cookie HttpOnly; jangan pernah membaca dari localStorage.
+    return memoryRefreshToken;
   },
 
   setRefreshToken(token: string | null): void {
+    // P1-01: Simpan hanya di memori runtime bila diberikan (mis. uji unit); JANGAN tulis ke localStorage.
     memoryRefreshToken = token;
     if (hasLocalStorage()) {
       try {
-        if (token) {
-          window.localStorage.setItem(REFRESH_TOKEN_KEY, token);
-        } else {
-          window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-        }
+        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
       } catch {
-        // Fallback to memory
+        // Ignore
       }
     }
   },
@@ -141,37 +123,8 @@ export const tokenStorage = {
         // Fallback
       }
     }
-
-    if (typeof document !== 'undefined') {
-      try {
-        const roles = user?.roles || [];
-        const adminRoles = [
-          'super_admin',
-          'admin_tu',
-          'principal',
-          'vice_principal',
-          'counselor',
-          'facility_staff',
-          'ppdb_committee',
-          'librarian',
-          'bendahara',
-          'treasurer',
-          'student_affairs',
-          'public_relations',
-          'operator_cms',
-          'admin_kurikulum',
-          'kurikulum',
-        ];
-        const hasAdminAccess = Array.isArray(roles) && roles.some((r) => adminRoles.includes(r));
-        if (hasAdminAccess) {
-          document.cookie = 'sistlabum_admin_session=1; path=/; SameSite=Lax';
-        } else {
-          document.cookie = 'sistlabum_admin_session=; path=/; max-age=0; SameSite=Lax';
-        }
-      } catch {
-        // Fallback
-      }
-    }
+    // P0-08: Cookie `sistlabum_admin_session` kini HttpOnly bertanda tangan HMAC
+    // yang diterbitkan oleh Route Handler `/api/admin-session`, tidak pernah ditulis dari JS.
   },
 
   clearAll(): void {
@@ -192,13 +145,7 @@ export const tokenStorage = {
         window.localStorage.removeItem(REFRESH_TOKEN_KEY);
         window.localStorage.removeItem('auth_token');
         window.localStorage.removeItem('user_role');
-      } catch {
-        // Ignore
-      }
-    }
-    if (typeof document !== 'undefined') {
-      try {
-        document.cookie = 'sistlabum_admin_session=; path=/; max-age=0; SameSite=Lax';
+        window.localStorage.removeItem('sistlabum_tdt');
       } catch {
         // Ignore
       }

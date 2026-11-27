@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { middleware } from '@/middleware';
 import { canAccessShell, ADMIN_SHELL_ROLES } from '@/lib/rbac/evaluator';
+import { signAdminSessionCookie } from '@/lib/auth/admin-session-cookie';
 
 describe('BATCH 5 - A.1, A.2, A.6: Middleware Hardening & Role Synchronization', () => {
   const originalEnv = process.env;
@@ -15,66 +16,78 @@ describe('BATCH 5 - A.1, A.2, A.6: Middleware Hardening & Role Synchronization',
   });
 
   describe('1. ADMIN_LOGIN_PATH Dynamic Rewriting & Old Path 404', () => {
-    it('rewrites configured custom ADMIN_LOGIN_PATH to /admin-gateway-internal', () => {
+    it('rewrites configured custom ADMIN_LOGIN_PATH to /admin-gateway-internal', async () => {
       process.env.ADMIN_LOGIN_PATH = '/custom-super-secret-gate-789';
 
       const req = new NextRequest('http://localhost:3000/custom-super-secret-gate-789');
-      const res = middleware(req);
+      const res = await middleware(req);
 
       // Verify it rewrites internally to /admin-gateway-internal
       expect(res.headers.get('x-middleware-rewrite')).toContain('/admin-gateway-internal');
     });
 
-    it('returns HTTP 404 for default path /secret-admin-gate-login when a custom path is configured', () => {
+    it('returns HTTP 404 for default path /secret-admin-gate-login when a custom path is configured', async () => {
       process.env.ADMIN_LOGIN_PATH = '/custom-super-secret-gate-789';
 
       const req = new NextRequest('http://localhost:3000/secret-admin-gate-login');
-      const res = middleware(req);
+      const res = await middleware(req);
 
       expect(res.status).toBe(404);
     });
 
-    it('returns HTTP 404 for direct access to /admin-gateway-internal', () => {
+    it('returns HTTP 404 for direct access to /admin-gateway-internal', async () => {
       const req = new NextRequest('http://localhost:3000/admin-gateway-internal');
-      const res = middleware(req);
+      const res = await middleware(req);
 
       expect(res.status).toBe(404);
     });
 
-    it('rewrites default path /secret-admin-gate-login when no custom path is configured', () => {
+    it('rewrites default path /secret-admin-gate-login when no custom path is configured', async () => {
       delete process.env.ADMIN_LOGIN_PATH;
 
       const req = new NextRequest('http://localhost:3000/secret-admin-gate-login');
-      const res = middleware(req);
+      const res = await middleware(req);
 
       expect(res.headers.get('x-middleware-rewrite')).toContain('/admin-gateway-internal');
     });
   });
 
   describe('2. HTTP 404 Status Code for Unauthenticated /admin Access', () => {
-    it('returns genuine HTTP 404 status code when accessing /admin without admin session cookie', () => {
+    it('returns genuine HTTP 404 status code when accessing /admin without admin session cookie', async () => {
       const req = new NextRequest('http://localhost:3000/admin');
-      const res = middleware(req);
+      const res = await middleware(req);
 
       expect(res.status).toBe(404);
       expect(res.headers.get('X-Robots-Tag')).toBe('noindex, nofollow');
     });
 
-    it('returns genuine HTTP 404 status code when accessing /admin/sub-page without admin session cookie', () => {
+    it('returns genuine HTTP 404 status code when accessing /admin/sub-page without admin session cookie', async () => {
       const req = new NextRequest('http://localhost:3000/admin/academic/grades');
-      const res = middleware(req);
+      const res = await middleware(req);
 
       expect(res.status).toBe(404);
       expect(res.headers.get('X-Robots-Tag')).toBe('noindex, nofollow');
     });
 
-    it('allows access to /admin when sistlabum_admin_session=1 cookie is present', () => {
+    it('rejects forged plain cookie sistlabum_admin_session=1 with HTTP 404 (P0-08)', async () => {
       const req = new NextRequest('http://localhost:3000/admin', {
         headers: {
           cookie: 'sistlabum_admin_session=1',
         },
       });
-      const res = middleware(req);
+      const res = await middleware(req);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('allows access to /admin when a valid HMAC-signed sistlabum_admin_session cookie is present', async () => {
+      const signed = await signAdminSessionCookie('adm-user-1', 'admin_tu');
+      const req = new NextRequest('http://localhost:3000/admin', {
+        headers: {
+          cookie: `sistlabum_admin_session=${signed}`,
+        },
+      });
+      const res = await middleware(req);
 
       // NextResponse.next() returns status 200 without rewrite header
       expect(res.status).toBe(200);

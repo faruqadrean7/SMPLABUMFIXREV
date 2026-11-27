@@ -55,11 +55,10 @@ export function AdminLoginForm() {
         isAdminLogin: true,
       });
 
-      // Normal Admin Login success: langsung arahkan ke admin shell dengan cookie sesi admin
+      // Normal Admin Login success: cookie HttpOnly HMAC sudah diset oleh AuthProvider via /api/admin-session
       const destination = redirectParam && redirectParam.startsWith('/admin') ? redirectParam : '/admin';
       router.push(destination);
       if (typeof window !== 'undefined') {
-        document.cookie = 'sistlabum_admin_session=1; path=/; SameSite=Lax';
         try {
           window.location.href = destination;
         } catch {

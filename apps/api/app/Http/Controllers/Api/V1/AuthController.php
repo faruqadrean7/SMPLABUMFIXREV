@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Http\Controllers\Api\V1\Concerns\ManagesRefreshCookies;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ChangePasswordRequest;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
@@ -18,7 +19,7 @@ use Throwable;
 
 class AuthController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse, ManagesRefreshCookies;
 
     public function __construct(
         protected AuthService $authService
@@ -32,8 +33,9 @@ class AuthController extends Controller
     {
         try {
             $data = $this->authService->login($request->validated(), $request);
+            [$payload, $plainRefreshToken] = $this->prepareAuthPayloadForTransport($data, $request);
 
-            return $this->successResponse($data);
+            return $this->attachRefreshCookie($this->successResponse($payload), $plainRefreshToken, $request);
         } catch (HttpException $e) {
             $code = match ($e->getStatusCode()) {
                 401 => 'UNAUTHENTICATED',
@@ -56,7 +58,7 @@ class AuthController extends Controller
      */
     public function refresh(RefreshTokenRequest $request): JsonResponse
     {
-        $refreshToken = $request->input('refreshToken') ?? $request->cookie('refreshToken');
+        $refreshToken = $this->resolveRefreshTokenFromRequest($request);
 
         if (! $refreshToken) {
             return $this->errorResponse(
@@ -69,8 +71,9 @@ class AuthController extends Controller
 
         try {
             $data = $this->authService->refresh($refreshToken, $request);
+            [$payload, $newPlainRefreshToken] = $this->prepareAuthPayloadForTransport($data, $request);
 
-            return $this->successResponse($data);
+            return $this->attachRefreshCookie($this->successResponse($payload), $newPlainRefreshToken, $request);
         } catch (HttpException $e) {
             $code = match ($e->getStatusCode()) {
                 401 => 'UNAUTHENTICATED',
@@ -78,7 +81,11 @@ class AuthController extends Controller
                 default => 'BUSINESS_RULE_VIOLATION',
             };
 
-            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+            $errorResponse = $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+
+            return $e->getStatusCode() === 401
+                ? $this->clearRefreshCookie($errorResponse, $request)
+                : $errorResponse;
         } catch (Throwable $e) {
             report($e);
 
@@ -93,10 +100,13 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         try {
-            $refreshToken = $request->input('refreshToken') ?? $request->cookie('refreshToken');
+            $refreshToken = $this->resolveRefreshTokenFromRequest($request);
             $this->authService->logout($request->user(), $refreshToken, $request);
 
-            return $this->successResponse(['message' => 'Berhasil keluar dari sistem']);
+            return $this->clearRefreshCookie(
+                $this->successResponse(['message' => 'Berhasil keluar dari sistem']),
+                $request
+            );
         } catch (Throwable $e) {
             report($e);
 
@@ -185,9 +195,12 @@ class AuthController extends Controller
                 $request
             );
 
-            return $this->successResponse([
-                'message' => 'Kata sandi berhasil diperbarui.',
-            ]);
+            return $this->clearRefreshCookie(
+                $this->successResponse([
+                    'message' => 'Kata sandi berhasil diperbarui.',
+                ]),
+                $request
+            );
         } catch (HttpException $e) {
             $code = match ($e->getStatusCode()) {
                 400 => 'VALIDATION_FAILED',

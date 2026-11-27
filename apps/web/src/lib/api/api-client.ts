@@ -17,10 +17,11 @@ function generateRequestId(): string {
   return 'req-' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
-// Instance Axios utama
+// Instance Axios utama (P1-01: withCredentials agar cookie HttpOnly refresh token ikut dikirim)
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
+  withCredentials: true,
   headers: {
     Accept: 'application/json',
     'Content-Type': 'application/json',
@@ -53,6 +54,17 @@ apiClient.interceptors.request.use(
     // Sisipkan Request ID untuk pelacakan audit
     if (!config.headers['X-Request-Id']) {
       config.headers['X-Request-Id'] = generateRequestId();
+    }
+
+    // P1-01: Minta transport cookie HttpOnly untuk endpoint autentikasi Web
+    const reqUrl = config.url || '';
+    if (
+      reqUrl.includes('/auth/login') ||
+      reqUrl.includes('/auth/admin/login') ||
+      reqUrl.includes('/auth/refresh') ||
+      reqUrl.includes('/auth/logout')
+    ) {
+      config.headers['X-Auth-Token-Transport'] = 'cookie';
     }
 
     // Sisipkan Bearer Token jika tersedia
@@ -147,19 +159,20 @@ apiClient.interceptors.response.use(
     const backendPayload = data as { error?: ApiErrorPayload; message?: string } | undefined;
     const backendError = backendPayload?.error;
 
-    // Tangani refresh token pada 401 UNAUTHENTICATED (hanya jika ada refresh token dan belum dicoba ulang)
+    // Tangani refresh token pada 401 UNAUTHENTICATED via cookie HttpOnly (P1-01)
     const requestUrl = originalRequest.url || '';
     const isLoginEndpoint =
       requestUrl.includes('/auth/login') ||
       requestUrl.includes('/auth/admin/login') ||
-      requestUrl.includes('/auth/2fa') ||
       requestUrl.includes('/ppdb/login');
     const isRefreshEndpoint = requestUrl.includes('/auth/refresh');
+    const isLogoutEndpoint = requestUrl.includes('/auth/logout');
 
-    if (status === 401 && !originalRequest._retry && !isLoginEndpoint && !isRefreshEndpoint) {
+    if (status === 401 && !originalRequest._retry && !isLoginEndpoint && !isRefreshEndpoint && !isLogoutEndpoint) {
       const storedRefreshToken = tokenStorage.getRefreshToken();
+      const isPPDBSession = typeof window !== 'undefined' && window.location.pathname.startsWith('/ppdb');
 
-      if (storedRefreshToken) {
+      if (!isPPDBSession) {
         if (isRefreshing) {
           return new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });
@@ -175,11 +188,18 @@ apiClient.interceptors.response.use(
         isRefreshing = true;
 
         try {
-          // Panggil endpoint rotasi refresh token
+          // P1-01: Panggil endpoint rotasi refresh token via cookie HttpOnly (tanpa localStorage)
+          const refreshPayload = storedRefreshToken ? { refreshToken: storedRefreshToken } : {};
           const refreshRes = await axios.post<ApiResponse<{ tokens: { accessToken: string; refreshToken?: string } }>>(
             `${API_BASE_URL}/auth/refresh`,
-            { refreshToken: storedRefreshToken },
-            { headers: { Accept: 'application/json' } }
+            refreshPayload,
+            {
+              withCredentials: true,
+              headers: {
+                Accept: 'application/json',
+                'X-Auth-Token-Transport': 'cookie',
+              },
+            }
           );
 
           const newTokens = refreshRes.data.data.tokens;
@@ -192,25 +212,14 @@ apiClient.interceptors.response.use(
         } catch (refreshErr) {
           processQueue(refreshErr, null);
           tokenStorage.clearAll();
-          // Redirect ke halaman login yang sesuai jika sesi habis di browser
           if (typeof window !== 'undefined') {
-            const isPPDB = window.location.pathname.startsWith('/ppdb');
-            const isAdmin =
-              window.location.pathname.startsWith('/admin') ||
-              window.location.pathname.includes('secret-admin-gate-login') ||
-              window.location.pathname.includes('admin-gateway-internal');
-
+            fetch('/api/admin-session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
+            // P0-08: Jangan pernah membocorkan path rahasia gateway admin di klien JS
             if (
               !window.location.pathname.includes('/masuk') &&
-              !window.location.pathname.includes('secret-admin-gate-login') &&
               !window.location.pathname.includes('admin-gateway-internal')
             ) {
-              const loginUrl = isPPDB
-                ? '/ppdb/masuk?session_expired=1'
-                : isAdmin
-                  ? '/secret-admin-gate-login?session_expired=1'
-                  : '/masuk?session_expired=1';
-              window.location.href = loginUrl;
+              window.location.href = '/masuk?session_expired=1';
             }
           }
           return Promise.reject(
@@ -224,28 +233,10 @@ apiClient.interceptors.response.use(
           isRefreshing = false;
         }
       } else {
-        // Tidak ada refresh token (misal sesi pendaftar PPDB)
+        // Sesi pendaftar PPDB tanpa refresh token
         tokenStorage.clearAll();
-        if (typeof window !== 'undefined') {
-          const isPPDB = window.location.pathname.startsWith('/ppdb');
-          const isAdmin =
-            window.location.pathname.startsWith('/admin') ||
-            window.location.pathname.includes('secret-admin-gate-login') ||
-            window.location.pathname.includes('admin-gateway-internal');
-
-          // Jangan redirect jika pengguna SUDAH berada di halaman login atau gateway admin
-          if (
-            !window.location.pathname.includes('/masuk') &&
-            !window.location.pathname.includes('secret-admin-gate-login') &&
-            !window.location.pathname.includes('admin-gateway-internal')
-          ) {
-            const loginUrl = isPPDB
-              ? '/ppdb/masuk?session_expired=1'
-              : isAdmin
-                ? '/secret-admin-gate-login?session_expired=1'
-                : '/masuk?session_expired=1';
-            window.location.href = loginUrl;
-          }
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/masuk')) {
+          window.location.href = '/ppdb/masuk?session_expired=1';
         }
       }
     }

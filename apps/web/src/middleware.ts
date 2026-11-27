@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import {
+  ADMIN_SESSION_COOKIE_NAME,
+  INTERNAL_GATEWAY_HEADER,
+  createGatewayInternalToken,
+  verifyAdminSessionCookie,
+  verifyGatewayInternalToken,
+} from '@/lib/auth/admin-session-cookie';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const configuredAdminPath = process.env.ADMIN_LOGIN_PATH || '/secret-admin-gate-login';
   // Rewrite internal harus lewat HTTP lokal: di belakang Cloudflare/tunnel,
@@ -11,18 +18,22 @@ export function middleware(request: NextRequest) {
 
   // 1. Pintu Masuk Rahasia Admin: Rewrite URL yang dikonfigurasi ke gateway internal
   if (configuredAdminPath && pathname === configuredAdminPath) {
-    // Tandai request internal supaya lolos dari blokir di bawah, tanpa membuka
-    // akses langsung ke /admin-gateway-internal dari luar.
+    // P0-08: Gunakan token HMAC internal (bukan nilai statis '1') dan hapus header lama
     const headers = new Headers(request.headers);
-    headers.set('x-admin-gateway', '1');
+    headers.delete('x-admin-gateway');
+    headers.set(INTERNAL_GATEWAY_HEADER, await createGatewayInternalToken());
     return NextResponse.rewrite(new URL('/admin-gateway-internal', internalOrigin), {
       request: { headers },
     });
   }
 
-  // Blokir akses langsung ke route gateway internal
-  if (pathname === '/admin-gateway-internal' && request.headers.get('x-admin-gateway') !== '1') {
-    return new NextResponse(null, { status: 404, statusText: 'Not Found' });
+  // P0-08: Blokir akses langsung ke route gateway internal meskipun penyerang memalsukan x-admin-gateway: 1
+  if (pathname === '/admin-gateway-internal') {
+    const internalToken = request.headers.get(INTERNAL_GATEWAY_HEADER);
+    const isAuthorizedRewrite = await verifyGatewayInternalToken(internalToken);
+    if (!isAuthorizedRewrite) {
+      return new NextResponse(null, { status: 404, statusText: 'Not Found' });
+    }
   }
 
   // Jika ADMIN_LOGIN_PATH bukan default, pastikan path default '/secret-admin-gate-login' menghasilkan 404
@@ -30,10 +41,11 @@ export function middleware(request: NextRequest) {
     return new NextResponse(null, { status: 404, statusText: 'Not Found' });
   }
 
-  // 2. Proteksi Shell Admin (/admin): Kembalikan HTTP 404 sungguhan jika tidak ada sesi admin
+  // 2. Proteksi Shell Admin (/admin): Verifikasi cookie HttpOnly bertanda tangan HMAC (P0-08)
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    const adminCookie = request.cookies.get('sistlabum_admin_session')?.value;
-    if (adminCookie !== '1') {
+    const adminCookie = request.cookies.get(ADMIN_SESSION_COOKIE_NAME)?.value;
+    const isValidAdminSession = await verifyAdminSessionCookie(adminCookie);
+    if (!isValidAdminSession) {
       return new NextResponse(
         `<!DOCTYPE html><html><head><meta name="robots" content="noindex, nofollow"><title>404: Not Found</title></head><body style="font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#1e293b;"><h1 style="font-size:4rem;margin:0;">404</h1><h2 style="margin:1rem 0 0.5rem;">Halaman Tidak Ditemukan</h2><p style="color:#64748b;">Halaman yang Anda cari tidak dapat ditemukan atau telah dipindahkan.</p></body></html>`,
         {

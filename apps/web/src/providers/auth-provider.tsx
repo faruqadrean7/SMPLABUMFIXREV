@@ -3,15 +3,48 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { User, LoginPayload, LoginResult, PortalDestination, RoleCode } from '@/types/auth';
+import { User, LoginPayload, LoginResult, RoleCode } from '@/types/auth';
 import { apiClient } from '@/lib/api/api-client';
 import { tokenStorage } from '@/lib/auth/token-storage';
-import { resolveUserDestination, sanitizeRoles } from '@/lib/rbac/evaluator';
+import { ADMIN_SHELL_ROLES, resolveUserDestination, sanitizeRoles } from '@/lib/rbac/evaluator';
 import { ApiResponse } from '@/types/api';
 import { queryClient } from './query-provider';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+
+async function syncAdminSessionCookie(accessToken: string, roles: string[]): Promise<void> {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+  const hasAdminRole = roles.some((r) =>
+    ADMIN_SHELL_ROLES.includes(r as (typeof ADMIN_SHELL_ROLES)[number])
+  );
+  if (!hasAdminRole) return;
+
+  try {
+    await fetch('/api/admin-session', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+      credentials: 'same-origin',
+    });
+  } catch {
+    // Abaikan kegagalan sinkronisasi di lingkungan test/offline
+  }
+}
+
+async function clearAdminSessionCookie(): Promise<void> {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+  try {
+    await fetch('/api/admin-session', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+  } catch {
+    // Abaikan kegagalan jaringan
+  }
+}
 
 interface AuthContextType {
   user: User | null;
@@ -42,16 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const accessToken = tokenStorage.getAccessToken();
       const refreshToken = tokenStorage.getRefreshToken();
 
-      // Tidak ada token sama sekali
-      if (!accessToken && !refreshToken) {
-        setUser(null);
-        setActiveRoleState(null);
-        return;
-      }
-
-      // Kasus Tab Baru: accessToken (sessionStorage) kosong, namun refreshToken (localStorage) tersedia
-      if (!accessToken && refreshToken) {
+      // Kasus Tab Baru (P1-01): accessToken (sessionStorage) kosong -> rehidrasi via cookie HttpOnly
+      if (!accessToken) {
         try {
+          const refreshPayload = refreshToken ? { refreshToken } : {};
           const refreshRes = await axios.post<
             ApiResponse<{
               user: User;
@@ -59,8 +86,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }>
           >(
             `${API_BASE_URL}/auth/refresh`,
-            { refreshToken },
-            { headers: { Accept: 'application/json' }, timeout: 10000 }
+            refreshPayload,
+            {
+              withCredentials: true,
+              headers: {
+                Accept: 'application/json',
+                'X-Auth-Token-Transport': 'cookie',
+              },
+              timeout: 10000,
+            }
           );
 
           const refreshedData = refreshRes.data.data;
@@ -72,9 +106,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (roles.length > 0) {
             setActiveRoleState(roles[0]);
           }
+          await syncAdminSessionCookie(refreshedData.tokens.accessToken, roles);
           return;
         } catch {
-          // Refresh token tidak sah atau kedaluwarsa
+          // Tidak ada sesi cookie HttpOnly aktif atau sudah kedaluwarsa
           tokenStorage.clearAll();
           setUser(null);
           setActiveRoleState(null);
@@ -115,51 +150,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const endpoint = payload.isAdminLogin ? '/auth/admin/login' : '/auth/login';
 
       const requestBody: Record<string, unknown> = {
-        ...payload,
+        identifier: payload.identifier,
+        password: payload.password,
         platform: payload.platform || 'web',
       };
-
-      // Perangkat tepercaya: lampirkan token tersimpan agar admin melewati 2FA (berlaku 30 hari)
-      if (payload.isAdminLogin && !requestBody.trusted_device_token && typeof window !== 'undefined') {
-        try {
-          const storedTdt = window.localStorage.getItem('sistlabum_tdt');
-          if (storedTdt) requestBody.trusted_device_token = storedTdt;
-        } catch {
-          // abaikan akses storage yang gagal
-        }
-      }
 
       const res = await apiClient.post<
         ApiResponse<{
           user?: User;
           tokens?: { accessToken: string; refreshToken?: string };
-          trusted_device_token?: string;
-          trusted_device_expires_at?: string;
-        }> & {
-          mfa_required?: boolean;
-          mfa_token?: string;
-          mfa_enrollment_required?: boolean;
-          enrollment_token?: string;
-        }
-      >(endpoint, requestBody);
-
-      if (res.data.mfa_enrollment_required && res.data.enrollment_token) {
-        return {
-          user: null,
-          destination: null,
-          mfa_enrollment_required: true,
-          enrollment_token: res.data.enrollment_token,
-        };
-      }
-
-      if (res.data.mfa_required && res.data.mfa_token) {
-        return {
-          user: null,
-          destination: null,
-          mfa_required: true,
-          mfa_token: res.data.mfa_token,
-        };
-      }
+        }>
+      >(endpoint, requestBody, {
+        headers: {
+          'X-Auth-Token-Transport': 'cookie',
+        },
+      });
 
       const responseData = res.data.data;
       if (!responseData?.user || !responseData?.tokens) {
@@ -168,16 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const loggedUser = responseData.user;
       const tokens = responseData.tokens;
 
-      // Simpan token perangkat tepercaya bila dikembalikan server (fitur "percayai perangkat 30 hari")
-      if (typeof window !== 'undefined' && responseData.trusted_device_token) {
-        try {
-          window.localStorage.setItem('sistlabum_tdt', responseData.trusted_device_token);
-        } catch {
-          // abaikan akses storage yang gagal
-        }
-      }
-
-      // Simpan token & profil pengguna
+      // Simpan access token di sessionStorage/memory (refresh token tetap di cookie HttpOnly)
       tokenStorage.setTokens(tokens.accessToken, tokens.refreshToken);
       tokenStorage.setUser(loggedUser);
       setUser(loggedUser);
@@ -192,6 +188,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActiveRoleState(roles[0]);
       }
 
+      // P0-08: Terbitkan cookie HttpOnly bertanda tangan HMAC jika peran diizinkan ke shell admin
+      await syncAdminSessionCookie(tokens.accessToken, roles);
+
       // Tentukan destinasi portal
       const destination = resolveUserDestination(roles);
       return { user: loggedUser, destination, mfa_required: false };
@@ -204,9 +203,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       const refreshToken = tokenStorage.getRefreshToken();
-      await apiClient.post('/auth/logout', { refreshToken }).catch(() => {
-        // Abaikan error jaringan server agar proses logout lokal tetap tuntas
-      });
+      await apiClient
+        .post('/auth/logout', refreshToken ? { refreshToken } : {})
+        .catch(() => {
+          // Abaikan error jaringan server agar proses logout lokal tetap tuntas
+        });
+      await clearAdminSessionCookie();
     } finally {
       tokenStorage.clearAll();
       setUser(null);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Http\Controllers\Api\V1\Concerns\ManagesRefreshCookies;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\RateLimiter;
 
 class AdminAuthController extends Controller
 {
+    use ManagesRefreshCookies;
+
     /**
      * Roles that are permitted to authenticate via admin back-office portal.
      * Menggunakan sumber kebenaran tunggal dari User::ADMIN_SHELL_ROLES.
@@ -121,11 +124,16 @@ class AdminAuthController extends Controller
         $user->saveQuietly();
 
         $authData = $this->authService->issueTokensForUser($user, $request);
+        [$payload, $plainRefreshToken] = $this->prepareAuthPayloadForTransport($authData, $request);
 
-        return response()->json([
-            'message' => 'Login admin berhasil.',
-            'data' => $authData,
-        ], 200);
+        return $this->attachRefreshCookie(
+            response()->json([
+                'message' => 'Login admin berhasil.',
+                'data' => $payload,
+            ], 200),
+            $plainRefreshToken,
+            $request
+        );
     }
 
     protected function logAudit(?string $actorId, string $action, string $entity, ?string $entityId, ?array $details, Request $request): void
