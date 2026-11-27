@@ -12,6 +12,7 @@ use App\Models\Guardian;
 use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
 use Carbon\Carbon;
@@ -61,6 +62,7 @@ class GradeService
     {
         /** @var User $currentUser */
         $currentUser = $request->user();
+        $this->authorizeComponentMutation($currentUser, $data['subject_id'], $data['class_id'] ?? null);
 
         return DB::transaction(function () use ($data, $currentUser, $request) {
             $component = GradeComponent::create([
@@ -93,7 +95,8 @@ class GradeService
     {
         /** @var User $currentUser */
         $currentUser = $request->user();
-        $component = GradeComponent::findOrFail($id);
+        $component = GradeComponent::with('subject')->findOrFail($id);
+        $this->authorizeComponentMutation($currentUser, $component->subject_id, $component->class_id);
 
         return DB::transaction(function () use ($component, $data, $currentUser, $request) {
             $oldData = $component->toArray();
@@ -130,7 +133,8 @@ class GradeService
     {
         /** @var User $currentUser */
         $currentUser = $request->user();
-        $component = GradeComponent::findOrFail($id);
+        $component = GradeComponent::with('subject')->findOrFail($id);
+        $this->authorizeComponentMutation($currentUser, $component->subject_id, $component->class_id);
 
         if ($component->grades()->exists()) {
             throw new HttpException(422, 'Komponen nilai tidak dapat dihapus karena sudah memiliki data nilai siswa.');
@@ -186,24 +190,28 @@ class GradeService
                 $childIds = $guardian->students()->pluck('students.id');
                 $query->whereIn('student_id', $childIds);
             } elseif ($teacher) {
-                // Guru melihat nilai kelas binaannya atau mapel yang diajarnya
+                // P1-14: Guru hanya melihat nilai siswa di kelas ajar/perwalian aktifnya (bukan siswa kelas lain)
                 $assignedClassIds = $teacher->teachingAssignments()->pluck('class_id');
                 $homeroomClassIds = SchoolClass::where('homeroom_teacher_id', $teacher->id)->pluck('id');
                 $allClassIds = $assignedClassIds->merge($homeroomClassIds)->unique();
-                $assignedSubjectIds = $teacher->teachingAssignments()->pluck('subject_id')->unique();
 
-                $query->where(function ($q) use ($allClassIds, $assignedSubjectIds) {
-                    $q->whereHas('component', function ($sub) use ($assignedSubjectIds, $allClassIds) {
-                        $sub->whereIn('subject_id', $assignedSubjectIds)
-                            ->orWhereIn('class_id', $allClassIds);
-                    })->orWhereHas('student.classes', function ($sub) use ($allClassIds) {
+                if ($allClassIds->isEmpty()) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereHas('student.activeClasses', function ($sub) use ($allClassIds) {
                         $sub->whereIn('classes.id', $allClassIds);
                     });
-                });
+                }
             } else {
                 // Deny-by-default untuk peran lain yang tidak memiliki otorisasi data nilai
                 $query->whereRaw('1 = 0');
             }
+        }
+
+        if (! $currentUser->hasRole('super_admin') && ! empty($currentUser->school_id)) {
+            $query->whereHas('student', function ($sq) use ($currentUser) {
+                $sq->where('school_id', $currentUser->school_id)->orWhereNull('school_id');
+            });
         }
 
         if (! empty($filters['student_id'])) {
@@ -241,9 +249,13 @@ class GradeService
     {
         /** @var User $currentUser */
         $currentUser = $request->user();
-        $this->authorizeGradeEntry($currentUser, $data['component_id']);
+        $this->authorizeGradeEntry($currentUser, $data['component_id'], $data['student_id']);
 
+        $component = GradeComponent::findOrFail($data['component_id']);
         $period = GradePeriod::findOrFail($data['period_id']);
+        if ($component->semester_id && $period->semester_id && $component->semester_id !== $period->semester_id) {
+            throw new HttpException(422, 'Komponen nilai tidak sesuai dengan semester pada periode penilaian yang dipilih.');
+        }
         if ($period->status === 'locked') {
             throw new HttpException(422, 'Periode penilaian telah dikunci. Perubahan nilai tidak diizinkan tanpa persetujuan / pembukaan kunci.');
         }
@@ -311,6 +323,24 @@ class GradeService
         $period = GradePeriod::findOrFail($data['period_id']);
         if ($period->status === 'locked') {
             throw new HttpException(422, 'Periode penilaian telah dikunci. Perubahan nilai massal tidak diizinkan tanpa pembukaan kunci.');
+        }
+
+        // P1-14: Validasi otorisasi komponen, keanggotaan siswa aktif, dan kecocokan semester sebelum transaksi
+        $componentCache = [];
+        foreach ($data['grades'] as $item) {
+            $componentId = $item['component_id'] ?? $defaultComponentId;
+            if (! $componentId) {
+                continue;
+            }
+            $this->authorizeGradeEntry($currentUser, $componentId, $item['student_id']);
+
+            if (! isset($componentCache[$componentId])) {
+                $componentCache[$componentId] = GradeComponent::findOrFail($componentId);
+            }
+            $comp = $componentCache[$componentId];
+            if ($comp->semester_id && $period->semester_id && $comp->semester_id !== $period->semester_id) {
+                throw new HttpException(422, 'Komponen nilai tidak sesuai dengan semester pada periode penilaian yang dipilih.');
+            }
         }
 
         return DB::transaction(function () use ($data, $defaultComponentId, $currentUser, $request) {
@@ -649,7 +679,7 @@ class GradeService
             throw new HttpException(422, 'Periode penilaian telah dikunci. Nilai tidak dapat dihapus.');
         }
 
-        $this->authorizeGradeEntry($currentUser, $grade->component_id);
+        $this->authorizeGradeEntry($currentUser, $grade->component_id, $grade->student_id);
 
         return DB::transaction(function () use ($grade, $currentUser, $request) {
             $oldData = $grade->toArray();
@@ -672,16 +702,87 @@ class GradeService
     /**
      * Public wrapper for checkGradeEntryAuthorization
      */
-    public function checkGradeEntryAuthorization(User $user, string $componentId): void
+    public function checkGradeEntryAuthorization(User $user, string $componentId, ?string $studentId = null): void
     {
-        $this->authorizeGradeEntry($user, $componentId);
+        $this->authorizeGradeEntry($user, $componentId, $studentId);
     }
 
     /**
-     * Validasi otorisasi apakah pengguna berhak menginput nilai komponen ini.
+     * P1-14: Validasi otorisasi mutasi komponen nilai (create/update/delete) beserta isolasi sekolah & penugasan guru.
      */
-    protected function authorizeGradeEntry(User $user, string $componentId): void
+    protected function authorizeComponentMutation(User $user, string $subjectId, ?string $classId = null): void
     {
+        $subject = Subject::findOrFail($subjectId);
+        if (! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($subject->school_id) && $subject->school_id !== $user->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Mata pelajaran berada di luar sekolah penugasan Anda.');
+        }
+
+        if ($classId !== null) {
+            $schoolClass = SchoolClass::findOrFail($classId);
+            if (! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($schoolClass->school_id) && $schoolClass->school_id !== $user->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Kelas berada di luar sekolah penugasan Anda.');
+            }
+        }
+
+        if ($this->checkIsAdmin($user)) {
+            return;
+        }
+
+        $teacher = Teacher::where('user_id', $user->id)->first();
+        if (! $teacher) {
+            throw new HttpException(403, 'Hanya guru atau administrator yang berhak mengelola komponen nilai.');
+        }
+
+        if ($classId !== null) {
+            $isAssigned = $teacher->teachingAssignments()
+                ->where('class_id', $classId)
+                ->where('subject_id', $subjectId)
+                ->exists();
+            $isHomeroom = SchoolClass::where('id', $classId)
+                ->where('homeroom_teacher_id', $teacher->id)
+                ->exists();
+
+            if (! $isAssigned && ! $isHomeroom) {
+                throw new HttpException(403, 'Anda tidak ditugaskan mengelola komponen nilai untuk mata pelajaran dan kelas ini.');
+            }
+
+            return;
+        }
+
+        // Komponen global (class_id IS NULL): guru minimal harus mengampu mata pelajaran terkait
+        $teachesSubject = $teacher->teachingAssignments()
+            ->where('subject_id', $subjectId)
+            ->exists();
+        if (! $teachesSubject) {
+            throw new HttpException(403, 'Anda tidak ditugaskan mengampu mata pelajaran pada komponen nilai global ini.');
+        }
+    }
+
+    /**
+     * Validasi otorisasi apakah pengguna berhak menginput/menghapus nilai komponen & siswa ini (P1-14 anti-IDOR).
+     */
+    protected function authorizeGradeEntry(User $user, string $componentId, ?string $studentId = null): void
+    {
+        $component = GradeComponent::with(['subject', 'class'])->findOrFail($componentId);
+
+        // Isolasi sekolah lintas tenant (non-super_admin)
+        if (! $user->hasRole('super_admin') && ! empty($user->school_id)) {
+            if (! empty($component->subject?->school_id) && $component->subject->school_id !== $user->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Komponen nilai berada di luar sekolah penugasan Anda.');
+            }
+            if ($component->class && ! empty($component->class->school_id) && $component->class->school_id !== $user->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Kelas komponen nilai berada di luar sekolah penugasan Anda.');
+            }
+        }
+
+        $student = null;
+        if ($studentId !== null) {
+            $student = Student::findOrFail($studentId);
+            if (! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($student->school_id) && $student->school_id !== $user->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Siswa berada di luar sekolah penugasan Anda.');
+            }
+        }
+
         if ($this->checkIsAdmin($user)) {
             return;
         }
@@ -691,9 +792,7 @@ class GradeService
             throw new HttpException(403, 'Hanya guru atau administrator yang berhak menginput nilai.');
         }
 
-        $component = GradeComponent::findOrFail($componentId);
-
-        // Jika komponen terikat pada kelas tertentu, guru harus mengampu kelas atau menjadi walas
+        // Jika komponen terikat pada kelas tertentu, guru harus mengampu kelas+mapel atau menjadi walas
         if ($component->class_id) {
             $isAssigned = $teacher->teachingAssignments()
                 ->where('class_id', $component->class_id)
@@ -705,6 +804,43 @@ class GradeService
             if (! $isAssigned && ! $isHomeroom) {
                 throw new HttpException(403, 'Anda tidak ditugaskan untuk mengajar mata pelajaran ini pada kelas tersebut.');
             }
+
+            // P1-14: Pastikan siswa benar-benar anggota aktif kelas komponen tersebut
+            if ($student !== null) {
+                $isActiveMember = ClassStudent::where('class_id', $component->class_id)
+                    ->where('student_id', $student->id)
+                    ->whereNull('left_at')
+                    ->exists();
+                if (! $isActiveMember) {
+                    throw new HttpException(403, 'Akses ditolak: Siswa tidak terdaftar sebagai anggota aktif pada kelas komponen nilai ini.');
+                }
+            }
+
+            return;
+        }
+
+        // P1-14: Komponen global (class_id IS NULL) — guru wajib mengampu mapel terkait dan hanya boleh menilai siswa di kelas aktifnya
+        $taughtClassIds = $teacher->teachingAssignments()
+            ->where('subject_id', $component->subject_id)
+            ->pluck('class_id')
+            ->all();
+        $homeroomClassIds = SchoolClass::where('homeroom_teacher_id', $teacher->id)->pluck('id')->all();
+        $allowedClassIds = array_values(array_unique(array_merge($taughtClassIds, $homeroomClassIds)));
+
+        if (empty($taughtClassIds) && empty($homeroomClassIds)) {
+            throw new HttpException(403, 'Anda tidak ditugaskan untuk mengajar mata pelajaran pada komponen nilai global ini.');
+        }
+
+        if ($student !== null) {
+            $inAllowedActiveClass = ClassStudent::whereIn('class_id', $allowedClassIds)
+                ->where('student_id', $student->id)
+                ->whereNull('left_at')
+                ->exists();
+            if (! $inAllowedActiveClass) {
+                throw new HttpException(403, 'Akses ditolak: Siswa tidak berada di kelas aktif yang Anda ampu untuk mata pelajaran ini.');
+            }
+        } elseif (empty($taughtClassIds)) {
+            throw new HttpException(403, 'Anda tidak ditugaskan untuk mengajar mata pelajaran pada komponen nilai global ini.');
         }
     }
 

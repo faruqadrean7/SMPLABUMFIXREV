@@ -57,7 +57,9 @@ class TeacherGradingController extends Controller
 
         $query = GradeComponent::query();
         if ($classId) {
-            $query->where('class_id', $classId);
+            $query->where(function ($q) use ($classId) {
+                $q->where('class_id', $classId)->orWhereNull('class_id');
+            });
         }
         if ($subjectId) {
             $query->where('subject_id', $subjectId);
@@ -108,9 +110,14 @@ class TeacherGradingController extends Controller
             }
         }
 
-        $schoolClass = SchoolClass::with('students')->find($classId);
+        $schoolClass = SchoolClass::with(['students' => fn ($q) => $q->wherePivotNull('left_at')])->find($classId);
         if (! $schoolClass) {
             return $this->errorResponse('Kelas tidak ditemukan.', 'NOT_FOUND', 404);
+        }
+
+        $user = $request->user();
+        if ($user && ! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($schoolClass->school_id) && $schoolClass->school_id !== $user->school_id) {
+            return $this->errorResponse('Akses ditolak: Kelas berada di luar sekolah penugasan Anda.', 'FORBIDDEN', 403);
         }
 
         // Buku nilai: kembalikan periode, komponen, dan NILAI SEBENARNYA.
@@ -140,8 +147,11 @@ class TeacherGradingController extends Controller
             $period = $periods->firstWhere('status', 'open') ?? $periods->first();
         }
 
+        // P1-14: Sertakan komponen spesifik kelas sekaligus komponen global (class_id IS NULL)
         $components = GradeComponent::query()
-            ->where('class_id', $classId)
+            ->where(function ($q) use ($classId) {
+                $q->where('class_id', $classId)->orWhereNull('class_id');
+            })
             ->where('subject_id', $subjectId)
             ->when($semester, fn ($q) => $q->where('semester_id', $semester->id))
             ->orderBy('code')
@@ -285,11 +295,50 @@ class TeacherGradingController extends Controller
             return $this->errorResponse('Periode penilaian telah dikunci (locked). Perubahan nilai tidak diizinkan.', 'BUSINESS_RULE_VIOLATION', 422);
         }
 
+        // P1-14: Bangun whitelist siswa aktif kelas & komponen sah (spesifik kelas atau global) anti-IDOR
+        $schoolClass = SchoolClass::find($classId);
+        if (! $schoolClass) {
+            return $this->errorResponse('Kelas tidak ditemukan.', 'NOT_FOUND', 404);
+        }
+        $user = $request->user();
+        if ($user && ! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($schoolClass->school_id) && $schoolClass->school_id !== $user->school_id) {
+            return $this->errorResponse('Akses ditolak: Kelas berada di luar sekolah penugasan Anda.', 'FORBIDDEN', 403);
+        }
+
+        $allowedStudentIds = DB::table('class_students')
+            ->where('class_id', $classId)
+            ->whereNull('left_at')
+            ->pluck('student_id')
+            ->all();
+        $allowedStudentLookup = array_flip($allowedStudentIds);
+
+        $allowedComponentIds = GradeComponent::query()
+            ->where('subject_id', $subjectId)
+            ->where(function ($q) use ($classId) {
+                $q->where('class_id', $classId)->orWhereNull('class_id');
+            })
+            ->when($period?->semester_id, fn ($q) => $q->where('semester_id', $period->semester_id))
+            ->pluck('id')
+            ->all();
+        $allowedComponentLookup = array_flip($allowedComponentIds);
+
         if (is_array($gradesList)) {
             foreach ($gradesList as $item) {
+                $studentId = $item['student_id'] ?? $item['studentId'] ?? null;
+                if ($studentId && Str::isUuid($studentId) && ! isset($allowedStudentLookup[$studentId])) {
+                    return $this->errorResponse('Akses ditolak: Terdapat siswa yang tidak terdaftar aktif pada kelas ini.', 'FORBIDDEN', 403);
+                }
+
                 $scores = $item['scores'] ?? [];
                 if (is_array($scores)) {
                     foreach ($scores as $componentId => $scoreVal) {
+                        // Sel kosong (null atau string kosong) dari grid FE dilewati secara aman
+                        if ($scoreVal === null || $scoreVal === '') {
+                            continue;
+                        }
+                        if (! Str::isUuid($componentId) || ! isset($allowedComponentLookup[$componentId])) {
+                            return $this->errorResponse('Akses ditolak: Komponen nilai berada di luar cakupan mata pelajaran, kelas, atau semester ini.', 'FORBIDDEN', 403);
+                        }
                         if (! is_numeric($scoreVal) || $scoreVal < 0 || $scoreVal > 100) {
                             return $this->errorResponse('Nilai harus berupa angka dalam rentang 0 hingga 100.', 'VALIDATION_ERROR', 422);
                         }
@@ -305,6 +354,9 @@ class TeacherGradingController extends Controller
                 $scores = $item['scores'] ?? [];
                 if ($studentId && is_array($scores)) {
                     foreach ($scores as $componentId => $scoreVal) {
+                        if ($scoreVal === null || $scoreVal === '') {
+                            continue;
+                        }
                         if (Str::isUuid($componentId) && Str::isUuid($studentId)) {
                             $isLocked = Grade::where([
                                 'student_id' => $studentId,
@@ -330,7 +382,7 @@ class TeacherGradingController extends Controller
                     $scores = $item['scores'] ?? [];
                     if (is_array($scores)) {
                         foreach ($scores as $componentId => $scoreVal) {
-                            if (! Str::isUuid($componentId)) {
+                            if ($scoreVal === null || $scoreVal === '' || ! Str::isUuid($componentId)) {
                                 continue;
                             }
                             // Nilai manual tidak boleh menurunkan nilai otomatis yang
