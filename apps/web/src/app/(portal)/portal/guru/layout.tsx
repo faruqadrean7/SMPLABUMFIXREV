@@ -208,7 +208,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                  <span className="truncate">{link.name}</span>
+                  <span className="leading-snug">{link.name}</span>
                 </div>
                 {link.badge && (
                   <span
