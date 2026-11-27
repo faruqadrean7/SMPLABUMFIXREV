@@ -244,6 +244,6 @@ flowchart TD
 6. **[`docs/audit/REGRESSION_TEST_PLAN.md`](REGRESSION_TEST_PLAN.md)** — Rencana pengujian regresi PHPUnit, Vitest, Playwright, dan dry-run verification.
 
 > **STATUS EKSEKUSI (Update 27 Nov 2026):**
-> - **Tier 0 + Surgical Fix `P0-16` + Tier 1A:** **SELESAI & PUSHED** ke `origin/develop` (`ea5be02`).
-> - **Tier 1B (`P0-08`, `P0-20`, `P1-01` s/d `P1-09`):** **SELESAI LOKAL** (`eea01bd..b9df55a`, menunggu review & persetujuan push sebelum masuk Tier 2A).
-> - **Tier 2A s/d Tier 5:** Belum dieksekusi — menunggu persetujuan eksplisit dari pemilik sistem.
+> - **Tier 0 + Surgical Fix `P0-16` + Tier 1A + Tier 1B:** **SELESAI & PUSHED** ke `origin/develop` (`6f08240`).
+> - **Tier 2A (`P0-24`, `P0-25`, `P0-21`, `P0-23`, `P0-12`, `P0-13`, `P0-14`, `P0-26`):** **SELESAI LOKAL** (`31bfc29..dad38d3`, menunggu review & persetujuan push sebelum masuk Tier 2B/3).
+> - **Tier 2B s/d Tier 5:** Belum dieksekusi — menunggu persetujuan eksplisit dari pemilik sistem.
