@@ -99,6 +99,8 @@ class StaffAttendanceTest extends TestCase
 
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->postJson('/api/v1/staff-attendances/check-in', [
+                'lat' => -7.9625000,
+                'lng' => 112.6175000,
                 'notes' => 'Hadir tepat waktu',
             ]);
 
@@ -158,6 +160,8 @@ class StaffAttendanceTest extends TestCase
 
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->post('/api/v1/staff-attendances/check-in', [
+                'lat' => -7.9625000,
+                'lng' => 112.6175000,
                 'photo_file' => $selfie,
                 'notes' => 'Selfie presensi',
             ], ['Accept' => 'application/json']);
@@ -210,6 +214,8 @@ class StaffAttendanceTest extends TestCase
 
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->postJson('/api/v1/staff-attendances/check-out', [
+                'lat' => -7.9625000,
+                'lng' => 112.6175000,
                 'notes' => 'Pulang jam kerja selesai',
             ]);
 

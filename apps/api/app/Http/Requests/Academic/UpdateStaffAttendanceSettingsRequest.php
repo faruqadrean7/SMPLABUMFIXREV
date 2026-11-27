@@ -13,6 +13,7 @@ class UpdateStaffAttendanceSettingsRequest extends BaseApiRequest
             'longitude' => ['required', 'numeric', 'between:-180,180'],
             'radius_meters' => ['required', 'integer', 'min:10', 'max:50000'],
             'late_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
+            'require_gps' => ['nullable', 'boolean'],
         ];
     }
 

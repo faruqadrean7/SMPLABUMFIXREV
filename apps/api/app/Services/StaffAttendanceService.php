@@ -31,8 +31,10 @@ class StaffAttendanceService
      */
     public function getTodayAttendance(Request $request): ?StaffAttendance
     {
-        /** @var User $currentUser */
+        /** @var User|null $currentUser */
         $currentUser = $request->user();
+        $this->authorizeStaffMember($currentUser);
+
         $today = Carbon::now()->format('Y-m-d');
 
         return StaffAttendance::with(['photoFile', 'user'])
@@ -42,12 +44,14 @@ class StaffAttendanceService
     }
 
     /**
-     * BE-ACD-05: Check-in staf (opsional GPS radius & selfie).
+     * BE-ACD-05: Check-in staf (P0-10: validasi peran staf, wajib GPS saat geofencing aktif, & kepemilikan foto).
      */
     public function checkIn(array $data, Request $request): StaffAttendance
     {
-        /** @var User $currentUser */
+        /** @var User|null $currentUser */
         $currentUser = $request->user();
+        $this->authorizeStaffMember($currentUser);
+
         $today = Carbon::now()->format('Y-m-d');
         $now = Carbon::now();
 
@@ -60,12 +64,10 @@ class StaffAttendanceService
             throw new HttpException(422, 'Anda sudah melakukan check-in presensi hari ini.');
         }
 
-        // Validasi GPS Radius bila koordinat disediakan
-        if (isset($data['lat'], $data['lng'])) {
-            $this->validateGpsRadius((float) $data['lat'], (float) $data['lng']);
-        }
+        // P0-10: Wajibkan koordinat GPS & validasi radius bila geofencing aktif
+        $this->enforceGpsIfRequired($data);
 
-        // Unggah foto selfie jika ada
+        // Unggah foto selfie jika ada, atau validasi kepemilikan photo_file_id
         $photoFileId = $data['photo_file_id'] ?? null;
         if ($request->hasFile('photo_file')) {
             $uploaded = $request->file('photo_file');
@@ -73,6 +75,7 @@ class StaffAttendanceService
             $checksum = hash_file('sha256', $uploaded->getRealPath());
 
             $fileRecord = File::create([
+                'school_id' => $currentUser->school_id ?? null,
                 'owner_id' => $currentUser->id,
                 'owner_type' => 'User',
                 'bucket' => 'staff-attendance',
@@ -84,6 +87,8 @@ class StaffAttendanceService
             ]);
 
             $photoFileId = $fileRecord->id;
+        } elseif ($photoFileId !== null) {
+            $this->authorizePhotoFileOwnership((string) $photoFileId, $currentUser);
         }
 
         // Tentukan status kehadiran (hadir / terlambat)
@@ -125,8 +130,10 @@ class StaffAttendanceService
      */
     public function checkOut(array $data, Request $request): StaffAttendance
     {
-        /** @var User $currentUser */
+        /** @var User|null $currentUser */
         $currentUser = $request->user();
+        $this->authorizeStaffMember($currentUser);
+
         $today = Carbon::now()->format('Y-m-d');
         $now = Carbon::now();
 
@@ -142,10 +149,8 @@ class StaffAttendanceService
             throw new HttpException(422, 'Anda sudah melakukan check-out hari ini.');
         }
 
-        // Validasi GPS Radius bila koordinat disediakan pada check-out
-        if (isset($data['lat'], $data['lng'])) {
-            $this->validateGpsRadius((float) $data['lat'], (float) $data['lng']);
-        }
+        // P0-10: Wajibkan koordinat GPS & validasi radius bila geofencing aktif
+        $this->enforceGpsIfRequired($data);
 
         return DB::transaction(function () use ($attendance, $now, $data, $currentUser, $request) {
             $oldData = $attendance->toArray();
@@ -175,8 +180,9 @@ class StaffAttendanceService
      */
     public function listAttendances(array $filters, Request $request): LengthAwarePaginator
     {
-        /** @var User $currentUser */
+        /** @var User|null $currentUser */
         $currentUser = $request->user();
+        $this->authorizeStaffMember($currentUser);
         $isAdmin = $this->checkIsAdmin($currentUser);
 
         $query = StaffAttendance::with(['user.teacher', 'user.staff', 'photoFile'])->orderBy('att_date', 'desc');
@@ -222,8 +228,9 @@ class StaffAttendanceService
      */
     public function getSummary(array $filters, Request $request): array
     {
-        /** @var User $currentUser */
+        /** @var User|null $currentUser */
         $currentUser = $request->user();
+        $this->authorizeStaffMember($currentUser);
         $isAdmin = $this->checkIsAdmin($currentUser);
 
         // IDOR Check: jika bukan admin tapi meminta summary user lain
@@ -437,20 +444,28 @@ class StaffAttendanceService
     /**
      * BE-ACD-05: Mengambil konfigurasi GPS dan jam batas presensi staf.
      */
-    public function getSettings(): array
+    public function getSettings(?Request $request = null): array
     {
+        if ($request !== null) {
+            $this->authorizeStaffMember($request->user());
+        }
+
         $gpsSetting = SiteSetting::where('setting_key', 'staff_attendance_gps')->first();
 
         $latitude = self::DEFAULT_SCHOOL_LAT;
         $longitude = self::DEFAULT_SCHOOL_LNG;
         $radiusMeters = self::DEFAULT_RADIUS_METERS;
         $lateTime = self::DEFAULT_LATE_TIME;
+        $requireGps = true;
 
         if ($gpsSetting && is_array($gpsSetting->setting_value)) {
             $latitude = (float) ($gpsSetting->setting_value['latitude'] ?? $latitude);
             $longitude = (float) ($gpsSetting->setting_value['longitude'] ?? $longitude);
             $radiusMeters = (int) ($gpsSetting->setting_value['radius_meters'] ?? $radiusMeters);
             $lateTime = (string) ($gpsSetting->setting_value['late_time'] ?? $lateTime);
+            $requireGps = array_key_exists('require_gps', $gpsSetting->setting_value)
+                ? (bool) $gpsSetting->setting_value['require_gps']
+                : ($radiusMeters > 0);
         }
 
         return [
@@ -458,6 +473,7 @@ class StaffAttendanceService
             'longitude' => $longitude,
             'radius_meters' => $radiusMeters,
             'late_time' => $lateTime,
+            'require_gps' => $requireGps,
         ];
     }
 
@@ -472,15 +488,18 @@ class StaffAttendanceService
             throw new HttpException(403, 'Hanya administrator yang berhak mengubah konfigurasi presensi staf.');
         }
 
+        $settingValue = [
+            'latitude' => (float) $data['latitude'],
+            'longitude' => (float) $data['longitude'],
+            'radius_meters' => (int) $data['radius_meters'],
+            'late_time' => $data['late_time'],
+            'require_gps' => array_key_exists('require_gps', $data) ? (bool) $data['require_gps'] : true,
+        ];
+
         $setting = SiteSetting::updateOrCreate(
             ['setting_key' => 'staff_attendance_gps'],
             [
-                'setting_value' => [
-                    'latitude' => (float) $data['latitude'],
-                    'longitude' => (float) $data['longitude'],
-                    'radius_meters' => (int) $data['radius_meters'],
-                    'late_time' => $data['late_time'],
-                ],
+                'setting_value' => $settingValue,
             ]
         );
 
@@ -495,6 +514,96 @@ class StaffAttendanceService
         );
 
         return $this->getSettings();
+    }
+
+    /**
+     * P0-10: Wajibkan koordinat GPS saat geofencing aktif agar tidak bisa di-bypass dengan mengosongkan lat/lng.
+     */
+    protected function enforceGpsIfRequired(array $data): void
+    {
+        $settings = $this->getSettings();
+        $hasLat = isset($data['lat']) && $data['lat'] !== '';
+        $hasLng = isset($data['lng']) && $data['lng'] !== '';
+
+        if ($settings['require_gps']) {
+            if (! $hasLat || ! $hasLng) {
+                throw new HttpException(
+                    422,
+                    'Koordinat lokasi GPS (latitude dan longitude) wajib disertakan untuk presensi dalam radius sekolah.'
+                );
+            }
+
+            $this->validateGpsRadius((float) $data['lat'], (float) $data['lng']);
+
+            return;
+        }
+
+        if ($hasLat && $hasLng) {
+            $this->validateGpsRadius((float) $data['lat'], (float) $data['lng']);
+        }
+    }
+
+    /**
+     * P0-10: Memastikan hanya guru, staf sekolah, atau administrator yang dapat mengakses endpoint presensi staf.
+     */
+    protected function authorizeStaffMember(?User $user): void
+    {
+        if (! $user) {
+            throw new HttpException(401, 'Unauthenticated');
+        }
+
+        if ($this->checkIsAdmin($user)) {
+            return;
+        }
+
+        if ($user->teacher()->exists() || $user->staff()->exists()) {
+            return;
+        }
+
+        $allowedStaffRoles = [
+            'teacher',
+            'guru',
+            'homeroom',
+            'wali_kelas',
+            'staff',
+            'counselor',
+            'bk',
+            'guru_bk',
+            'librarian',
+            'pustakawan',
+            'laboran',
+            'lab_assistant',
+            'facility_staff',
+            'sarpras',
+            'humas',
+            'finance_staff',
+            'student_affairs',
+            'curriculum',
+            'principal',
+            'kepala_sekolah',
+        ];
+
+        if ($user->hasRole($allowedStaffRoles)) {
+            return;
+        }
+
+        throw new HttpException(403, 'Akses ditolak: Layanan presensi pegawai hanya tersedia untuk guru dan staf sekolah.');
+    }
+
+    /**
+     * P0-10: Validasi kepemilikan photo_file_id agar tidak dapat menyematkan berkas milik pengguna lain.
+     */
+    protected function authorizePhotoFileOwnership(string $fileId, User $user): void
+    {
+        $file = File::findOrFail($fileId);
+
+        if ((string) $file->owner_id !== (string) $user->id) {
+            throw new HttpException(403, 'Akses ditolak: Berkas foto presensi bukan milik akun Anda.');
+        }
+
+        if (! str_starts_with((string) $file->mime_type, 'image/')) {
+            throw new HttpException(422, 'Berkas foto presensi harus berupa gambar.');
+        }
     }
 
     /**

@@ -35,6 +35,14 @@ class StaffAttendanceController extends Controller
             $attendance = $this->service->getTodayAttendance($request);
 
             return $this->successResponse($attendance);
+        } catch (HttpException $e) {
+            $code = match ($e->getStatusCode()) {
+                401 => 'UNAUTHORIZED',
+                403 => 'FORBIDDEN',
+                default => 'BAD_REQUEST',
+            };
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -102,6 +110,14 @@ class StaffAttendanceController extends Controller
             $paginator = $this->service->listAttendances($request->validated(), $request);
 
             return $this->paginatedResponse($paginator);
+        } catch (HttpException $e) {
+            $code = match ($e->getStatusCode()) {
+                401 => 'UNAUTHORIZED',
+                403 => 'FORBIDDEN',
+                default => 'BAD_REQUEST',
+            };
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -192,9 +208,17 @@ class StaffAttendanceController extends Controller
     public function getSettings(Request $request): JsonResponse
     {
         try {
-            $settings = $this->service->getSettings();
+            $settings = $this->service->getSettings($request);
 
             return $this->successResponse($settings);
+        } catch (HttpException $e) {
+            $code = match ($e->getStatusCode()) {
+                401 => 'UNAUTHORIZED',
+                403 => 'FORBIDDEN',
+                default => 'BAD_REQUEST',
+            };
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
