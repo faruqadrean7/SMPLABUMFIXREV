@@ -115,7 +115,9 @@ jobs:
             --exclude '.next' \
             --exclude '/apps/api/storage' \
             --exclude '.env' \
-            --exclude '.env.*' \
+            --exclude '.env.local' \
+            --exclude '.env.production' \
+            --exclude '*.env.local' \
             ./ "$APP_ROOT/releases/$REL/"
 
       - name: Aktifkan release
