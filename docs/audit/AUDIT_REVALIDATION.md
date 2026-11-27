@@ -243,4 +243,7 @@ flowchart TD
 5. **[`docs/audit/SECURITY_FIX_PLAN.md`](SECURITY_FIX_PLAN.md)** — Rencana teknis perbaikan keamanan, analisis dampak API contract Web & Android, risiko data lama, dan prosedur rollback.
 6. **[`docs/audit/REGRESSION_TEST_PLAN.md`](REGRESSION_TEST_PLAN.md)** — Rencana pengujian regresi PHPUnit, Vitest, Playwright, dan dry-run verification.
 
-> **STATUS EKSEKUSI:** Menunggu persetujuan eksplisit dari pemilik sistem sebelum melakukan perubahan kode apa pun.
+> **STATUS EKSEKUSI (Update 27 Nov 2026):**
+> - **Tier 0 + Surgical Fix `P0-16` + Tier 1A:** **SELESAI & PUSHED** ke `origin/develop` (`ea5be02`).
+> - **Tier 1B (`P0-08`, `P0-20`, `P1-01` s/d `P1-09`):** **SELESAI LOKAL** (`eea01bd..b9df55a`, menunggu review & persetujuan push sebelum masuk Tier 2A).
+> - **Tier 2A s/d Tier 5:** Belum dieksekusi — menunggu persetujuan eksplisit dari pemilik sistem.

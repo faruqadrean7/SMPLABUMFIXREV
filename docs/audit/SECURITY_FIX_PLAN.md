@@ -1,9 +1,9 @@
 # Rencana Perbaikan Keamanan, Analisis Dampak Kontrak API, & Prosedur Rollback (`SECURITY_FIX_PLAN`)
 
-> **Basis Verifikasi:** Branch `develop` · Commit awal `be6a875` · Update Pasca-Eksekusi Tier 0 + P0-16 + Tier 1A (`6ec1be3`)  
+> **Basis Verifikasi:** Branch `develop` · Commit awal `be6a875` · Sync Remote `ea5be02` · Update Pasca-Eksekusi Tier 1B (`b9df55a`)  
 > **Prinsip Eksekusi:** Perubahan kecil & terisolasi (*surgical hotfix*, bukan refactoring besar), **non-destruktif terhadap data lama**, menjaga kebijakan bisnis `max(manual, auto)` & perbaikan `grade_component_id`, serta memetakan dampak ke **Web (`apps/web`)** dan **Android (`apps/mobile`)** sebelum eksekusi.
 
-## Status Eksekusi Terkini (Tier 0 + Surgical Fix P0-16 + Tier 1A — SELESAI)
+## Status Eksekusi Terkini (Tier 0 + Surgical Fix P0-16 + Tier 1A + Tier 1B — SELESAI)
 
 | Gelombang | ID | Status | Commit | File Utama | Rollback Command |
 |---|---|---|---|---|---|
@@ -21,10 +21,22 @@
 | **Tier 1A** | **P0-09** | **SELESAI** | `fc48d99` | `TeachingMaterialService.php`, `TeachingMaterialAuthorizationTest.php` | `git revert fc48d99` |
 | **Tier 1A** | **P0-10** | **SELESAI** | `36c3bb6` | `StaffAttendanceService.php`, `StaffAttendanceController.php`, `UpdateStaffAttendanceSettingsRequest.php`, `StaffAttendanceSecurityTest.php` | `git revert 36c3bb6` |
 | **Tier 1A** | **P0-11** | **SELESAI** | `6ec1be3` | `LibraryService.php`, `LabService.php`, `AssetService.php`, `AssetAuditService.php`, `PartnershipService.php`, `AlumniService.php`, 7 Controllers SAR/HUM, `SarAndHumAuthorizationTest.php` | `git revert 6ec1be3` |
+| **Tier 1B** | **P1-02** | **SELESAI** | `eea01bd` | `RbacService.php`, `UserService.php`, `ProvisionsLoginAccount.php`, `RbacPermissionCacheTest.php` | `git revert eea01bd` |
+| **Tier 1B** | **P1-03** | **SELESAI** | `bf0a019` | `AuthService.php`, `UserService.php`, `ChangeUserStatusRequest.php`, `UpdateUserRequest.php`, `SessionRevocationSecurityTest.php` | `git revert bf0a019` |
+| **Tier 1B** | **P1-04, P1-05** | **SELESAI** | `2af243f` | `AuthService.php`, `routes/api/auth.php`, `bootstrap/app.php`, `BypassThrottle.php`, `AuthRateLimitAndProxySecurityTest.php` | `git revert 2af243f` |
+| **Tier 1B** | **P1-06** | **SELESAI** | `ff462cc` | `TwoFactorAuthController.php`, `AdminAuthController.php`, `TwoFactorAuthService.php`, `routes/api/auth.php`, `TwoFactorDisabledPolicyTest.php` | `git revert ff462cc` |
+| **Tier 1B** | **P0-08, P1-01** | **SELESAI** | `b956917` | `ManagesRefreshCookies.php`, `AuthController.php`, `AdminAuthController.php`, `DualModeAuthCookieTest.php`, `admin-session-cookie.ts`, `api/admin-session/route.ts`, `middleware.ts`, `token-storage.ts`, `api-client.ts`, `auth-provider.tsx`, `admin-login-form.tsx`, `batch5-middleware-and-hardening.test.ts`, `auth-security-tier1b.test.ts` | `git revert b956917` |
+| **Tier 1B** | **P0-20, P1-08** | **SELESAI** | `5b6d307` | `ExamSyncService.php`, `CounselingService.php`, `AnnouncementService.php`, `MessagingService.php`, `MessagingController.php`, `ComplaintService.php`, `MultiTenantAndCbtSyncSecurityTest.php` | `git revert 5b6d307` |
+| **Tier 1B** | **P1-07** | **SELESAI (via P0-18)** | `9d9dcd3` | `Complaint.php`, `ComplaintService.php`, `routes/api/guest.php`, `BkAndComplaintPrivacyTest.php` | `git revert 9d9dcd3` |
+| **Tier 1B** | **P1-09** | **SELESAI** | `b9df55a` | `AuditLogService.php`, `ComplaintService.php`, `FileStorageService.php`, 15 Services/Controllers (`ip_address`→`ip`), `AuditLogHardeningTest.php` | `git revert b9df55a` |
 
 > **Kebijakan E-Rapor (`P1-16` — PENDING SCHOOL APPROVAL):** Alur yang direkomendasikan adalah *Guru Mapel (input & finalisasi nilai) → Wali Kelas (verifikasi kelengkapan rapor) → Kepala Sekolah (pengesahan & penerbitan rapor)*. Permission produksi **belum diubah** dan perilaku eksisting tetap dipertahankan hingga ada konfirmasi resmi dari pihak sekolah.  
-> **Tier 1B & Tier 2A s/d Tier 3:** Belum dieksekusi — menunggu review & persetujuan pemilik sistem.  
-> **Status Push:** Seluruh commit masih berada di branch lokal `develop` (belum di-push ke `origin/develop`).
+> **Tier 2A s/d Tier 3:** Belum dieksekusi — menunggu review & persetujuan pemilik sistem.  
+> **Status Push:** Tier 0 + P0-16 + Tier 1A telah di-push ke `origin/develop` (`ea5be02`). Seluruh commit **Tier 1B** masih berada di branch lokal `develop` menunggu review & persetujuan push.  
+> **Kontrak Dual-Mode Cookie (`P1-01`) & 2FA (`P1-06`):**
+> - Web mengirim header `X-Auth-Token-Transport: cookie` + `withCredentials: true` sehingga `refreshToken` dikirim eksklusif via cookie HttpOnly `sistlabum_refresh_token` (`SameSite=Lax`, `Path=/api/v1/auth`) tanpa pernah tersimpan di `localStorage` atau body JSON.
+> - Klien Android/iOS (`platform: 'android'|'ios'`) tanpa header `X-Auth-Token-Transport: cookie` **tetap menerima `data.tokens.refreshToken` di JSON** dan me-refresh via JSON body (terverifikasi hijau pada `MobileClientAuthCompatibilityTest` & `DualModeAuthCookieTest`).
+> - Seluruh endpoint `/api/v1/auth/2fa/{setup,verify,challenge,disable}` kini mengembalikan **`410 Gone`** (`error.code = FEATURE_DISABLED`) sesuai kebijakan `AGENTS.md §6.11`. Zero caller aktif di Web maupun Android; test lawas `AdminTrustedDeviceTest` adalah artefak era 2FA pra-penonaktifan dan sengaja tidak dihapus secara diam-diam.
 
 ---
 
