@@ -61,17 +61,17 @@ Route::prefix('auth')->group(function () {
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,15');
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:60,1');
 
-    // GAP-SEC-02 & BATCH 4B & 5C: Manajemen Otentikasi Dua Faktor (2FA / TOTP)
-    Route::post('/2fa/setup', [TwoFactorAuthController::class, 'setup'])->middleware('throttle:10,15');
-    Route::post('/2fa/verify', [TwoFactorAuthController::class, 'verify'])->middleware('throttle:5,15');
-    Route::post('/2fa/challenge', [AdminAuthController::class, 'login'])->middleware('throttle:10,15');
+    // P1-06: Endpoint 2FA/TOTP dinonaktifkan secara konsisten (410 Gone) sesuai AGENTS.md §6.11
+    Route::post('/2fa/setup', [TwoFactorAuthController::class, 'disabled']);
+    Route::post('/2fa/verify', [TwoFactorAuthController::class, 'disabled']);
+    Route::post('/2fa/challenge', [TwoFactorAuthController::class, 'disabled']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/change-password', [AuthController::class, 'changePassword']);
 
-        Route::post('/2fa/disable', [TwoFactorAuthController::class, 'disable']);
+        Route::post('/2fa/disable', [TwoFactorAuthController::class, 'disabled']);
 
         // BE-AUTH-04: Manajemen Sesi Perangkat
         Route::get('/sessions', [AuthController::class, 'sessions']);

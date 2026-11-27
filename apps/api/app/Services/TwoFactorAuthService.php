@@ -204,6 +204,10 @@ class TwoFactorAuthService
                 return null;
             }
 
+            if (($payload['type'] ?? '') !== 'mfa_challenge') {
+                return null;
+            }
+
             if ($payload['expires_at'] < time()) {
                 return null;
             }
