@@ -22,11 +22,13 @@ use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\StudentProgramProfile;
 use App\Models\TeachingAssignment;
+use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\LmsService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class MeStudentController extends Controller
 {
@@ -503,19 +505,50 @@ class MeStudentController extends Controller
 
     /**
      * GET /api/v1/me/counseling-requests
-     * Daftar permohonan konseling siswa yang login.
+     * Daftar permohonan konseling siswa atau orang tua/wali yang login.
+     * P1-23: Orang tua hanya melihat permintaan yang diajukan sendiri (konsisten P0-18, tidak membaca curhat mandiri siswa).
      */
     public function counselingRequests(Request $request): JsonResponse
     {
-        $student = $this->resolveCounselingSubject($request);
-        if (! $student) {
-            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 'UNAUTHORIZED', 401);
         }
 
-        $counselings = CounselingRequest::with(['counselor', 'preferredCounselor'])
-            ->where('student_id', $student->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        if ($user->student) {
+            $student = $this->resolveCounselingSubject($request);
+            if (! $student) {
+                return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+            }
+
+            $counselings = CounselingRequest::with(['counselor', 'preferredCounselor'])
+                ->where('student_id', $student->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+        } elseif ($user->guardian) {
+            $requestedChildId = $request->input('student_id');
+            if ($requestedChildId !== null && $requestedChildId !== '') {
+                $student = $this->resolveCounselingSubject($request);
+                if (! $student) {
+                    return $this->errorResponse('Akses ditolak: Anda tidak berwenang mengakses permohonan konseling siswa ini.', 'FORBIDDEN', 403);
+                }
+                $wardIds = [$student->id];
+            } else {
+                $wardIds = $this->resolveGuardianWardIds($user);
+                if (empty($wardIds)) {
+                    return $this->errorResponse('Akses ditolak: Profil anak perwalian tidak ditemukan.', 'FORBIDDEN', 403);
+                }
+            }
+
+            // P1-23: Guardian hanya boleh melihat permintaan yang diajukannya sendiri
+            $counselings = CounselingRequest::with(['counselor', 'preferredCounselor'])
+                ->whereIn('student_id', $wardIds)
+                ->where('requested_by', $user->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+        } else {
+            return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
+        }
 
         $data = $counselings->map(function (CounselingRequest $c) {
             $prefSchedule = '';
@@ -528,6 +561,8 @@ class MeStudentController extends Controller
 
             return [
                 'id' => $c->id,
+                'student_id' => $c->student_id,
+                'requester_role' => $c->requester_role,
                 'topic' => $c->topic,
                 'category' => 'Pengembangan Diri',
                 'requestDate' => $c->created_at?->format('Y-m-d') ?? now()->toDateString(),
@@ -551,7 +586,7 @@ class MeStudentController extends Controller
 
     /**
      * POST /api/v1/me/counseling-requests
-     * Pengajuan permohonan konseling mandiri siswa.
+     * Pengajuan permohonan konseling mandiri siswa atau konsultasi orang tua/wali.
      */
     public function storeCounselingRequest(Request $request): JsonResponse
     {
@@ -560,12 +595,18 @@ class MeStudentController extends Controller
             return $this->errorResponse('Akses ditolak: Profil siswa tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        // Support both camelCase and snake_case
+        // Support both camelCase, snake_case, dan preferred_schedule dari portal orang tua
         if ($request->has('preferredDate') && ! $request->has('preferred_date')) {
             $request->merge(['preferred_date' => $request->input('preferredDate')]);
         }
         if ($request->has('preferredTime') && ! $request->has('preferred_time')) {
             $request->merge(['preferred_time' => $request->input('preferredTime')]);
+        }
+        if (! $request->filled('preferred_date') && ! $request->filled('preferred_time')) {
+            $prefSchedule = $request->input('preferred_schedule') ?? $request->input('preferredSchedule');
+            if (is_string($prefSchedule) && trim($prefSchedule) !== '') {
+                $request->merge(['preferred_date' => trim($prefSchedule)]);
+            }
         }
 
         // Support notes or topic as fallback for reason
@@ -638,7 +679,7 @@ class MeStudentController extends Controller
 
     /**
      * Resolve subjek konseling: siswa sendiri, atau anak milik wali (ortu).
-     * Wali hanya dapat mengakses anak yang benar-benar miliknya (anti-IDOR),
+     * Wali hanya dapat mengakses anak yang benar-benar miliknya pada sekolah yang sama (anti-IDOR),
      * opsional difilter student_id; default anak pertama.
      */
     protected function resolveCounselingSubject(Request $request): ?Student
@@ -648,19 +689,59 @@ class MeStudentController extends Controller
             return null;
         }
         if ($user->student) {
-            return $user->student;
+            $student = $user->student;
+            if (! empty($user->school_id) && ! empty($student->school_id) && $student->school_id !== $user->school_id) {
+                return null;
+            }
+
+            return $student;
         }
         $guardian = $user->guardian;
         if ($guardian) {
             $childId = $request->input('student_id');
-            if ($childId) {
-                return $guardian->students()->where('students.id', $childId)->first();
+            $query = $guardian->students();
+            if (! empty($user->school_id)) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('students.school_id', $user->school_id)
+                        ->orWhereNull('students.school_id');
+                });
             }
 
-            return $guardian->students()->first();
+            if ($childId !== null && $childId !== '') {
+                if (! is_string($childId) || ! Str::isUuid($childId)) {
+                    return null;
+                }
+
+                return $query->where('students.id', $childId)->first();
+            }
+
+            return $query->first();
         }
 
         return null;
+    }
+
+    /**
+     * Ambil daftar ID anak perwalian sah pada sekolah yang sama untuk guardian.
+     *
+     * @return array<int, string>
+     */
+    protected function resolveGuardianWardIds(User $user): array
+    {
+        $guardian = $user->guardian;
+        if (! $guardian) {
+            return [];
+        }
+
+        $query = $guardian->students();
+        if (! empty($user->school_id)) {
+            $query->where(function ($q) use ($user) {
+                $q->where('students.school_id', $user->school_id)
+                    ->orWhereNull('students.school_id');
+            });
+        }
+
+        return $query->pluck('students.id')->all();
     }
 
     /**

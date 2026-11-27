@@ -399,9 +399,6 @@ class CounselingRequestService
         }
 
         $studentClassIds = $student->classes()->whereNull('class_students.left_at')->pluck('classes.id');
-        if ($studentClassIds->isEmpty()) {
-            $studentClassIds = $student->classes()->pluck('classes.id');
-        }
 
         if ($studentClassIds->isEmpty()) {
             return false;

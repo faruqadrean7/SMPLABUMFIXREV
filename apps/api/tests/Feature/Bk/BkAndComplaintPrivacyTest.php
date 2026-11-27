@@ -528,4 +528,120 @@ class BkAndComplaintPrivacyTest extends TestCase
         $principalSessionResp->assertStatus(200);
         $this->assertStringNotContainsString($secretFollowUp, $principalSessionResp->getContent());
     }
+
+    public function test_p1_23_me_counseling_requests_blocks_guardian_from_reading_student_self_requests_and_cross_family_ids(): void
+    {
+        // 1. Siswa mengajukan curhat mandiri lewat /me/counseling-requests
+        $studentSecret = 'CURHAT-MANDIRI-SISWA-RAHASIA-9090';
+        $this->actingAs($this->studentUser, 'sanctum')
+            ->postJson('/api/v1/me/counseling-requests', [
+                'topic' => $studentSecret,
+                'reason' => 'Saya butuh bicara pribadi dengan Guru BK.',
+            ])
+            ->assertStatus(201);
+
+        // 2. Guru BK membuat permintaan atas nama siswa (bukan oleh guardian)
+        CounselingRequest::create([
+            'student_id' => $this->student->id,
+            'requested_by' => $this->counselorUser->id,
+            'requester_role' => 'counselor',
+            'topic' => 'UNDANGAN-BK-INTERNAL-8080',
+            'notes' => 'Undangan sesi konseling lanjutan.',
+            'status' => 'pending',
+        ]);
+
+        // 3. Guardian mengajukan permintaan konsultasi miliknya sendiri (dengan preferred_schedule)
+        $this->app['auth']->forgetGuards();
+        $guardianCreateResp = $this->actingAs($this->guardianUser, 'sanctum')
+            ->postJson('/api/v1/me/counseling-requests', [
+                'student_id' => $this->student->id,
+                'topic' => 'Konsultasi Perkembangan Belajar Ortu',
+                'reason' => 'Ingin berdiskusi jadwal belajar di rumah.',
+                'preferred_schedule' => '2026-12-05',
+            ]);
+        $guardianCreateResp->assertStatus(201);
+        $guardianReqId = $guardianCreateResp->json('data.id');
+        $this->assertSame('2026-12-05', $guardianCreateResp->json('data.preferredSchedule'));
+
+        // 4. Guardian memanggil GET /me/counseling-requests (tanpa & dengan student_id)
+        //    WAJIB hanya melihat permintaannya sendiri — NOL kebocoran curhat mandiri siswa atau undangan BK
+        foreach (['/api/v1/me/counseling-requests', "/api/v1/me/counseling-requests?student_id={$this->student->id}"] as $url) {
+            $this->app['auth']->forgetGuards();
+            $listResp = $this->actingAs($this->guardianUser, 'sanctum')->getJson($url);
+            $listResp->assertStatus(200);
+            $items = $listResp->json('data');
+            $this->assertCount(1, $items, "Guardian pada {$url} hanya boleh melihat 1 permintaannya sendiri");
+            $this->assertSame($guardianReqId, $items[0]['id']);
+            $this->assertSame($this->student->id, $items[0]['student_id']);
+            $this->assertStringNotContainsString($studentSecret, $listResp->getContent());
+            $this->assertStringNotContainsString('UNDANGAN-BK-INTERNAL-8080', $listResp->getContent());
+        }
+
+        // 5. Siswa sendiri tetap dapat melihat curhat mandirinya
+        $this->app['auth']->forgetGuards();
+        $studentList = $this->actingAs($this->studentUser, 'sanctum')
+            ->getJson('/api/v1/me/counseling-requests')
+            ->assertStatus(200);
+        $this->assertStringContainsString($studentSecret, $studentList->getContent());
+
+        // 6. Anti-IDOR lintas keluarga: Guardian tidak boleh mengakses/membuat request untuk anak keluarga lain
+        $otherStudentUser = $this->makeUser('p123_siswa_lain', Role::where('code', 'student')->firstOrFail());
+        $otherStudent = Student::create([
+            'user_id' => $otherStudentUser->id,
+            'nis' => '202699123',
+            'nisn' => '0099123456',
+            'nik_enc' => '3573010101129123',
+            'full_name' => 'Siswa Keluarga Lain Fiktif',
+            'gender' => 'P',
+            'birth_place' => 'Malang',
+            'birth_date' => '2012-06-01',
+            'status' => 'aktif',
+            'entry_date' => '2026-07-01',
+        ]);
+
+        $this->app['auth']->forgetGuards();
+        $this->actingAs($this->guardianUser, 'sanctum')
+            ->getJson("/api/v1/me/counseling-requests?student_id={$otherStudent->id}")
+            ->assertStatus(403);
+
+        $this->app['auth']->forgetGuards();
+        $this->actingAs($this->guardianUser, 'sanctum')
+            ->postJson('/api/v1/me/counseling-requests', [
+                'student_id' => $otherStudent->id,
+                'topic' => 'Coba IDOR',
+                'reason' => 'Tidak sah.',
+            ])
+            ->assertStatus(403);
+
+        // 7. Isolasi school_id pada /me/counseling-requests
+        $schoolA = (string) Str::uuid();
+        $schoolB = (string) Str::uuid();
+        $this->guardianUser->update(['school_id' => $schoolA]);
+        $this->student->update(['school_id' => $schoolB]);
+
+        $this->app['auth']->forgetGuards();
+        $this->actingAs($this->guardianUser->fresh(), 'sanctum')
+            ->getJson("/api/v1/me/counseling-requests?student_id={$this->student->id}")
+            ->assertStatus(403);
+
+        // 8. Unauthenticated -> 401
+        $this->app['auth']->forgetGuards();
+        $this->getJson('/api/v1/me/counseling-requests')->assertStatus(401);
+    }
+
+    public function test_p1_23_former_teacher_cannot_create_counseling_request_after_student_left_class(): void
+    {
+        // Tandai siswa sudah keluar dari kelas walas (left_at terisi)
+        ClassStudent::where('student_id', $this->student->id)
+            ->where('class_id', $this->classA->id)
+            ->update(['left_at' => now()->subDay()->toDateString()]);
+
+        $this->actingAs($this->homeroomTeacherUser, 'sanctum')
+            ->postJson('/api/v1/counseling/requests', [
+                'student_id' => $this->student->id,
+                'topic' => 'Coba akses siswa eks-kelas',
+                'notes' => 'Harus ditolak karena siswa sudah keluar kelas.',
+            ])
+            ->assertStatus(403);
+    }
 }
