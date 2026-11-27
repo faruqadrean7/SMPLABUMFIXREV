@@ -284,14 +284,16 @@ export function ComplaintTracker({ initialCode }: ComplaintTrackerProps) {
                 </div>
               </div>
 
-              {/* ISI LAPORAN */}
+              {/* ISI LAPORAN (Disamarkan di pelacakan publik demi kerahasiaan pelapor) */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                   <FileText className="w-4 h-4 text-slate-400" />
-                  <span>Isi Uraian Laporan</span>
+                  <span>Kerahasiaan Uraian Laporan</span>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {trackResult.content}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  {trackResult.content && !trackResult.content_redacted
+                    ? trackResult.content
+                    : 'Isi uraian laporan dienkripsi dan disamarkan pada pelacakan publik untuk melindungi privasi pelapor. Hanya Guru BK dan Kepala Sekolah yang dapat membaca detail laporan.'}
                 </div>
               </div>
 

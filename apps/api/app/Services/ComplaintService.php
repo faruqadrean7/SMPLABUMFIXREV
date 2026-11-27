@@ -13,7 +13,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ComplaintService
@@ -31,11 +30,11 @@ class ComplaintService
             // AC2: Jika anonim, reporter_user_id wajib NULL
             $reporterUserId = $isAnonymous ? null : ($currentUser?->id ?? null);
 
-            // AC3: Format kode tiket pelacak unik acak: ASP-YYYYMMDD-XXXX
+            // AC3 & P0-18: Format kode tiket pelacak unik ber-entropi tinggi (10 hex kriptografis)
             $datePrefix = Carbon::now()->format('Ymd');
-            $ticketCode = 'ASP-'.$datePrefix.'-'.strtoupper(Str::random(4));
+            $ticketCode = 'ASP-'.$datePrefix.'-'.strtoupper(bin2hex(random_bytes(5)));
             while (Complaint::where('ticket_code', $ticketCode)->exists()) {
-                $ticketCode = 'ASP-'.$datePrefix.'-'.strtoupper(Str::random(4));
+                $ticketCode = 'ASP-'.$datePrefix.'-'.strtoupper(bin2hex(random_bytes(5)));
             }
 
             $complaint = Complaint::create([
@@ -134,11 +133,13 @@ class ComplaintService
             throw new HttpException(404, 'Data pengaduan dengan kode tiket tersebut tidak ditemukan');
         }
 
-        // Jangan pernah membocorkan identitas pelapor ke endpoint publik
+        // P0-18: Jangan pernah membocorkan identitas pelapor maupun isi mentah pengaduan ke endpoint publik
         return [
             'ticket_code' => $complaint->ticket_code,
             'category' => $complaint->category,
-            'content' => $complaint->content,
+            'is_anonymous' => (bool) $complaint->is_anonymous,
+            'content' => null,
+            'content_redacted' => true,
             'status' => $complaint->status,
             'created_at' => $complaint->created_at->toIso8601String(),
             'updated_at' => $complaint->updated_at->toIso8601String(),
@@ -330,7 +331,7 @@ class ComplaintService
                 'created_at' => Carbon::now(),
             ]);
 
-            // Audit Log
+            // Audit Log (P0-18: jangan tulis isi teks tanggapan sensitif ke audit_logs)
             $this->logAudit(
                 $currentUser->id,
                 'complaint.status_updated',
@@ -343,7 +344,7 @@ class ComplaintService
                 [
                     'status' => $complaint->status,
                     'assigned_to' => $complaint->assigned_to,
-                    'notes' => trim($data['response_text']),
+                    'has_response' => trim($data['response_text']) !== '',
                 ],
                 $request->ip(),
                 $request->userAgent()

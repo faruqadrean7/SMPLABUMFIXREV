@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\SafeEncryptedCast;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +24,7 @@ class CounselingSession extends Model
     protected $casts = [
         'session_date' => 'date',
         'notes_enc' => 'encrypted',
+        'follow_up' => SafeEncryptedCast::class,
     ];
 
     public function case(): BelongsTo

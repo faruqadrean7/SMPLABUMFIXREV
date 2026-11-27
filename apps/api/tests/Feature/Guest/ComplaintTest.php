@@ -427,22 +427,25 @@ class ComplaintTest extends TestCase
         $ticketCode = $submitResponse->json('data.ticket_code');
         $this->assertNotNull($ticketCode);
 
-        // 2. Public tracking (FE-REPORT-01)
+        // 2. Public tracking (FE-REPORT-01 + P0-18 redaksi isi sensitif pada endpoint publik)
         $trackResponse = $this->getJson("/api/v1/public/complaints/{$ticketCode}");
         $trackResponse->assertStatus(200)
             ->assertJsonPath('data.ticket_code', $ticketCode)
             ->assertJsonPath('data.category', 'bullying')
             ->assertJsonPath('data.status', 'baru')
-            ->assertJsonPath('data.content', $payload['content']);
+            ->assertJsonPath('data.content', null)
+            ->assertJsonPath('data.content_redacted', true);
 
         $this->assertCount(1, $trackResponse->json('data.timeline'));
 
-        // 3. Counselor review (ADM-GUEST-01)
+        // 3. Counselor review (ADM-GUEST-01) menerima isi pengaduan yang terdekripsi
         $counselorListResponse = $this->actingAs($this->counselorUser)
             ->getJson('/api/v1/complaints?category=bullying');
 
         $counselorListResponse->assertStatus(200);
         $items = $counselorListResponse->json('data');
-        $this->assertTrue(collect($items)->contains('ticket_code', $ticketCode));
+        $matched = collect($items)->firstWhere('ticket_code', $ticketCode);
+        $this->assertNotNull($matched);
+        $this->assertEquals($payload['content'], $matched['content']);
     }
 }

@@ -25,7 +25,7 @@ Route::post('/public/complaints/attachments/confirm', [ComplaintAttachmentContro
 // BE-GUEST-02: Aspirasi & Whistleblowing (Public Submission & Tracking)
 // =========================================================================
 Route::post('/public/complaints', [ComplaintController::class, 'submit'])->middleware('throttle:60,1');
-Route::get('/public/complaints/{code}', [ComplaintController::class, 'track']);
+Route::get('/public/complaints/{code}', [ComplaintController::class, 'track'])->middleware('throttle:10,5');
 
 Route::middleware('auth:sanctum')->group(function () {
     // =====================================================================

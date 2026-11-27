@@ -108,7 +108,9 @@ export interface UpdateComplaintStatusPayload {
 export interface PublicComplaintTrackResult {
   ticket_code: string;
   category: string;
-  content: string;
+  is_anonymous?: boolean;
+  content?: string | null;
+  content_redacted?: boolean;
   status: string;
   created_at: string;
   updated_at: string;

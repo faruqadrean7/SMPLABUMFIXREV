@@ -15,6 +15,7 @@ use App\Models\Teacher;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -188,9 +189,14 @@ class CounselingRequestTest extends TestCase
             'student_id' => $this->student1->id,
             'requested_by' => $this->studentUser1->id,
             'requester_role' => 'student',
-            'topic' => 'Konsultasi pemilihan jurusan kuliah teknik informatika',
             'status' => 'pending',
         ]);
+
+        // P0-18: Kolom topic terenkripsi di database namun terbaca utuh via Eloquent
+        $reqId = $response->json('data.id');
+        $rawTopic = DB::table('counseling_requests')->where('id', $reqId)->value('topic');
+        $this->assertNotEquals('Konsultasi pemilihan jurusan kuliah teknik informatika', $rawTopic);
+        $this->assertEquals('Konsultasi pemilihan jurusan kuliah teknik informatika', CounselingRequest::find($reqId)->topic);
     }
 
     /**
@@ -321,8 +327,12 @@ class CounselingRequestTest extends TestCase
         $this->assertDatabaseHas('counseling_requests', [
             'id' => $cReq->id,
             'status' => 'rejected',
-            'rejection_reason' => 'Topik diarahkan untuk konsultasi langsung dengan wali kelas atau guru mapel terkait.',
         ]);
+
+        // P0-18: rejection_reason tersimpan terenkripsi di database dan terbaca via Eloquent
+        $rawReason = DB::table('counseling_requests')->where('id', $cReq->id)->value('rejection_reason');
+        $this->assertNotEquals('Topik diarahkan untuk konsultasi langsung dengan wali kelas atau guru mapel terkait.', $rawReason);
+        $this->assertEquals('Topik diarahkan untuk konsultasi langsung dengan wali kelas atau guru mapel terkait.', $cReq->fresh()->rejection_reason);
 
         $this->assertDatabaseHas('audit_logs', [
             'actor_id' => $this->counselorUser->id,

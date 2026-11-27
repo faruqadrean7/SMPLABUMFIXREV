@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\SafeEncryptedCast;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,7 @@ class Complaint extends Model
     ];
 
     protected $casts = [
+        'content' => SafeEncryptedCast::class,
         'is_anonymous' => 'boolean',
     ];
 

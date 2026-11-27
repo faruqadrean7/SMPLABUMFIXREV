@@ -8,6 +8,8 @@ use App\Models\CounselingRequest;
 use App\Models\CounselingSession;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\Teacher;
+use App\Models\TeachingAssignment;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -33,9 +35,8 @@ class CounselingRequestService
             $query->whereHas('student', fn ($sq) => $sq->where('school_id', $user->school_id));
         }
 
-        // Scoping peranan
-        if ($this->isCounselorOrAdminOrPrincipal($user)) {
-            // Counselor, Admin, Kepsek dapat melihat semua permintaan di sekolahnya
+        // Scoping peranan ketat (P0-18): data konseling hanya dapat diakses Guru BK & pemohon sah
+        if ($this->isCounselorUser($user)) {
             if (! empty($filters['student_id'])) {
                 $query->where('student_id', $filters['student_id']);
             }
@@ -48,21 +49,17 @@ class CounselingRequestService
                 $q->orWhere('requested_by', $user->id);
             });
         } elseif ($this->isGuardianUser($user)) {
+            // Orang tua hanya melihat permintaan yang diajukan sendiri (tidak membaca curhat mandiri siswa)
             $guardianStudentIds = $user->guardian?->students()->pluck('students.id')->toArray() ?? [];
-            $query->where(function ($q) use ($guardianStudentIds, $user) {
-                if (! empty($guardianStudentIds)) {
-                    $q->whereIn('student_id', $guardianStudentIds);
-                }
-                $q->orWhere('requested_by', $user->id);
-            });
+            $query->where('requested_by', $user->id);
+            if (! empty($guardianStudentIds)) {
+                $query->whereIn('student_id', $guardianStudentIds);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         } elseif ($this->isTeacherUser($user)) {
-            // Wali kelas hanya dapat melihat siswa di kelasnya
-            $homeroomClassIds = SchoolClass::whereHas('homeroomTeacher', fn ($hq) => $hq->where('user_id', $user->id))
-                ->pluck('id');
-
-            $query->whereHas('student.classes', function ($cq) use ($homeroomClassIds) {
-                $cq->whereIn('classes.id', $homeroomClassIds);
-            });
+            // Guru/wali kelas hanya melihat permintaan yang diajukan sendiri, bukan curhat pribadi siswa
+            $query->where('requested_by', $user->id);
         } else {
             throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang melihat permintaan konseling.');
         }
@@ -116,9 +113,7 @@ class CounselingRequestService
             throw new HttpException(403, 'Akses ditolak: Siswa berada di luar sekolah penugasan Anda.');
         }
 
-        $requesterRole = 'other';
-
-        // Validasi anti-IDOR
+        // Validasi anti-IDOR & deny-by-default (P0-18)
         if ($this->isStudentUser($user)) {
             $requesterRole = 'student';
             $studentId = $user->student?->id;
@@ -131,18 +126,24 @@ class CounselingRequestService
             if (! $isOwnWard) {
                 throw new HttpException(403, 'Akses ditolak: Anda hanya dapat mengajukan permintaan konseling untuk anak yang terdaftar di bawah perwalian Anda.');
             }
-        } elseif ($this->isCounselorOrAdmin($user)) {
+        } elseif ($this->isCounselorUser($user)) {
             $requesterRole = 'counselor';
         } elseif ($this->isTeacherUser($user)) {
             $requesterRole = 'teacher';
+            if (! $this->teacherHasStudentAccess($user, $student)) {
+                throw new HttpException(403, 'Akses ditolak: Anda hanya dapat mengajukan permintaan konseling untuk siswa di kelas perwalian atau kelas ajar Anda.');
+            }
+        } else {
+            throw new HttpException(403, 'Akses ditolak: Peran Anda tidak memiliki wewenang membuat permintaan konseling.');
         }
 
-        // Cegah spamming/duplikasi permintaan yang masih aktif
+        // Cegah spamming/duplikasi permintaan aktif (bandingkan topik setelah dekripsi SafeEncryptedCast)
+        $normalizedTopic = mb_strtolower(trim((string) $data['topic']));
         $existingActive = CounselingRequest::where('student_id', $data['student_id'])
             ->where('requested_by', $user->id)
             ->whereIn('status', ['pending', 'scheduled'])
-            ->where('topic', $data['topic'])
-            ->first();
+            ->get()
+            ->first(fn (CounselingRequest $item) => mb_strtolower(trim((string) $item->topic)) === $normalizedTopic);
 
         if ($existingActive) {
             throw new HttpException(422, 'Permintaan konseling serupa untuk siswa ini masih dalam status aktif (menunggu jadwal atau telah dijadwalkan).');
@@ -241,7 +242,7 @@ class CounselingRequestService
             'counseling_requests',
             $counselingRequest->id,
             ['status' => $oldStatus],
-            ['status' => 'rejected', 'rejection_reason' => $data['rejection_reason']],
+            ['status' => 'rejected', 'has_rejection_reason' => ! empty($data['rejection_reason'])],
             $request
         );
 
@@ -261,11 +262,11 @@ class CounselingRequestService
         $counselingRequest = CounselingRequest::with(['student.classes', 'requester', 'preferredCounselor', 'counselor'])->findOrFail($id);
         $this->authorizeRequestAccess($user, $counselingRequest);
 
-        // Hanya pemohon atau BK/Admin yang boleh membatalkan
+        // Hanya pemohon atau Guru BK yang boleh membatalkan
         $isRequester = $counselingRequest->requested_by === $user->id;
-        $isCounselorOrAdmin = $this->isCounselorOrAdmin($user);
+        $isCounselor = $this->isCounselorUser($user);
 
-        if (! $isRequester && ! $isCounselorOrAdmin) {
+        if (! $isRequester && ! $isCounselor) {
             throw new HttpException(403, 'Akses ditolak: Anda tidak berwenang membatalkan permintaan konseling ini.');
         }
 
@@ -349,7 +350,7 @@ class CounselingRequestService
     }
 
     /**
-     * Otorisasi akses detail permintaan konseling.
+     * Otorisasi akses detail permintaan konseling (P0-18: kerahasiaan ketat BK).
      */
     protected function authorizeRequestAccess(User $user, CounselingRequest $counselingRequest): void
     {
@@ -357,29 +358,29 @@ class CounselingRequestService
             throw new HttpException(403, 'Akses ditolak: Permintaan konseling berada di luar sekolah penugasan Anda.');
         }
 
-        if ($this->isCounselorOrAdminOrPrincipal($user)) {
+        // Hanya Guru BK yang dapat mengakses semua permintaan konseling di sekolahnya
+        if ($this->isCounselorUser($user)) {
             return;
         }
 
+        // Siswa hanya dapat mengakses permintaan miliknya sendiri
         if ($this->isStudentUser($user)) {
             if ($counselingRequest->student_id === $user->student?->id || $counselingRequest->requested_by === $user->id) {
                 return;
             }
         }
 
+        // Orang tua hanya dapat mengakses permintaan yang diajukan sendiri untuk anak perwalian sah (bukan curhat mandiri siswa)
         if ($this->isGuardianUser($user)) {
             $isOwnWard = $user->guardian?->students()->where('students.id', $counselingRequest->student_id)->exists();
-            if ($isOwnWard || $counselingRequest->requested_by === $user->id) {
+            if ($isOwnWard && $counselingRequest->requested_by === $user->id) {
                 return;
             }
         }
 
+        // Guru/Wali Kelas hanya dapat mengakses permintaan yang diajukannya sendiri
         if ($this->isTeacherUser($user)) {
-            $isHomeroom = SchoolClass::whereHas('homeroomTeacher', fn ($hq) => $hq->where('user_id', $user->id))
-                ->whereHas('students', fn ($sq) => $sq->where('students.id', $counselingRequest->student_id))
-                ->exists();
-
-            if ($isHomeroom) {
+            if ($counselingRequest->requested_by === $user->id) {
                 return;
             }
         }
@@ -387,30 +388,55 @@ class CounselingRequestService
         throw new HttpException(403, 'Akses ditolak: Anda tidak berwenang mengakses permintaan konseling ini.');
     }
 
-    protected function isCounselorOrAdmin(?User $user): bool
+    /**
+     * Memeriksa apakah guru adalah wali kelas atau pengampu siswa terkait.
+     */
+    protected function teacherHasStudentAccess(User $user, Student $student): bool
     {
-        if (! $user) {
+        $teacher = Teacher::where('user_id', $user->id)->first();
+        if (! $teacher) {
             return false;
         }
 
-        if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
+        $studentClassIds = $student->classes()->whereNull('class_students.left_at')->pluck('classes.id');
+        if ($studentClassIds->isEmpty()) {
+            $studentClassIds = $student->classes()->pluck('classes.id');
+        }
+
+        if ($studentClassIds->isEmpty()) {
+            return false;
+        }
+
+        $isHomeroom = SchoolClass::whereIn('id', $studentClassIds)
+            ->where('homeroom_teacher_id', $teacher->id)
+            ->exists();
+
+        if ($isHomeroom) {
             return true;
+        }
+
+        return TeachingAssignment::where('teacher_id', $teacher->id)
+            ->whereIn('class_id', $studentClassIds)
+            ->exists();
+    }
+
+    protected function isCounselorUser(?User $user): bool
+    {
+        if (! $user) {
+            return false;
         }
 
         return $user->hasRole('counselor') || $user->hasRole('bk') || $user->hasRole('guru_bk');
     }
 
+    protected function isCounselorOrAdmin(?User $user): bool
+    {
+        return $this->isCounselorUser($user);
+    }
+
     protected function isCounselorOrAdminOrPrincipal(?User $user): bool
     {
-        if (! $user) {
-            return false;
-        }
-
-        if ($this->isCounselorOrAdmin($user)) {
-            return true;
-        }
-
-        return $user->hasRole('principal') || $user->hasRole('kepala_sekolah');
+        return $this->isCounselorUser($user);
     }
 
     protected function isStudentUser(?User $user): bool
@@ -447,7 +473,7 @@ class CounselingRequestService
         }
 
         if (! $this->isCounselorOrAdmin($user)) {
-            throw new HttpException(403, 'Akses ditolak: Hanya Guru BK atau Administrator yang berwenang memproses permintaan ini.');
+            throw new HttpException(403, 'Akses ditolak: Hanya Guru BK yang berwenang memproses permintaan ini.');
         }
     }
 

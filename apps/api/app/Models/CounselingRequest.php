@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\SafeEncryptedCast;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +27,9 @@ class CounselingRequest extends Model
     ];
 
     protected $casts = [
+        'topic' => SafeEncryptedCast::class,
+        'notes' => SafeEncryptedCast::class,
+        'rejection_reason' => SafeEncryptedCast::class,
         'preferred_date' => 'date',
         'scheduled_at' => 'datetime',
     ];

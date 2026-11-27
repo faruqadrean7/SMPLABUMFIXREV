@@ -148,6 +148,9 @@ class CounselingService
             $case->summary_enc = '[Ringkasan Sensitif Disamarkan untuk Kepala Sekolah]';
             foreach ($case->sessions as $s) {
                 $s->notes_enc = '[Catatan Sesi Konseling Privat Disamarkan]';
+                if ($s->follow_up !== null && $s->follow_up !== '') {
+                    $s->follow_up = '[Tindak Lanjut Sesi Konseling Privat Disamarkan]';
+                }
             }
         }
 
@@ -247,6 +250,9 @@ class CounselingService
 
         if ($this->isPrincipalOnly($user)) {
             $session->notes_enc = '[Catatan Sesi Konseling Privat Disamarkan]';
+            if ($session->follow_up !== null && $session->follow_up !== '') {
+                $session->follow_up = '[Tindak Lanjut Sesi Konseling Privat Disamarkan]';
+            }
         }
 
         return $session;
@@ -379,7 +385,7 @@ class CounselingService
             'counseling_referrals',
             $referral->id,
             ['status' => $oldStatus],
-            ['status' => $referral->status, 'notes' => $data['notes'] ?? null],
+            ['status' => $referral->status, 'has_notes' => ! empty($data['notes'])],
             $request
         );
 
