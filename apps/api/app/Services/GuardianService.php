@@ -46,6 +46,10 @@ class GuardianService
         // Scoping: guardian tanpa izin baca penuh hanya melihat data dirinya sendiri
         if (! $canReadAll) {
             $query->where('user_id', $user->id);
+        } elseif (! $user->hasRole('super_admin') && ! empty($user->school_id)) {
+            $query->where(function ($q) use ($user) {
+                $q->where('school_id', $user->school_id)->orWhereNull('school_id');
+            });
         }
 
         if ($q !== '') {
@@ -289,9 +293,22 @@ class GuardianService
     public function attachStudentGuardian(string $studentId, array $data, Request $request): void
     {
         DB::transaction(function () use ($studentId, $data, $request) {
+            $actor = $request->user();
             $student = Student::findOrFail($studentId);
             $guardianId = $data['guardian_id'];
+            $guardian = Guardian::findOrFail($guardianId);
             $isPrimary = ! empty($data['is_primary']);
+
+            // P1-25: Tolak penautan wali-siswa lintas sekolah
+            if (! empty($student->school_id) && ! empty($guardian->school_id) && (string) $student->school_id !== (string) $guardian->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Wali murid dan siswa harus berasal dari sekolah yang sama.');
+            }
+            if ($actor && ! $actor->hasRole('super_admin') && ! empty($actor->school_id)) {
+                if ((! empty($student->school_id) && (string) $student->school_id !== (string) $actor->school_id)
+                    || (! empty($guardian->school_id) && (string) $guardian->school_id !== (string) $actor->school_id)) {
+                    throw new HttpException(403, 'Akses ditolak: Data siswa atau wali berada di luar sekolah penugasan Anda.');
+                }
+            }
 
             $exists = DB::table('student_guardians')
                 ->where('student_id', $studentId)
@@ -436,6 +453,10 @@ class GuardianService
      */
     protected function verifyGuardianAccess(Guardian $guardian, User $user): void
     {
+        if (! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($guardian->school_id) && (string) $guardian->school_id !== (string) $user->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Data wali murid berada di luar sekolah penugasan Anda.');
+        }
+
         if ($user->hasRole('super_admin') || $user->hasPermission('master.student.read')) {
             return;
         }

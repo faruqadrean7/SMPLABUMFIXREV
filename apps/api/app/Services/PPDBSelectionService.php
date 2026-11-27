@@ -338,8 +338,13 @@ class PPDBSelectionService
         $currentUser = $request->user();
 
         $wave = PPDBWave::with('tracks')->findOrFail($waveId);
+        if ($currentUser && ! $currentUser->hasRole('super_admin') && ! empty($currentUser->school_id) && ! empty($wave->school_id) && (string) $wave->school_id !== (string) $currentUser->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Gelombang PPDB berada di luar sekolah penugasan Anda.');
+        }
+
         $confirmed = (bool) ($data['confirmed'] ?? false);
         $force = (bool) ($data['force'] ?? false);
+        $trackIdFilter = $data['track_id'] ?? null;
         $publishAt = $wave->result_publish_at ?? $wave->close_at;
         $deadline = $publishAt ? $publishAt->copy()->addWeekdays(3)->endOfDay() : Carbon::now()->subDay();
 
@@ -352,15 +357,28 @@ class PPDBSelectionService
             );
         }
 
-        return DB::transaction(function () use ($wave, $confirmed, $deadline, $currentUser, $request) {
-            $tracks = $wave->tracks;
+        return DB::transaction(function () use ($wave, $confirmed, $deadline, $trackIdFilter, $currentUser, $request) {
+            // P1-25: Hormati filter track_id agar promosi cadangan tidak memengaruhi jalur lain secara tak sengaja
+            $tracks = $trackIdFilter
+                ? $wave->tracks->where('id', $trackIdFilter)->values()
+                : $wave->tracks;
+
+            if ($trackIdFilter && $tracks->isEmpty()) {
+                throw new HttpException(422, 'Jalur PPDB tidak ditemukan pada gelombang seleksi ini.');
+            }
+
             $results = [];
 
             foreach ($tracks as $track) {
-                // Find candidates who were selected, but haven't confirmed/verified re-registration past deadline
+                // Find candidates who were selected, haven't confirmed/verified re-registration,
+                // AND whose personal re-registration deadline (for promoted waitlist) has also expired (P1-25)
                 $expiredApplicants = Applicant::where('track_id', $track->id)
                     ->where('wave_id', $wave->id)
                     ->where('status', 'selected')
+                    ->where(function ($q) {
+                        $q->whereNull('re_registration_deadline_at')
+                            ->orWhere('re_registration_deadline_at', '<=', Carbon::now());
+                    })
                     ->whereDoesntHave('reRegistration', function ($q) {
                         $q->whereIn('status', ['dikonfirmasi', 'diverifikasi']);
                     })
