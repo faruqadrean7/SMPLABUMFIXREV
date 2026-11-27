@@ -105,6 +105,7 @@ class RbacService
 
         if (array_key_exists('permission_ids', $data)) {
             $role->permissions()->sync($data['permission_ids'] ?? []);
+            $this->flushPermissionCacheForRole($role);
         }
 
         $role->load('permissions');
@@ -150,6 +151,7 @@ class RbacService
         }
 
         $oldValue = $role->toArray();
+        $this->flushPermissionCacheForRole($role);
         $role->permissions()->detach();
         $role->delete();
 
@@ -203,6 +205,7 @@ class RbacService
             }
 
             $user->roles()->sync($syncData);
+            $user->flushPermissionCache();
             $user->load(['roles.permissions']);
 
             $newRoles = $user->roles()->pluck('code')->all();
@@ -220,6 +223,18 @@ class RbacService
 
             return $user;
         });
+    }
+
+    /**
+     * P1-02: Hapus cache permission seluruh pengguna yang terhubung dengan role ini.
+     */
+    protected function flushPermissionCacheForRole(Role $role): void
+    {
+        $userIds = $role->users()->pluck('users.id');
+
+        foreach ($userIds as $userId) {
+            cache()->forget("user_perm_cache:{$userId}");
+        }
     }
 
     /**

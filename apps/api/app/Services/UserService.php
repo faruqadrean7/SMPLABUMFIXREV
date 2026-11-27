@@ -378,6 +378,8 @@ class UserService
                 ->where('user_id', $userId)
                 ->whereNull('revoked_at')
                 ->update(['revoked_at' => now()]);
+
+            cache()->forget("user_perm_cache:{$userId}");
         } catch (Throwable $e) {
             report($e);
         }

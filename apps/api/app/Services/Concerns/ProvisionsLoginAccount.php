@@ -42,6 +42,7 @@ trait ProvisionsLoginAccount
 
             $user->save();
             $user->roles()->syncWithoutDetaching([$role->id]);
+            $user->flushPermissionCache();
 
             return $user;
         }
