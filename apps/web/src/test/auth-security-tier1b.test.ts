@@ -5,8 +5,10 @@ import { tokenStorage } from '@/lib/auth/token-storage';
 import {
   ADMIN_SESSION_COOKIE_NAME,
   INTERNAL_GATEWAY_HEADER,
+  createGatewayInternalToken,
   signAdminSessionCookie,
   verifyAdminSessionCookie,
+  verifyGatewayInternalToken,
 } from '@/lib/auth/admin-session-cookie';
 
 describe('Tier 1B Security Regression: P0-08 Admin Gateway & P1-01 Token Storage', () => {
@@ -42,6 +44,21 @@ describe('Tier 1B Security Regression: P0-08 Admin Gateway & P1-01 Token Storage
       },
     });
 
+    const res = await middleware(req);
+    expect(res.status).toBe(404);
+  });
+
+  it('P0-08: rejects expired/replayed internal gateway token outside 30s window', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const freshToken = await createGatewayInternalToken(now);
+    const staleToken = await createGatewayInternalToken(now - 120);
+
+    expect(await verifyGatewayInternalToken(freshToken, now)).toBe(true);
+    expect(await verifyGatewayInternalToken(staleToken, now)).toBe(false);
+
+    const req = new NextRequest('http://localhost:3000/admin-gateway-internal', {
+      headers: { [INTERNAL_GATEWAY_HEADER]: staleToken },
+    });
     const res = await middleware(req);
     expect(res.status).toBe(404);
   });

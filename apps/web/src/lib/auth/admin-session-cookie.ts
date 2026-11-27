@@ -10,6 +10,7 @@ import { ADMIN_SHELL_ROLES } from '@/lib/rbac/evaluator';
 export const ADMIN_SESSION_COOKIE_NAME = 'sistlabum_admin_session';
 export const INTERNAL_GATEWAY_HEADER = 'x-admin-gateway-secret';
 export const ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 jam
+export const INTERNAL_GATEWAY_TOKEN_TTL_SECONDS = 30; // jendela anti-replay 30 detik
 
 function getGatewaySecret(): string {
   const configured = process.env.ADMIN_GATEWAY_SECRET?.trim();
@@ -75,14 +76,34 @@ async function computeHmacHex(message: string): Promise<string> {
   return bytesToHex(new Uint8Array(sig));
 }
 
-export async function createGatewayInternalToken(): Promise<string> {
-  return computeHmacHex('admin-gateway-internal-rewrite-v1');
+export async function createGatewayInternalToken(nowSeconds: number = Math.floor(Date.now() / 1000)): Promise<string> {
+  const nonceBytes = new Uint8Array(8);
+  crypto.getRandomValues(nonceBytes);
+  const nonce = bytesToHex(nonceBytes);
+  const sig = await computeHmacHex(`admin-gateway-internal-rewrite-v2:${nowSeconds}:${nonce}`);
+  return `${nowSeconds}.${nonce}.${sig}`;
 }
 
-export async function verifyGatewayInternalToken(token: string | null | undefined): Promise<boolean> {
+export async function verifyGatewayInternalToken(
+  token: string | null | undefined,
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): Promise<boolean> {
   if (!token || typeof token !== 'string') return false;
-  const expected = await createGatewayInternalToken();
-  return constantTimeEqual(token, expected);
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+
+  const [tsRaw, nonce, providedSig] = parts;
+  if (!tsRaw || !nonce || !providedSig || !/^\d+$/.test(tsRaw) || !/^[a-f0-9]{16}$/.test(nonce)) {
+    return false;
+  }
+
+  const ts = Number.parseInt(tsRaw, 10);
+  if (!Number.isFinite(ts) || Math.abs(nowSeconds - ts) > INTERNAL_GATEWAY_TOKEN_TTL_SECONDS) {
+    return false;
+  }
+
+  const expected = await computeHmacHex(`admin-gateway-internal-rewrite-v2:${ts}:${nonce}`);
+  return constantTimeEqual(providedSig, expected);
 }
 
 export async function signAdminSessionCookie(
@@ -90,10 +111,15 @@ export async function signAdminSessionCookie(
   role: string,
   ttlSeconds: number = ADMIN_SESSION_TTL_SECONDS
 ): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const nonceBytes = new Uint8Array(12);
+  crypto.getRandomValues(nonceBytes);
   const payload = JSON.stringify({
     uid: userId,
     role,
-    exp: Math.floor(Date.now() / 1000) + ttlSeconds,
+    iat: now,
+    exp: now + ttlSeconds,
+    jti: bytesToHex(nonceBytes),
   });
   const encodedPayload = stringToBase64Url(payload);
   const signature = await computeHmacHex(`admin-session:${encodedPayload}`);
@@ -117,13 +143,19 @@ export async function verifyAdminSessionCookie(cookieValue: string | undefined |
   if (!decoded) return false;
 
   try {
-    const data = JSON.parse(decoded) as { uid?: unknown; role?: unknown; exp?: unknown };
+    const data = JSON.parse(decoded) as { uid?: unknown; role?: unknown; iat?: unknown; exp?: unknown };
+    const now = Math.floor(Date.now() / 1000);
     if (typeof data.uid !== 'string' || data.uid.trim() === '') return false;
     if (typeof data.role !== 'string' || !ADMIN_SHELL_ROLES.includes(data.role as (typeof ADMIN_SHELL_ROLES)[number])) {
       return false;
     }
-    if (typeof data.exp !== 'number' || data.exp <= Math.floor(Date.now() / 1000)) {
+    if (typeof data.exp !== 'number' || data.exp <= now) {
       return false;
+    }
+    if (typeof data.iat === 'number') {
+      if (data.iat > now + 60 || data.exp - data.iat > ADMIN_SESSION_TTL_SECONDS + 60) {
+        return false;
+      }
     }
     return true;
   } catch {
