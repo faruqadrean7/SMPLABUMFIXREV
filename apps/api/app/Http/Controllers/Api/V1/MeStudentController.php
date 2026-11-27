@@ -16,7 +16,6 @@ use App\Models\ExamSession;
 use App\Models\Extracurricular;
 use App\Models\ExtracurricularMember;
 use App\Models\Grade;
-use App\Models\PointType;
 use App\Models\Schedule;
 use App\Models\Student;
 use App\Models\StudentPoint;
@@ -781,7 +780,7 @@ class MeStudentController extends Controller
         foreach ($achievements as $ach) {
             $dateStr = $ach->achieved_at ? $ach->achieved_at->format('d M Y') : $ach->created_at->format('d M Y');
             $items->push([
-                'id' => 'ach-' . $ach->id,
+                'id' => 'ach-'.$ach->id,
                 'student_id' => $student->id,
                 'kind' => 'prestasi',
                 'title' => $ach->title,
@@ -797,7 +796,7 @@ class MeStudentController extends Controller
             $isViolation = ($sp->pointType?->kind === 'pelanggaran');
             $dateStr = $sp->point_date ? $sp->point_date->format('d M Y') : $sp->created_at->format('d M Y');
             $items->push([
-                'id' => 'pt-' . $sp->id,
+                'id' => 'pt-'.$sp->id,
                 'student_id' => $student->id,
                 'kind' => $isViolation ? 'pelanggaran' : 'prestasi',
                 'title' => $sp->pointType?->name ?: ($isViolation ? 'Pelanggaran Kedisiplinan' : 'Apresiasi Karakter'),
@@ -849,7 +848,7 @@ class MeStudentController extends Controller
 
         $myExtracurriculars = $memberships->map(function (ExtracurricularMember $m) {
             $ekskul = $m->extracurricular;
-            $sched = trim(($ekskul?->schedule_day ?? '') . ($ekskul?->schedule_time ? ', ' . $ekskul->schedule_time : ''));
+            $sched = trim(($ekskul?->schedule_day ?? '').($ekskul?->schedule_time ? ', '.$ekskul->schedule_time : ''));
 
             return [
                 'id' => $m->extracurricular_id,
@@ -875,7 +874,7 @@ class MeStudentController extends Controller
         $availableExtracurriculars = $available->map(function (Extracurricular $e) {
             $memberCount = $e->members()->count();
             $remainingQuota = max(0, ($e->quota ?? 30) - $memberCount);
-            $sched = trim(($e->schedule_day ?? '') . ($e->schedule_time ? ', ' . $e->schedule_time : ''));
+            $sched = trim(($e->schedule_day ?? '').($e->schedule_time ? ', '.$e->schedule_time : ''));
 
             return [
                 'id' => $e->id,
