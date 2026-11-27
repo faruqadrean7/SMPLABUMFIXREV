@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
@@ -15,7 +15,9 @@ import {
   Users, 
   CheckCircle2, 
   ChevronDown,
-  LogOut
+  LogOut,
+  Menu,
+  X
 } from 'lucide-react';
 import { GuardianProvider, useGuardian } from '@/lib/guardian-context';
 import { useAuth } from '@/lib/auth-context';
@@ -27,6 +29,23 @@ function GuardianShell({ children }: { children: React.ReactNode }) {
   const { guardian, activeChild, setActiveChildId } = useGuardian();
   const [isChildDropdownOpen, setIsChildDropdownOpen] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Drawer mobile: tutup otomatis saat rute berubah
+  useEffect(() => {
+    setIsSidebarOpen(false);
+    setIsChildDropdownOpen(false);
+    setIsRoleDropdownOpen(false);
+  }, [pathname]);
+
+  // Kunci scroll body saat drawer terbuka
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.style.overflow = isSidebarOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isSidebarOpen]);
 
 
   const navLinks = [
@@ -88,17 +107,39 @@ function GuardianShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans">
-      {/* ─── SIDEBAR (Width 288px / w-72 to prevent text truncation) ─── */}
-      <aside className="w-72 border-r border-slate-200/90 bg-white flex flex-col fixed inset-y-0 left-0 z-30 shadow-xs">
+      {/* ─── OVERLAY DRAWER (mobile) ─── */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ─── SIDEBAR (desktop tetap, mobile drawer) ─── */}
+      <aside
+        className={`w-72 max-w-[85vw] border-r border-slate-200/90 bg-white flex flex-col fixed inset-y-0 left-0 z-50 shadow-xl transition-transform duration-300 ease-out lg:z-30 lg:translate-x-0 lg:shadow-xs ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        aria-label="Menu navigasi orang tua"
+      >
         {/* Brand Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 bg-white">
           <div className="w-10 h-10 rounded-xl bg-emerald-800 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-xs">
             <School className="w-5 h-5 text-white" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="font-bold text-sm text-slate-900 tracking-tight leading-tight">LABSCHOOL UM</h1>
             <p className="text-xs text-slate-500 font-medium truncate">Portal Wali Murid</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(false)}
+            className="lg:hidden p-2 -mr-1 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+            aria-label="Tutup menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Child Selector in Sidebar (Clean, Unified, No AI Clutter) */}
@@ -298,12 +339,21 @@ function GuardianShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ─── MAIN CONTENT AREA ─── */}
-      <div className="flex-1 ml-72 flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen lg:ml-72">
         {/* Top Header Bar */}
-        <header className="h-16 border-b border-slate-200/90 bg-white flex items-center justify-between px-8 sticky top-0 z-20 shadow-xs">
-          {/* Left: Clean Context Breadcrumb */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-xs">
+        <header className="h-16 border-b border-slate-200/90 bg-white flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-xs">
+          {/* Left: hamburger (mobile) + breadcrumb */}
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 hover:bg-slate-100 active:bg-slate-200 transition-colors shrink-0"
+              aria-label="Buka menu navigasi"
+              aria-expanded={isSidebarOpen}
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="hidden sm:flex items-center gap-2 text-xs min-w-0">
               <span className="font-medium text-slate-400 uppercase tracking-wider text-[11px]">
                 Portal Orang Tua
               </span>
@@ -352,7 +402,7 @@ function GuardianShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Fluid Page Body Container */}
-        <main className="flex-1 w-full px-6 xl:px-8 py-4 xl:py-5">
+        <main className="flex-1 w-full min-w-0 px-3 sm:px-6 xl:px-8 py-3 sm:py-4 xl:py-5">
           {children}
         </main>
       </div>

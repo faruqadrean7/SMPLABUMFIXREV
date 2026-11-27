@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
@@ -18,7 +18,9 @@ import {
   ChevronDown,
   CheckCircle2,
   Users,
-  CalendarCheck
+  CalendarCheck,
+  Menu,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useStudentDashboard } from '@/lib/use-student-data';
@@ -30,7 +32,23 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { data: studentDash } = useStudentDashboard();
+
+  // Drawer mobile: tutup otomatis setiap kali rute berubah
+  useEffect(() => {
+    setIsSidebarOpen(false);
+    setIsRoleDropdownOpen(false);
+  }, [pathname]);
+
+  // Kunci scroll body saat drawer terbuka di layar kecil
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.style.overflow = isSidebarOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isSidebarOpen]);
 
   // Distraction-free full-screen kiosk mode for active CBT exam session
   const isExamTakingSession =
@@ -69,17 +87,39 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   return (
     <RoleGuard allowedRoles={['student']} portalName="Portal Siswa">
       <div className="portal-siswa siswa-bg flex min-h-screen text-slate-900 font-sans">
-        {/* ─── SIDEBAR (Width 288px / w-72 matching Guru & Ortu) ─── */}
-        <aside className="w-72 border-r border-indigo-100 bg-white/90 backdrop-blur flex flex-col fixed inset-y-0 left-0 z-30 shadow-sm">
+        {/* ─── OVERLAY DRAWER (mobile) ─── */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* ─── SIDEBAR (desktop tetap, mobile drawer) ─── */}
+        <aside
+          className={`w-72 max-w-[85vw] border-r border-indigo-100 bg-white/95 backdrop-blur flex flex-col fixed inset-y-0 left-0 z-50 shadow-xl transition-transform duration-300 ease-out lg:z-30 lg:translate-x-0 lg:shadow-sm ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+          aria-label="Menu navigasi siswa"
+        >
           {/* Brand Header */}
           <div className="px-5 py-4 border-b border-indigo-50 flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl siswa-hero text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-md">
               <School className="w-5 h-5 text-white" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="font-extrabold text-sm text-slate-900 tracking-tight leading-tight">LABSCHOOL UM</h1>
               <p className="text-xs text-indigo-500 font-semibold truncate">Portal Belajar Siswa 🎒</p>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(false)}
+              className="lg:hidden p-2 -mr-1 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+              aria-label="Tutup menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
           {/* Profil Siswa Card with Real Avatar */}
@@ -251,27 +291,36 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         </aside>
 
         {/* ─── MAIN CONTENT VIEWPORT ─── */}
-        <div className="flex-1 ml-72 flex flex-col min-h-screen">
+        <div className="flex-1 min-w-0 flex flex-col min-h-screen lg:ml-72">
           {/* Top Navbar Bar */}
-          <header className="h-16 border-b border-slate-200/90 bg-white flex items-center justify-between px-8 sticky top-0 z-20 shadow-xs">
-            {/* Left: Clean Context Breadcrumb */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 text-xs">
+          <header className="h-16 border-b border-slate-200/90 bg-white flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-xs">
+            {/* Left: hamburger (mobile) + breadcrumb */}
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen(true)}
+                className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 hover:bg-slate-100 active:bg-slate-200 transition-colors shrink-0"
+                aria-label="Buka menu navigasi"
+                aria-expanded={isSidebarOpen}
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="hidden sm:flex items-center gap-2 text-xs min-w-0">
                 <span className="font-medium text-slate-400 uppercase tracking-wider text-[11px]">
                   Portal Siswa
                 </span>
                 <span className="text-slate-300 font-light">/</span>
-                <span className="font-semibold text-slate-900 text-xs">
+                <span className="font-semibold text-slate-900 text-xs truncate max-w-[9rem]">
                   {studentName}
                 </span>
-                <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 font-mono border border-slate-200">
+                <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 font-mono border border-slate-200 shrink-0">
                   {studentClass}
                 </span>
               </div>
             </div>
 
             {/* Right: Academic Year Pill, Lab Status, Notifications, & User Avatar */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
               {/* Academic Year Pill */}
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-medium text-slate-600">
                 <CalendarCheck className="w-3.5 h-3.5 text-slate-500" />
@@ -294,7 +343,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               </button>
 
               {/* Avatar & User Details */}
-              <div className="flex items-center gap-2.5 pl-3 border-l border-slate-200">
+              <div className="flex items-center gap-2.5 pl-2 sm:pl-3 sm:border-l border-slate-200">
                 {studentAvatar ? (
                   <img
                     src={studentAvatar}
@@ -315,7 +364,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           </header>
 
           {/* Fluid Page Body Container */}
-          <main className="flex-1 w-full px-6 xl:px-8 py-4 xl:py-5">
+          <main className="flex-1 w-full min-w-0 px-3 sm:px-6 xl:px-8 py-3 sm:py-4 xl:py-5">
             {children}
           </main>
         </div>
