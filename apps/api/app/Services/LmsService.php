@@ -7,7 +7,6 @@ use App\Models\AssignmentSubmission;
 use App\Models\AuditLog;
 use App\Models\ClassStudent;
 use App\Models\File;
-use App\Models\Grade;
 use App\Models\GradePeriod;
 use App\Models\Guardian;
 use App\Models\LearningMaterial;
@@ -761,19 +760,18 @@ class LmsService
                 }
             }
 
-            // Beri tahu siswa bahwa tugasnya sudah dinilai (dulu tidak ada notifikasi).
+            // P0-19 & 09_SECURITY_PRIVACY §6.7: Beri tahu siswa bahwa tugasnya sudah dinilai
+            // tanpa memuat angka nilai maupun catatan/feedback sensitif pada body/payload notifikasi.
             $siswa = Student::find($submission->student_id);
             if ($siswa?->user_id) {
                 Notification::create([
                     'user_id' => $siswa->user_id,
                     'notif_type' => 'assignment.graded',
                     'title' => 'Tugas dinilai: '.$assignment->title,
-                    'body' => 'Nilai: '.rtrim(rtrim(number_format((float) $submission->score, 2, ',', '.'), '0'), ',')
-                        .($submission->feedback ? ' — '.$submission->feedback : ''),
+                    'body' => 'Tugas Anda telah dinilai oleh guru. Silakan buka portal siswa untuk melihat hasil dan catatan penilaian.',
                     'data' => [
                         'assignment_id' => $assignment->id,
                         'submission_id' => $submission->id,
-                        'score' => (float) $submission->score,
                     ],
                 ]);
             }
