@@ -220,11 +220,15 @@ export default function ApplicantDashboardPage() {
       if (!selectedTrackId) {
         throw new Error('Jalur pendaftaran belum tersedia. Pastikan gelombang pendaftaran aktif.');
       }
+      const cleanedNik = personalData.nik.replace(/\D/g, '');
+      if (cleanedNik.length !== 16) {
+        throw new Error('NIK 16 digit wajib diisi terlebih dahulu sebelum membuat draf pendaftaran.');
+      }
       return ppdbApi.createApplication({
         wave_id: choiceData.wave_id || activeWave?.id || '',
         track_id: selectedTrackId,
         full_name: personalData.full_name || profile?.username || 'Calon Siswa',
-        nik: personalData.nik || '3579000000000000',
+        nik: cleanedNik,
         birth_date: personalData.birth_date || '2010-01-01',
       });
     },
@@ -289,14 +293,15 @@ export default function ApplicantDashboardPage() {
     if (activeStep === 1) {
       saveStepMutation.mutate({ step: 'personal', data: personalData });
     } else if (activeStep === 2) {
+      const parentEntries = [
+        { parent_type: 'ayah', name: parentData.father_name.trim(), occupation: parentData.father_job, income_range: parentData.income_range, phone: parentData.father_phone },
+        { parent_type: 'ibu', name: parentData.mother_name.trim(), occupation: parentData.mother_job, income_range: parentData.income_range, phone: parentData.mother_phone },
+      ].filter((p) => p.name.length > 0);
       saveStepMutation.mutate({
         step: 'parent',
         data: {
           ...parentData,
-          parents: [
-            { parent_type: 'ayah', name: parentData.father_name, occupation: parentData.father_job, phone: parentData.father_phone },
-            { parent_type: 'ibu', name: parentData.mother_name, occupation: parentData.mother_job, phone: parentData.mother_phone },
-          ],
+          parents: parentEntries,
         },
       });
     } else if (activeStep === 3) {

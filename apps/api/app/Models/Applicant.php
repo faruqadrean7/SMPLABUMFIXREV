@@ -29,6 +29,7 @@ class Applicant extends Model
         'score',
         'rank',
         'decision',
+        're_registration_deadline_at',
         'step_data',
     ];
 
@@ -41,6 +42,7 @@ class Applicant extends Model
     {
         return [
             'birth_date' => 'date',
+            're_registration_deadline_at' => 'datetime',
             'score' => 'decimal:2',
             'step_data' => 'array',
             'nik_enc' => 'encrypted',

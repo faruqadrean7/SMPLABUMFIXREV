@@ -54,19 +54,19 @@ class PPDBEnrollmentService
             ];
         }
 
-        // Decision #4: Batas waktu daftar ulang 3 hari kerja setelah pengumuman hasil seleksi
+        // Decision #4 & P0-23: Batas waktu daftar ulang 3 hari kerja setelah pengumuman (atau tenggat khusus promosi cadangan)
         if (! $currentUser->hasPermission('ppdb.applicant.verify')) {
             $wave = $applicant->wave;
             $publishAt = $wave?->result_publish_at ?? $wave?->close_at;
-            if ($publishAt) {
-                $deadline = $publishAt->copy()->addWeekdays(3)->endOfDay();
-                if (Carbon::now()->gt($deadline)) {
-                    $formattedDeadline = $deadline->translatedFormat('d F Y H:i');
-                    throw new HttpException(
-                        422,
-                        "Batas waktu konfirmasi daftar ulang telah berakhir pada tanggal {$formattedDeadline} WIB (3 hari kerja setelah pengumuman hasil seleksi). Silakan hubungi panitia PPDB."
-                    );
-                }
+            $deadline = $applicant->re_registration_deadline_at
+                ?? ($publishAt ? $publishAt->copy()->addWeekdays(3)->endOfDay() : null);
+
+            if ($deadline && Carbon::now()->gt($deadline)) {
+                $formattedDeadline = $deadline->translatedFormat('d F Y H:i');
+                throw new HttpException(
+                    422,
+                    "Batas waktu konfirmasi daftar ulang telah berakhir pada tanggal {$formattedDeadline} WIB (3 hari kerja setelah pengumuman hasil seleksi). Silakan hubungi panitia PPDB."
+                );
             }
         }
 
@@ -117,35 +117,39 @@ class PPDBEnrollmentService
         /** @var User $currentUser */
         $currentUser = $request->user();
 
-        $applicant = Applicant::with(['wave', 'track', 'parents', 'reRegistration', 'user', 'documents'])->findOrFail($applicantId);
+        // P0-23: Bungkus seluruh pemeriksaan idempotensi, validasi status, & pembuatan NIS di dalam
+        // DB::transaction() dengan lockForUpdate() pada Applicant agar bebas race condition duplikat.
+        return DB::transaction(function () use ($applicantId, $data, $currentUser, $request) {
+            $applicant = Applicant::with(['wave', 'track', 'parents', 'reRegistration', 'user', 'documents'])
+                ->lockForUpdate()
+                ->findOrFail($applicantId);
 
-        // 1. Idempotency Check: if already enrolled or student_id exists
-        if ($applicant->student_id !== null || $applicant->status === 'enrolled') {
-            $existingStudent = Student::with(['user.roles', 'guardians.user', 'classes'])->find($applicant->student_id);
-            if ($existingStudent) {
-                return [
-                    'is_idempotent' => true,
-                    'message' => 'Pendaftar telah dikonversi menjadi siswa sebelumnya (idempoten)',
-                    'student' => $existingStudent,
-                    'applicant' => $applicant->fresh(['statusHistory', 'reRegistration']),
-                ];
+            // 1. Idempotency Check di bawah row lock eksklusif
+            if ($applicant->student_id !== null || $applicant->status === 'enrolled') {
+                $existingStudent = Student::with(['user.roles', 'guardians.user', 'classes'])->find($applicant->student_id);
+                if ($existingStudent) {
+                    return [
+                        'is_idempotent' => true,
+                        'message' => 'Pendaftar telah dikonversi menjadi siswa sebelumnya (idempoten)',
+                        'student' => $existingStudent,
+                        'applicant' => $applicant->fresh(['statusHistory', 'reRegistration']),
+                    ];
+                }
             }
-        }
 
-        // 2. Acceptance Verification
-        $isAccepted = $applicant->decision === 'diterima' || $applicant->status === 'selected';
-        if (! $isAccepted) {
-            throw new HttpException(422, 'Calon siswa belum dinyatakan diterima untuk gelombang seleksi ini');
-        }
+            // 2. Acceptance Verification
+            $isAccepted = $applicant->decision === 'diterima' || $applicant->status === 'selected';
+            if (! $isAccepted) {
+                throw new HttpException(422, 'Calon siswa belum dinyatakan diterima untuk gelombang seleksi ini');
+            }
 
-        // 3. Re-registration Check
-        $forceEnroll = (bool) ($data['force_enroll'] ?? false);
-        $reReg = $applicant->reRegistration;
-        if (! $forceEnroll && (! $reReg || $reReg->status !== 'dikonfirmasi')) {
-            throw new HttpException(422, 'Calon siswa belum melakukan konfirmasi daftar ulang');
-        }
+            // 3. Re-registration Check
+            $forceEnroll = (bool) ($data['force_enroll'] ?? false);
+            $reReg = $applicant->reRegistration;
+            if (! $forceEnroll && (! $reReg || $reReg->status !== 'dikonfirmasi')) {
+                throw new HttpException(422, 'Calon siswa belum melakukan konfirmasi daftar ulang');
+            }
 
-        return DB::transaction(function () use ($applicant, $data, $currentUser, $request) {
             // A. Roles Setup
             $roleStudent = Role::firstOrCreate(['code' => 'student'], ['name' => 'Siswa', 'is_system' => true]);
             $roleGuardian = Role::firstOrCreate(['code' => 'guardian'], ['name' => 'Orang Tua / Wali Murid', 'is_system' => true]);
@@ -157,6 +161,7 @@ class PPDBEnrollmentService
                 if (! $alreadyUsed) {
                     $studentUserId = $applicant->user_id;
                     $applicant->user?->roles()->syncWithoutDetaching([$roleStudent->id]);
+                    $applicant->user?->flushPermissionCache();
                 }
             }
 
@@ -186,13 +191,33 @@ class PPDBEnrollmentService
                 Cache::put("student_activation_token:{$studentActivationToken}", $studentUser->id, 86400 * 7);
             }
 
-            // C. Resolve NIS & NISN
+            // C. Resolve NIS & NISN secara atomik (P0-23: advisory lock + MAX numerik, bukan count()+1)
             $nis = $data['nis'] ?? null;
             if (! $nis) {
                 $year = Carbon::now()->format('Y');
-                $seq = Student::where('nis', 'like', $year.'%')->count() + 1;
+                if (DB::getDriverName() === 'pgsql') {
+                    DB::selectOne('SELECT pg_advisory_xact_lock(?)', [crc32("ppdb_nis_seq:{$year}")]);
+                    $row = DB::selectOne(
+                        "SELECT MAX(CAST(SUBSTRING(nis FROM 5) AS INTEGER)) AS max_seq
+                         FROM students
+                         WHERE nis LIKE ? AND LENGTH(nis) >= 5 AND SUBSTRING(nis FROM 5) ~ '^[0-9]+$'",
+                        [$year.'%']
+                    );
+                    $seq = ((int) ($row->max_seq ?? 0)) + 1;
+                } else {
+                    $maxSeq = 0;
+                    $existingNis = Student::withTrashed()->where('nis', 'like', $year.'%')->pluck('nis');
+                    foreach ($existingNis as $n) {
+                        $suffix = substr((string) $n, 4);
+                        if (ctype_digit($suffix) && (int) $suffix > $maxSeq) {
+                            $maxSeq = (int) $suffix;
+                        }
+                    }
+                    $seq = $maxSeq + 1;
+                }
+
                 $nis = $year.str_pad((string) $seq, 5, '0', STR_PAD_LEFT);
-                while (Student::where('nis', $nis)->exists()) {
+                while (Student::withTrashed()->where('nis', $nis)->exists()) {
                     $seq++;
                     $nis = $year.str_pad((string) $seq, 5, '0', STR_PAD_LEFT);
                 }

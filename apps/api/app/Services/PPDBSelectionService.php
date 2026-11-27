@@ -393,11 +393,13 @@ class PPDBSelectionService
                         ]);
                     }
 
-                    // Promote waitlist candidates to selected
+                    // Promote waitlist candidates to selected + berikan jendela daftar ulang 3 hari kerja baru (P0-23)
+                    $promotedDeadline = Carbon::now()->addWeekdays(3)->endOfDay();
                     foreach ($waitlistCandidates as $promoted) {
                         $promoted->update([
                             'status' => 'selected',
                             'decision' => 'diterima',
+                            're_registration_deadline_at' => $promotedDeadline,
                         ]);
 
                         ApplicantStatusHistory::create([

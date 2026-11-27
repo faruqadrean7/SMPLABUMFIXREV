@@ -336,24 +336,65 @@ class PPDBApplicationService
 
                 case '2':
                 case 'parent':
-                    $stepData['parent'] = $data;
+                    $existingParent = is_array($stepData['parent'] ?? null) ? $stepData['parent'] : [];
+                    $stepData['parent'] = array_merge($existingParent, $data);
+
+                    $parentEntries = [];
                     if (isset($data['parents']) && is_array($data['parents'])) {
-                        $applicant->parents()->delete();
                         foreach ($data['parents'] as $parentInfo) {
-                            $applicant->parents()->create([
-                                'parent_type' => $parentInfo['parent_type'],
-                                'name' => $parentInfo['name'],
+                            $name = trim((string) ($parentInfo['name'] ?? ''));
+                            if ($name === '') {
+                                continue;
+                            }
+                            $parentEntries[] = [
+                                'parent_type' => $parentInfo['parent_type'] ?? 'wali',
+                                'name' => $name,
                                 'occupation' => $parentInfo['occupation'] ?? null,
-                                'income_range' => $parentInfo['income_range'] ?? null,
+                                'income_range' => $parentInfo['income_range'] ?? ($data['income_range'] ?? null),
                                 'phone' => $parentInfo['phone'] ?? null,
-                            ]);
+                            ];
+                        }
+                    } else {
+                        if (! empty(trim((string) ($data['father_name'] ?? '')))) {
+                            $parentEntries[] = [
+                                'parent_type' => 'ayah',
+                                'name' => trim((string) $data['father_name']),
+                                'occupation' => $data['father_job'] ?? null,
+                                'income_range' => $data['income_range'] ?? null,
+                                'phone' => $data['father_phone'] ?? null,
+                            ];
+                        }
+                        if (! empty(trim((string) ($data['mother_name'] ?? '')))) {
+                            $parentEntries[] = [
+                                'parent_type' => 'ibu',
+                                'name' => trim((string) $data['mother_name']),
+                                'occupation' => $data['mother_job'] ?? null,
+                                'income_range' => $data['income_range'] ?? null,
+                                'phone' => $data['mother_phone'] ?? null,
+                            ];
+                        }
+                    }
+
+                    if (! empty($parentEntries)) {
+                        $applicant->parents()->delete();
+                        foreach ($parentEntries as $entry) {
+                            $applicant->parents()->create($entry);
                         }
                     }
                     break;
 
                 case '3':
                 case 'school':
-                    $stepData['school'] = $data;
+                    $existingSchool = is_array($stepData['school'] ?? null) ? $stepData['school'] : [];
+                    $normalizedSchool = $data;
+                    // Kompatibilitas mundur: dukung baik format flat (origin_school, npsn) maupun nested (school.name)
+                    if (empty($normalizedSchool['origin_school']) && ! empty($data['school']['name'])) {
+                        $normalizedSchool['origin_school'] = $data['school']['name'];
+                    }
+                    if (empty($normalizedSchool['npsn']) && ! empty($data['school']['npsn'])) {
+                        $normalizedSchool['npsn'] = $data['school']['npsn'];
+                    }
+                    $stepData['school'] = array_merge($existingSchool, $normalizedSchool);
                     break;
 
                 case '4':
@@ -441,21 +482,29 @@ class PPDBApplicationService
 
             $oldStatus = $applicant->status;
 
-            // Generate unique official registration number if currently draft
+            // Generate unique official registration number atomically if currently draft (P0-23)
             if (str_starts_with($applicant->registration_no, 'DFT-')) {
                 $year = Carbon::now()->format('Y');
                 $prefix = "PPDB-{$year}-";
 
-                $existingNumbers = Applicant::where('registration_no', 'like', "{$prefix}%")
-                    ->pluck('registration_no');
+                if (DB::getDriverName() === 'pgsql') {
+                    DB::selectOne('SELECT pg_advisory_xact_lock(?)', [crc32('ppdb_reg_seq:'.$prefix)]);
+                    $row = DB::selectOne(
+                        "SELECT MAX(CAST(SUBSTRING(registration_no FROM ?) AS INTEGER)) AS max_seq
+                         FROM applicants
+                         WHERE registration_no LIKE ? AND SUBSTRING(registration_no FROM ?) ~ '^[0-9]+$'",
+                        [strlen($prefix) + 1, $prefix.'%', strlen($prefix) + 1]
+                    );
+                    $maxSeq = (int) ($row->max_seq ?? 0);
+                } else {
+                    $existingNumbers = Applicant::where('registration_no', 'like', "{$prefix}%")
+                        ->pluck('registration_no');
 
-                $maxSeq = 0;
-                foreach ($existingNumbers as $regNum) {
-                    $numStr = substr($regNum, strlen($prefix));
-                    if (is_numeric($numStr)) {
-                        $num = (int) $numStr;
-                        if ($num > $maxSeq) {
-                            $maxSeq = $num;
+                    $maxSeq = 0;
+                    foreach ($existingNumbers as $regNum) {
+                        $numStr = substr($regNum, strlen($prefix));
+                        if (is_numeric($numStr) && (int) $numStr > $maxSeq) {
+                            $maxSeq = (int) $numStr;
                         }
                     }
                 }
