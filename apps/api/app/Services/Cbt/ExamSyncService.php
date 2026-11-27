@@ -7,9 +7,11 @@ use App\Models\CbtSyncLog;
 use App\Models\Exam;
 use App\Models\ExamAnswer;
 use App\Models\ExamParticipant;
+use App\Models\ExamQuestion;
 use App\Models\ExamSession;
 use App\Models\ExamViolation;
 use App\Models\User;
+use App\Services\Concerns\GuardsExamOwnership;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +20,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ExamSyncService
 {
+    use GuardsExamOwnership;
+
     /**
      * BE-CBT-11: Ekspor Paket Soal & Peserta untuk Server Lokal Sekolah.
      * POST /api/v1/cbt/sync/pull
@@ -149,6 +153,29 @@ class ExamSyncService
         $user = $request->user('sanctum') ?? $request->user();
         $this->authorizeSyncNodeOrAdmin($exam, $syncToken, $user);
 
+        $enrolledStudentLookup = array_flip(
+            ExamParticipant::where('exam_id', $exam->id)->pluck('student_id')->all()
+        );
+        $examQuestionLookup = array_flip(
+            ExamQuestion::where('exam_id', $exam->id)->pluck('question_id')->all()
+        );
+
+        // P1-11: Validasi seluruh student_id & question_id benar-benar milik ujian ini sebelum transaksi
+        foreach ($sessionsData as $item) {
+            $studentId = $item['student_id'] ?? null;
+            if (! $studentId || ! isset($enrolledStudentLookup[$studentId])) {
+                throw new HttpException(422, 'Data sinkronisasi ditolak: Terdapat peserta yang tidak terdaftar pada ujian ini.');
+            }
+            if (! empty($item['answers']) && is_array($item['answers'])) {
+                foreach ($item['answers'] as $ans) {
+                    $questionId = $ans['question_id'] ?? null;
+                    if (! $questionId || ! isset($examQuestionLookup[$questionId])) {
+                        throw new HttpException(422, 'Data sinkronisasi ditolak: Terdapat soal yang tidak termasuk pada ujian ini.');
+                    }
+                }
+            }
+        }
+
         $processedSessions = 0;
         $processedAnswers = 0;
         $conflictCount = 0;
@@ -162,6 +189,7 @@ class ExamSyncService
 
                 $startedAt = ! empty($item['started_at']) ? Carbon::parse($item['started_at']) : Carbon::now()->subMinutes($exam->duration_min);
                 $submittedAt = ! empty($item['submitted_at']) ? Carbon::parse($item['submitted_at']) : Carbon::now();
+                $deadlineAt = $startedAt->copy()->addMinutes($exam->duration_min);
 
                 if (! $session) {
                     $session = ExamSession::create([
@@ -169,7 +197,8 @@ class ExamSyncService
                         'student_id' => $studentId,
                         'status' => 'selesai',
                         'started_at' => $startedAt,
-                        'deadline_at' => $startedAt->copy()->addMinutes($exam->duration_min),
+                        'deadline_at' => $deadlineAt,
+                        'ends_at' => $deadlineAt,
                         'submitted_at' => $submittedAt,
                         'seed' => $item['seed'] ?? Str::random(10),
                     ]);
@@ -275,14 +304,9 @@ class ExamSyncService
             }
         }
 
-        // 2. Otorisasi via User Role
-        if ($user) {
-            if ($user->hasRole(['admin', 'super_admin']) || $user->hasPermission('cbt.exam.manage')) {
-                return;
-            }
-            if ($exam->created_by === $user->id) {
-                return;
-            }
+        // 2. Otorisasi via User Role / Pemilik Ujian (P1-11: cbt.exam.manage tidak bypass kepemilikan)
+        if ($user && $this->canManageExam($exam, $user)) {
+            return;
         }
 
         throw new HttpException(403, 'Akses ditolak: Token sinkronisasi tidak valid atau tidak memiliki hak akses server lokal.');

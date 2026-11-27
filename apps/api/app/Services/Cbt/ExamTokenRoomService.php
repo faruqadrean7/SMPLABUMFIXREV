@@ -7,6 +7,7 @@ use App\Models\Exam;
 use App\Models\ExamParticipant;
 use App\Models\ExamRoom;
 use App\Models\User;
+use App\Services\Concerns\GuardsExamOwnership;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -17,6 +18,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ExamTokenRoomService
 {
+    use GuardsExamOwnership;
+
     /**
      * BE-CBT-03: Regenerasi token ujian untuk ruang & sesi tertentu.
      */
@@ -92,6 +95,7 @@ class ExamTokenRoomService
     public function distributeParticipants(string $examId, array $data, Request $request): array
     {
         $exam = Exam::with(['rooms.room', 'participants'])->findOrFail($examId);
+        $this->assertCanManage($exam, $request->user());
 
         $examRoomQuery = ExamRoom::with('room')->where('exam_id', $exam->id);
         if (! empty($data['exam_room_ids'])) {
@@ -196,9 +200,12 @@ class ExamTokenRoomService
     /**
      * BE-CBT-03: Daftar kartu ujian peserta CBT.
      */
-    public function listParticipantCards(string $examId, array $filters): LengthAwarePaginator
+    public function listParticipantCards(string $examId, array $filters, ?User $user = null): LengthAwarePaginator
     {
         $exam = Exam::findOrFail($examId);
+        if ($user) {
+            $this->assertCanManage($exam, $user);
+        }
 
         $query = ExamParticipant::with([
             'student.classes',
@@ -242,9 +249,10 @@ class ExamTokenRoomService
 
         $user = $request->user();
         $isOwner = $user && $participant->student && $participant->student->user_id === $user->id;
-        $isPrivileged = $user && ($user->hasRole(['admin', 'super_admin']) || $user->hasPermission('cbt.exam.manage'));
+        $isExamManager = $participant->exam && $this->canManageExam($participant->exam, $user);
+        $isAssignedProctor = $user && $participant->examRoom && (string) $participant->examRoom->proctor_id === (string) $user->id;
 
-        if (! $isOwner && ! $isPrivileged) {
+        if (! $isOwner && ! $isExamManager && ! $isAssignedProctor) {
             throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki hak akses mengunduh kartu ujian peserta ini.');
         }
 
@@ -258,7 +266,7 @@ class ExamTokenRoomService
     }
 
     /**
-     * Otorisasi Pengawas Ruang atau Admin.
+     * Otorisasi Pengawas Ruang, Pemilik Ujian, atau Admin CBT (P1-11: cbt.exam.manage tidak bypass kepemilikan).
      */
     protected function authorizeProctorOrAdmin(ExamRoom $examRoom, ?User $user): void
     {
@@ -266,16 +274,18 @@ class ExamTokenRoomService
             throw new HttpException(401, 'Unauthenticated');
         }
 
-        if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
-            return;
-        }
-
-        if ($user->hasPermission('cbt.exam.manage')) {
+        $exam = $examRoom->exam;
+        if ($exam) {
+            $this->assertExamSchoolAccess($exam, $user);
+            if ($this->canManageExam($exam, $user)) {
+                return;
+            }
+        } elseif ($this->isCbtAdmin($user)) {
             return;
         }
 
         // Pengawas yang ditugaskan di ruang tersebut
-        if ($examRoom->proctor_id && $examRoom->proctor_id === $user->id) {
+        if ($examRoom->proctor_id && (string) $examRoom->proctor_id === (string) $user->id) {
             return;
         }
 

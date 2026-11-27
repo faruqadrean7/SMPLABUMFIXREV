@@ -57,11 +57,13 @@ class ExamParticipantCardController extends Controller
     public function index(string $id, ListExamCardRequest $request): JsonResponse
     {
         try {
-            $paginator = $this->service->listParticipantCards($id, $request->validated());
+            $paginator = $this->service->listParticipantCards($id, $request->validated(), $request->user());
 
             return $this->paginatedResponse($paginator);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Data ujian tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'FORBIDDEN', $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 

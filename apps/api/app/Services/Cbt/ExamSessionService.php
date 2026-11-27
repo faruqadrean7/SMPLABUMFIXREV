@@ -14,6 +14,7 @@ use App\Models\ExamViolation;
 use App\Models\Question;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\Concerns\GuardsExamOwnership;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -23,6 +24,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ExamSessionService
 {
+    use GuardsExamOwnership;
+
     /**
      * BE-CBT-04: Mulai atau lanjutkan sesi ujian siswa dengan verifikasi token ruang ujian.
      */
@@ -686,8 +689,8 @@ class ExamSessionService
 
         $this->authorizeProctorOrAdminForExam($session->exam_id, $currentUser);
 
-        // SEC-AUTHZ-01: Isolasi ruang untuk aksi proctor
-        $isGlobalAdmin = $currentUser && ($currentUser->hasRole(['admin', 'super_admin']) || $currentUser->hasPermission('cbt.exam.manage'));
+        // SEC-AUTHZ-01 & P1-11: Isolasi ruang untuk pengawas non-pemilik/non-admin CBT
+        $isGlobalAdmin = $session->exam && $this->canManageExam($session->exam, $currentUser);
         if (! $isGlobalAdmin) {
             $assignedRoomIds = ExamRoom::where('exam_id', $session->exam_id)
                 ->where('proctor_id', $currentUser->id)
@@ -877,11 +880,11 @@ class ExamSessionService
             throw new HttpException(401, 'Unauthenticated');
         }
 
-        if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
-            return;
-        }
+        $exam = Exam::findOrFail($examId);
+        $this->assertExamSchoolAccess($exam, $user);
 
-        if ($user->hasPermission('cbt.exam.manage')) {
+        // P1-11: Admin CBT atau pembuat ujian boleh mengelola semua ruang; cbt.exam.manage tidak bypass kepemilikan
+        if ($this->canManageExam($exam, $user)) {
             return;
         }
 
@@ -943,8 +946,8 @@ class ExamSessionService
         $participantsQuery = ExamParticipant::with(['student.user', 'examRoom.room', 'examRoom.proctor'])
             ->where('exam_id', $examId);
 
-        // SEC-AUTHZ-01: Isolasi ruangan untuk pengawas non-admin
-        $isGlobalAdmin = $user && ($user->hasRole(['admin', 'super_admin']) || $user->hasPermission('cbt.exam.manage'));
+        // SEC-AUTHZ-01 & P1-11: Isolasi ruangan untuk pengawas non-pemilik/non-admin CBT
+        $isGlobalAdmin = $this->canManageExam($exam, $user);
         if (! $isGlobalAdmin) {
             $assignedRoomIds = ExamRoom::where('exam_id', $examId)
                 ->where('proctor_id', $user->id)
@@ -1206,8 +1209,8 @@ class ExamSessionService
             $q->where('exam_id', $examId);
         })->with(['session.student']);
 
-        // SEC-AUTHZ-01: Isolasi anomali hanya untuk siswa di ruangan yang ditugaskan
-        $isGlobalAdmin = $user && ($user->hasRole(['admin', 'super_admin']) || $user->hasPermission('cbt.exam.manage'));
+        // SEC-AUTHZ-01 & P1-11: Isolasi anomali hanya untuk siswa di ruangan yang ditugaskan
+        $isGlobalAdmin = $this->canManageExam($exam, $user);
         if (! $isGlobalAdmin) {
             $assignedRoomIds = ExamRoom::where('exam_id', $examId)
                 ->where('proctor_id', $user->id)
