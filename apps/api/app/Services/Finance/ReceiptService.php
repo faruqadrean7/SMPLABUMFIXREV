@@ -56,7 +56,7 @@ class ReceiptService
 
     /**
      * Hasilkan nomor kuitansi unik: KWT/{YYYY}/{MM}/{SEQUENCE}
-     * Contoh: KWT/2026/10/0001
+     * P0-25: Gunakan advisory transaction lock PostgreSQL & ekstraksi sequence numerik aman (tanpa tabrakan).
      */
     public function generateReceiptNumber(): string
     {
@@ -64,21 +64,36 @@ class ReceiptService
         $month = date('m');
         $prefix = "KWT/{$year}/{$month}/";
 
-        // Cari nomor kuitansi terakhir di bulan dan tahun yang sama
-        $lastReceipt = DB::table('payments')
-            ->where('receipt_number', 'like', $prefix.'%')
-            ->orderBy('receipt_number', 'desc')
-            ->value('receipt_number');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::selectOne('SELECT pg_advisory_xact_lock(?)', [crc32('finance_receipt_seq:'.$prefix)]);
 
-        if ($lastReceipt) {
-            $parts = explode('/', $lastReceipt);
-            $lastSequence = (int) end($parts);
-            $nextSequence = str_pad((string) ($lastSequence + 1), 4, '0', STR_PAD_LEFT);
+            $row = DB::selectOne(
+                "SELECT MAX(CAST(SPLIT_PART(receipt_number, '/', 4) AS INTEGER)) AS max_seq
+                 FROM payments
+                 WHERE receipt_number LIKE ? AND SPLIT_PART(receipt_number, '/', 4) ~ '^[0-9]+$'",
+                [$prefix.'%']
+            );
+            $maxSeq = (int) ($row->max_seq ?? 0);
         } else {
-            $nextSequence = '0001';
+            $lastReceipt = DB::table('payments')
+                ->where('receipt_number', 'like', $prefix.'%')
+                ->orderBy('receipt_number', 'desc')
+                ->value('receipt_number');
+            $parts = $lastReceipt ? explode('/', $lastReceipt) : [];
+            $maxSeq = ! empty($parts) && ctype_digit((string) end($parts)) ? (int) end($parts) : 0;
         }
 
-        return $prefix.$nextSequence;
+        $seq = $maxSeq + 1;
+        do {
+            $candidate = $prefix.str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+            $exists = DB::table('payments')->where('receipt_number', $candidate)->exists();
+            if (! $exists) {
+                return $candidate;
+            }
+            $seq++;
+        } while ($exists);
+
+        return $candidate;
     }
 
     /**

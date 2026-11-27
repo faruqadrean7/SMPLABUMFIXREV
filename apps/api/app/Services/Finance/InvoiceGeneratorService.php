@@ -20,7 +20,7 @@ class InvoiceGeneratorService
 
     /**
      * Hasilkan nomor invoice unik: INV/{YYYY}/{MM}/{SEQUENCE}
-     * Contoh: INV/2026/10/0001
+     * P0-25: Gunakan advisory transaction lock PostgreSQL & query O(1) berurut agar aman dari race condition.
      */
     public function generateInvoiceNumber(): string
     {
@@ -28,19 +28,29 @@ class InvoiceGeneratorService
         $month = date('m');
         $prefix = "INV/{$year}/{$month}/";
 
-        // Ambil semua invoice bulan ini yang berawalan prefix
-        $existing = DB::table('invoices')
-            ->where('invoice_number', 'like', $prefix.'%')
-            ->pluck('invoice_number');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::selectOne('SELECT pg_advisory_xact_lock(?)', [crc32('finance_invoice_seq:'.$prefix)]);
+        }
 
         $maxSeq = 0;
-        foreach ($existing as $invNum) {
-            $parts = explode('/', $invNum);
-            $last = end($parts);
-            if (ctype_digit($last)) {
-                $num = (int) $last;
-                if ($num > $maxSeq) {
-                    $maxSeq = $num;
+        if (DB::getDriverName() === 'pgsql') {
+            // Ambil angka sequence maksimum langsung di DB (hindari full pluck O(N))
+            $row = DB::selectOne(
+                "SELECT MAX(CAST(SPLIT_PART(invoice_number, '/', 4) AS INTEGER)) AS max_seq
+                 FROM invoices
+                 WHERE invoice_number LIKE ? AND SPLIT_PART(invoice_number, '/', 4) ~ '^[0-9]+$'",
+                [$prefix.'%']
+            );
+            $maxSeq = (int) ($row->max_seq ?? 0);
+        } else {
+            $existing = DB::table('invoices')
+                ->where('invoice_number', 'like', $prefix.'%')
+                ->pluck('invoice_number');
+            foreach ($existing as $invNum) {
+                $parts = explode('/', $invNum);
+                $last = end($parts);
+                if (ctype_digit($last) && (int) $last > $maxSeq) {
+                    $maxSeq = (int) $last;
                 }
             }
         }
@@ -111,6 +121,11 @@ class InvoiceGeneratorService
             &$createdInvoices,
             &$skippedCount
         ) {
+            // P0-25: Advisory lock per (fee_type, period) agar generateBulk paralel tetap idempoten
+            if (DB::getDriverName() === 'pgsql') {
+                DB::selectOne('SELECT pg_advisory_xact_lock(?)', [crc32("finance_bulk:{$feeType->id}:{$period}")]);
+            }
+
             foreach ($students as $student) {
                 // Aturan Idempotensi: Cek apakah siswa sudah memiliki tagihan aktif dengan fee_type dan periode yang sama
                 $alreadyExists = Invoice::where('student_id', $student->id)
