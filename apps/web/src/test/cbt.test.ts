@@ -165,7 +165,7 @@ describe('ADM-CBT-01 to ADM-CBT-08 & SIS-CBT-01: Asesmen Ujian Komputer (CBT)', 
       const res = await cbtApi.getExamMonitor('exam-1');
       expect(apiClient.get).toHaveBeenCalledWith('/exams/exam-1/monitor', { params: undefined });
       expect(res.data.active_count).toBe(30);
-      expect(res.data.sessions[0].student_name).toBe('Ahmad Faiz');
+      expect(res.data.sessions?.[0].student_name).toBe('Ahmad Faiz');
     });
 
     it('proctor unlocks or manages student session', async () => {
@@ -219,8 +219,9 @@ describe('ADM-CBT-01 to ADM-CBT-08 & SIS-CBT-01: Asesmen Ujian Komputer (CBT)', 
 
       const res = await cbtApi.getExamResults('exam-1');
       expect(apiClient.get).toHaveBeenCalledWith('/exams/exam-1/results', { params: undefined });
-      expect(res.data[0].is_passed).toBe(true);
-      expect(res.data[0].total_score).toBe(88.5);
+      const items = Array.isArray(res.data) ? res.data : res.data.results;
+      expect(items[0].is_passed).toBe(true);
+      expect(items[0].total_score).toBe(88.5);
     });
 
     it('publishes exam scores to Gradebook (ADM-GRD-01)', async () => {

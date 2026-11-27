@@ -72,11 +72,17 @@ class QuestionBankService
     /**
      * BE-CBT-01: Detail paket bank soal.
      */
-    public function getQuestionBank(string $id): QuestionBank
+    public function getQuestionBank(string $id, ?Request $request = null): QuestionBank
     {
-        return QuestionBank::with(['subject', 'gradeLevel', 'owner'])
+        $bank = QuestionBank::with(['subject', 'gradeLevel', 'owner'])
             ->withCount('questions')
             ->findOrFail($id);
+
+        if ($request?->user()) {
+            $this->verifyBankAccess($bank, $request->user());
+        }
+
+        return $bank;
     }
 
     /**
@@ -85,6 +91,9 @@ class QuestionBankService
     public function updateQuestionBank(string $id, array $data, Request $request): QuestionBank
     {
         $bank = QuestionBank::findOrFail($id);
+        if ($request->user()) {
+            $this->verifyBankAccess($bank, $request->user(), true);
+        }
         $oldData = $bank->only(['name', 'subject_id', 'grade_level_id']);
 
         $bank->update([
@@ -112,6 +121,9 @@ class QuestionBankService
     public function deleteQuestionBank(string $id, Request $request): void
     {
         $bank = QuestionBank::findOrFail($id);
+        if ($request->user()) {
+            $this->verifyBankAccess($bank, $request->user(), true);
+        }
 
         $hasUsedInExam = ExamQuestion::whereHas('question', fn ($q) => $q->where('bank_id', $id))->exists();
         if ($hasUsedInExam) {
@@ -230,10 +242,16 @@ class QuestionBankService
     /**
      * BE-CBT-01: Ambil detail butir soal beserta opsi jawaban.
      */
-    public function getQuestion(string $id): Question
+    public function getQuestion(string $id, ?Request $request = null): Question
     {
-        return Question::with(['bank.subject', 'bank.gradeLevel', 'options'])
+        $question = Question::with(['bank.subject', 'bank.gradeLevel', 'options'])
             ->findOrFail($id);
+
+        if ($request?->user() && $question->bank) {
+            $this->verifyBankAccess($question->bank, $request->user());
+        }
+
+        return $question;
     }
 
     /**
@@ -242,7 +260,10 @@ class QuestionBankService
      */
     public function updateQuestion(string $id, array $data, Request $request): Question
     {
-        $existing = Question::with('options')->findOrFail($id);
+        $existing = Question::with(['options', 'bank'])->findOrFail($id);
+        if ($request->user() && $existing->bank) {
+            $this->verifyBankAccess($existing->bank, $request->user(), true);
+        }
         $isUsedInExam = ExamQuestion::where('question_id', $id)->exists();
 
         return DB::transaction(function () use ($existing, $isUsedInExam, $data, $request) {
@@ -330,7 +351,10 @@ class QuestionBankService
      */
     public function deleteQuestion(string $id, Request $request): void
     {
-        $question = Question::findOrFail($id);
+        $question = Question::with('bank')->findOrFail($id);
+        if ($request->user() && $question->bank) {
+            $this->verifyBankAccess($question->bank, $request->user(), true);
+        }
 
         if (ExamQuestion::where('question_id', $id)->exists()) {
             throw new HttpException(422, 'Butir soal tidak dapat dihapus karena sudah digunakan dalam ujian. Silakan nonaktifkan atau arsipkan soal.');
@@ -355,6 +379,9 @@ class QuestionBankService
     public function importQuestions(array $data, Request $request): array
     {
         $bank = QuestionBank::findOrFail($data['bank_id']);
+        if ($request->user()) {
+            $this->verifyBankAccess($bank, $request->user(), true);
+        }
         $createdList = [];
 
         DB::transaction(function () use ($data, $bank, &$createdList, $request) {
@@ -403,6 +430,31 @@ class QuestionBankService
             'imported_count' => count($createdList),
             'questions' => $createdList,
         ];
+    }
+
+    /**
+     * SEC-CBT-09: Verifikasi hak akses guru terhadap bank soal (pemilik atau pengampu mapel).
+     */
+    protected function verifyBankAccess(QuestionBank $bank, User $user, bool $requireWriteOwnership = false): void
+    {
+        if ($user->hasRole(['admin', 'super_admin', 'cbt_operator']) || $user->hasPermission('cbt.exam.manage')) {
+            return;
+        }
+
+        if ($bank->owner_id === $user->id) {
+            return;
+        }
+
+        if (! $requireWriteOwnership && $user->teacher) {
+            $teachesSubject = \App\Models\TeachingAssignment::where('teacher_id', $user->teacher->id)
+                ->where('subject_id', $bank->subject_id)
+                ->exists();
+            if ($teachesSubject) {
+                return;
+            }
+        }
+
+        throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang atas bank soal ini.');
     }
 
     protected function logAudit(

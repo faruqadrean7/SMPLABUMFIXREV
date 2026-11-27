@@ -15,6 +15,8 @@ class StartExamSessionRequest extends FormRequest
     {
         return [
             'token' => ['required', 'string', 'max:20'],
+            'device_fingerprint' => ['nullable', 'string', 'max:100'],
+            'session_lock_token' => ['nullable', 'string', 'max:64'],
         ];
     }
 

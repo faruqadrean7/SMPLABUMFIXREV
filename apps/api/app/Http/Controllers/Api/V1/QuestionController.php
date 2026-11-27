@@ -61,14 +61,18 @@ class QuestionController extends Controller
      * BE-CBT-01: Detail butir soal.
      * GET /api/v1/questions/{id}
      */
-    public function show(string $id): JsonResponse
+    public function show(string $id, Request $request): JsonResponse
     {
         try {
-            $question = $this->service->getQuestion($id);
+            $question = $this->service->getQuestion($id, $request);
 
             return $this->successResponse($question);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Butir soal tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            $code = $e->getStatusCode() === 403 ? 'FORBIDDEN' : 'BUSINESS_RULE_VIOLATION';
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -88,6 +92,10 @@ class QuestionController extends Controller
             return $this->successResponse($question);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Butir soal tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            $code = $e->getStatusCode() === 403 ? 'FORBIDDEN' : 'BUSINESS_RULE_VIOLATION';
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -108,7 +116,9 @@ class QuestionController extends Controller
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Butir soal tidak ditemukan.', 'NOT_FOUND', 404);
         } catch (HttpException $e) {
-            return $this->errorResponse($e->getMessage(), 'BUSINESS_RULE_VIOLATION', $e->getStatusCode());
+            $code = $e->getStatusCode() === 403 ? 'FORBIDDEN' : 'BUSINESS_RULE_VIOLATION';
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
@@ -128,10 +138,18 @@ class QuestionController extends Controller
             return $this->successResponse($result, 201);
         } catch (ModelNotFoundException) {
             return $this->errorResponse('Bank soal tidak ditemukan.', 'NOT_FOUND', 404);
+        } catch (HttpException $e) {
+            $code = $e->getStatusCode() === 403 ? 'FORBIDDEN' : 'BUSINESS_RULE_VIOLATION';
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
         } catch (Throwable $e) {
             report($e);
 
-            return $this->errorResponse('Terjadi kesalahan saat mengimport butir soal: '.$e->getMessage(), 'INTERNAL_ERROR', 500);
+            $msg = config('app.debug')
+                ? 'Terjadi kesalahan saat mengimport butir soal: '.$e->getMessage()
+                : 'Terjadi kesalahan saat mengimport butir soal.';
+
+            return $this->errorResponse($msg, 'INTERNAL_ERROR', 500);
         }
     }
 }

@@ -61,6 +61,27 @@ apiClient.interceptors.request.use(
       config.headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // SEC-CBT-07: Sisipkan X-Exam-Session-Token & X-Device-Fingerprint otomatis pada rute sesi ujian siswa
+    if (typeof window !== 'undefined' && config.url) {
+      const examMatch = config.url.match(/\/exams\/([^/]+)\/(start-session|session-questions|save-answer|log-violation|violations|finish-session)/);
+      const hbMatch = config.url.match(/\/exam-sessions\/([^/]+)\/heartbeat/);
+      const targetKey = examMatch?.[1] || hbMatch?.[1];
+      if (targetKey) {
+        try {
+          const lockToken = window.sessionStorage.getItem(`sistlabum_cbt_lock_${targetKey}`);
+          if (lockToken && !config.headers['X-Exam-Session-Token']) {
+            config.headers['X-Exam-Session-Token'] = lockToken;
+          }
+          const fp = window.sessionStorage.getItem('sistlabum_cbt_device_fp');
+          if (fp && !config.headers['X-Device-Fingerprint']) {
+            config.headers['X-Device-Fingerprint'] = fp;
+          }
+        } catch {
+          // Ignore storage error
+        }
+      }
+    }
+
     // Cegah operasi mutasi data (POST, PUT, PATCH, DELETE) bagi role baca-saja murni (Komite & Pengawas)
     const activeUser = tokenStorage.getUser();
     if (activeUser && isReadOnlyRole(activeUser.roles)) {

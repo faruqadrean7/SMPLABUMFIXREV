@@ -54,5 +54,8 @@ docs/mtk/
 # Claude Code: setelan mesin-lokal (config bersama seperti launch.json tetap di-track)
 .claude/settings.local.json
 
+# Referensi open source lokal (tidak di-commit)
+references/
+
 # Superpowers scratch (brainstorm mockups, plan ledgers)
 .superpowers/

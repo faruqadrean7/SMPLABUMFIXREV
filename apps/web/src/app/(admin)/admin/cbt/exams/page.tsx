@@ -32,7 +32,7 @@ import { cbtApi } from '@/features/cbt/cbt-api';
 import { subjectsApi } from '@/features/master/subjects-api';
 import { classesApi } from '@/features/master/classes-api';
 import { academicApi } from '@/features/academic/academic-api';
-import { ExamItem, ExamType, ExamStatus, ExamResultItem, ExamRoomItem } from '@/types/cbt';
+import { ExamItem, ExamType, ExamStatus, ExamResultItem, EssaySubmissionItem, ExamRoomItem, QuestionBankItem, QuestionItem } from '@/types/cbt';
 import { SubjectItem, SchoolClassItem } from '@/types/master';
 import { GradeComponentItem, GradePeriodItem } from '@/types/academic';
 
@@ -46,12 +46,25 @@ export default function ExamsAdminPage() {
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [isQuestionsModalOpen, setIsQuestionsModalOpen] = useState<boolean>(false);
   const [isRoomsModalOpen, setIsRoomsModalOpen] = useState<boolean>(false);
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState<boolean>(false);
   const [isResultsModalOpen, setIsResultsModalOpen] = useState<boolean>(false);
 
+  // Assign Questions State
+  const [questionBanks, setQuestionBanks] = useState<QuestionBankItem[]>([]);
+  const [selectedBankIdForAssign, setSelectedBankIdForAssign] = useState<string>('');
+  const [bankQuestionsForAssign, setBankQuestionsForAssign] = useState<QuestionItem[]>([]);
+  const [selectedQuestionIdsForAssign, setSelectedQuestionIdsForAssign] = useState<string[]>([]);
+  const [isLoadingBankQuestions, setIsLoadingBankQuestions] = useState<boolean>(false);
+  const [isAssigningQuestions, setIsAssigningQuestions] = useState<boolean>(false);
+
   const [activeExam, setActiveExam] = useState<ExamItem | null>(null);
   const [examResults, setExamResults] = useState<ExamResultItem[]>([]);
+  const [essaySubmissions, setEssaySubmissions] = useState<EssaySubmissionItem[]>([]);
+  const [essayScoreInputs, setEssayScoreInputs] = useState<Record<string, string>>({});
+  const [gradingAnswerId, setGradingAnswerId] = useState<string | null>(null);
+  const [resultsTab, setResultsTab] = useState<'rekap' | 'esai'>('rekap');
   const [isLoadingResults, setIsLoadingResults] = useState<boolean>(false);
 
   // Gradebook Publish Form State
@@ -78,6 +91,7 @@ export default function ExamsAdminPage() {
     passing_grade: 75.0,
     shuffle_questions: false,
     shuffle_options: false,
+    show_result_mode: 'after_release' as 'after_submit' | 'after_release' | 'never',
   });
 
   // Enroll Class Selection
@@ -138,11 +152,12 @@ export default function ExamsAdminPage() {
         subject_id: examForm.subject_id,
         exam_type: examForm.exam_type,
         duration_min: Number(examForm.duration_min),
-        start_at: examForm.start_at,
-        end_at: examForm.end_at,
+        start_at: new Date(examForm.start_at).toISOString(),
+        end_at: new Date(examForm.end_at).toISOString(),
         passing_grade: Number(examForm.passing_grade),
         shuffle_questions: examForm.shuffle_questions,
         shuffle_options: examForm.shuffle_options,
+        show_result_mode: examForm.show_result_mode,
       });
       setFeedbackMsg({ type: 'success', text: 'Jadwal asesmen CBT berhasil dibuat!' });
       setIsCreateModalOpen(false);
@@ -155,7 +170,7 @@ export default function ExamsAdminPage() {
   };
 
   const handleToggleStatus = async (exam: ExamItem) => {
-    const nextStatus = exam.status === 'active' || exam.status === 'berlangsung' ? 'selesai' : 'active';
+    const nextStatus = exam.status === 'active' || exam.status === 'berlangsung' ? 'selesai' : 'berlangsung';
     setTogglingExamId(exam.id);
     try {
       await cbtApi.updateExamStatus(exam.id, nextStatus);
@@ -168,9 +183,83 @@ export default function ExamsAdminPage() {
     }
   };
 
-  const handleOpenRooms = (exam: ExamItem) => {
+  const handleOpenAssignQuestions = async (exam: ExamItem) => {
+    setActiveExam(exam);
+    setIsQuestionsModalOpen(true);
+    setSelectedBankIdForAssign('');
+    setBankQuestionsForAssign([]);
+    setSelectedQuestionIdsForAssign([]);
+    setIsLoadingBankQuestions(true);
+    try {
+      const banksRes = await cbtApi.getQuestionBanks({ per_page: 50 });
+      const banks = banksRes.data || [];
+      setQuestionBanks(banks);
+      const preferred = banks.find((b) => b.subject_id === exam.subject_id) || banks[0];
+      if (preferred) {
+        setSelectedBankIdForAssign(preferred.id);
+        const qRes = await cbtApi.getQuestions({ bank_id: preferred.id, per_page: 100 });
+        const qList = qRes.data || [];
+        setBankQuestionsForAssign(qList);
+        setSelectedQuestionIdsForAssign(qList.map((q) => q.id));
+      }
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal memuat daftar bank soal.' });
+    } finally {
+      setIsLoadingBankQuestions(false);
+    }
+  };
+
+  const handleSelectBankForAssign = async (bankId: string) => {
+    setSelectedBankIdForAssign(bankId);
+    setBankQuestionsForAssign([]);
+    setSelectedQuestionIdsForAssign([]);
+    if (!bankId) return;
+    setIsLoadingBankQuestions(true);
+    try {
+      const qRes = await cbtApi.getQuestions({ bank_id: bankId, per_page: 100 });
+      const qList = qRes.data || [];
+      setBankQuestionsForAssign(qList);
+      setSelectedQuestionIdsForAssign(qList.map((q) => q.id));
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal memuat butir soal.' });
+    } finally {
+      setIsLoadingBankQuestions(false);
+    }
+  };
+
+  const handleAssignQuestionsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeExam || selectedQuestionIdsForAssign.length === 0) {
+      setFeedbackMsg({ type: 'error', text: 'Pilih minimal 1 butir soal untuk diplotkan.' });
+      return;
+    }
+    setIsAssigningQuestions(true);
+    try {
+      await cbtApi.assignExamQuestions(activeExam.id, {
+        questions: selectedQuestionIdsForAssign.map((qid, idx) => ({
+          question_id: qid,
+          sort_order: idx + 1,
+        })),
+      });
+      setFeedbackMsg({ type: 'success', text: `${selectedQuestionIdsForAssign.length} butir soal berhasil diplotkan ke ujian.` });
+      setIsQuestionsModalOpen(false);
+      fetchExams();
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal memplotkan soal ke ujian.' });
+    } finally {
+      setIsAssigningQuestions(false);
+    }
+  };
+
+  const handleOpenRooms = async (exam: ExamItem) => {
     setActiveExam(exam);
     setIsRoomsModalOpen(true);
+    try {
+      const detail = await cbtApi.getExam(exam.id);
+      setActiveExam(detail.data);
+    } catch {
+      // Gunakan data ringkas jika gagal memuat detail
+    }
   };
 
   const handleRegenerateToken = async (roomId: string) => {
@@ -202,7 +291,10 @@ export default function ExamsAdminPage() {
 
     setIsEnrolling(true);
     try {
+      const firstRoomId = activeExam.rooms && activeExam.rooms.length > 0 ? activeExam.rooms[0].id : undefined;
       await cbtApi.enrollExamParticipants(activeExam.id, {
+        exam_room_id: firstRoomId,
+        class_id: selectedClassId,
         class_ids: [selectedClassId],
       });
       setFeedbackMsg({ type: 'success', text: 'Peserta rombel berhasil didaftarkan ke ujian.' });
@@ -215,17 +307,34 @@ export default function ExamsAdminPage() {
     }
   };
 
+  const extractResultsArray = (payload: any): ExamResultItem[] => {
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.results)) return payload.results;
+    return [];
+  };
+
   const handleOpenResults = async (exam: ExamItem) => {
     setActiveExam(exam);
+    setResultsTab('rekap');
     setIsResultsModalOpen(true);
     setIsLoadingResults(true);
 
     try {
-      const [resultsRes, compRes] = await Promise.all([
+      const [resultsRes, essaysRes, compRes] = await Promise.all([
         cbtApi.getExamResults(exam.id),
+        cbtApi.getEssaySubmissions(exam.id).catch(() => null),
         academicApi.listGradeComponents({ subject_id: exam.subject_id }),
       ]);
-      setExamResults(resultsRes.data || []);
+      setExamResults(extractResultsArray(resultsRes.data));
+      const subs = essaysRes?.data?.submissions || [];
+      setEssaySubmissions(subs);
+      const initialScores: Record<string, string> = {};
+      subs.forEach((s) => {
+        if (s.current_score !== null && s.current_score !== undefined) {
+          initialScores[s.answer_id] = String(s.current_score);
+        }
+      });
+      setEssayScoreInputs(initialScores);
       setGradeComponents(compRes || []);
       if (compRes && compRes.length > 0) {
         setSelectedComponentId(compRes[0].id);
@@ -241,6 +350,34 @@ export default function ExamsAdminPage() {
     }
   };
 
+  const handleGradeEssay = async (sub: EssaySubmissionItem) => {
+    if (!activeExam) return;
+    const rawVal = essayScoreInputs[sub.answer_id];
+    const scoreNum = parseFloat(rawVal);
+    if (Number.isNaN(scoreNum) || scoreNum < 0 || scoreNum > sub.max_score) {
+      setFeedbackMsg({ type: 'error', text: `Skor esai harus berada di antara 0 dan ${sub.max_score}.` });
+      return;
+    }
+
+    setGradingAnswerId(sub.answer_id);
+    try {
+      await cbtApi.gradeEssay(activeExam.id, { answer_id: sub.answer_id, score: scoreNum });
+      setFeedbackMsg({ type: 'success', text: `Nilai esai ${sub.student_name} berhasil disimpan (${scoreNum}/${sub.max_score}).` });
+      const [resultsRes, essaysRes] = await Promise.all([
+        cbtApi.getExamResults(activeExam.id),
+        cbtApi.getEssaySubmissions(activeExam.id).catch(() => null),
+      ]);
+      setExamResults(extractResultsArray(resultsRes.data));
+      if (essaysRes?.data?.submissions) {
+        setEssaySubmissions(essaysRes.data.submissions);
+      }
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menyimpan nilai esai.' });
+    } finally {
+      setGradingAnswerId(null);
+    }
+  };
+
   const handleRunAutoGrade = async () => {
     if (!activeExam) return;
     setIsRunningAutoGrade(true);
@@ -248,7 +385,7 @@ export default function ExamsAdminPage() {
       await cbtApi.runAutoGrade(activeExam.id);
       setFeedbackMsg({ type: 'success', text: 'Koreksi otomatis soal objektif berhasil dijalankan!' });
       const res = await cbtApi.getExamResults(activeExam.id);
-      setExamResults(res.data || []);
+      setExamResults(extractResultsArray(res.data));
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err?.message || 'Gagal menjalankan koreksi otomatis.' });
     } finally {
@@ -472,7 +609,7 @@ export default function ExamsAdminPage() {
                           </Badge>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
                             <Button
                               size="sm"
                               variant="ghost"
@@ -491,6 +628,17 @@ export default function ExamsAdminPage() {
                                 <Play className="h-3.5 w-3.5 mr-1" />
                               )}
                               {isLive ? 'Tutup' : 'Buka'}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenAssignQuestions(exam)}
+                              className="h-7 px-2 text-xs"
+                              title="Plot Soal dari Bank Soal"
+                            >
+                              <BookOpen className="h-3 w-3 mr-1" />
+                              Soal
                             </Button>
 
                             <Button
@@ -639,6 +787,18 @@ export default function ExamsAdminPage() {
               </div>
 
               <div className="space-y-2 pt-2 border-t">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Tampilan Nilai ke Siswa</label>
+                  <select
+                    value={examForm.show_result_mode}
+                    onChange={(e) => setExamForm({ ...examForm, show_result_mode: e.target.value as 'after_submit' | 'after_release' | 'never' })}
+                    className="w-full text-xs rounded-md border border-slate-300 p-2 mt-1"
+                  >
+                    <option value="after_release">Setelah Dirilis Guru/Admin</option>
+                    <option value="after_submit">Langsung Setelah Selesai</option>
+                    <option value="never">Disembunyikan (Khusus Arsip)</option>
+                  </select>
+                </div>
                 <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
                   <input
                     type="checkbox"
@@ -671,6 +831,122 @@ export default function ExamsAdminPage() {
                     </>
                   ) : (
                     'Simpan Jadwal'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Plot Soal dari Bank Soal */}
+      {isQuestionsModalOpen && activeExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl space-y-4 my-8">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Plot Soal ke Ujian</h3>
+                <p className="text-[11px] text-slate-500">{activeExam.title}</p>
+              </div>
+              <button onClick={() => setIsQuestionsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleAssignQuestionsSubmit} className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-700">Pilih Bank Soal</label>
+                <select
+                  value={selectedBankIdForAssign}
+                  onChange={(e) => handleSelectBankForAssign(e.target.value)}
+                  className="w-full text-xs rounded-md border border-slate-300 p-2 mt-1"
+                  required
+                >
+                  <option value="">-- Pilih Bank Soal --</option>
+                  {questionBanks.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.questions_count ?? 0} soal)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {isLoadingBankQuestions ? (
+                <div className="py-6 text-center text-xs text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-1.5" />
+                  Memuat butir soal...
+                </div>
+              ) : bankQuestionsForAssign.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">
+                      Butir Soal ({selectedQuestionIdsForAssign.length}/{bankQuestionsForAssign.length} dipilih)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedQuestionIdsForAssign(
+                          selectedQuestionIdsForAssign.length === bankQuestionsForAssign.length
+                            ? []
+                            : bankQuestionsForAssign.map((q) => q.id)
+                        )
+                      }
+                      className="text-blue-600 hover:underline font-medium"
+                    >
+                      {selectedQuestionIdsForAssign.length === bankQuestionsForAssign.length ? 'Kosongkan' : 'Pilih Semua'}
+                    </button>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto border rounded-md divide-y">
+                    {bankQuestionsForAssign.map((q, i) => {
+                      const checked = selectedQuestionIdsForAssign.includes(q.id);
+                      const labelText = q.stem || q.body?.content || q.body?.text || `Soal #${i + 1}`;
+                      return (
+                        <label key={q.id} className="flex items-start gap-2 p-2.5 text-xs hover:bg-slate-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedQuestionIdsForAssign((prev) => [...prev, q.id]);
+                              } else {
+                                setSelectedQuestionIdsForAssign((prev) => prev.filter((id) => id !== q.id));
+                              }
+                            }}
+                            className="mt-0.5 rounded text-blue-600"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-slate-800 line-clamp-2">{labelText}</div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              Tipe: {q.question_type} · Bobot: {q.weight}
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : selectedBankIdForAssign ? (
+                <div className="p-4 text-center text-xs text-slate-500 border rounded-md bg-slate-50">
+                  Bank soal ini belum memiliki butir soal.
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuestionsModalOpen(false)} disabled={isAssigningQuestions} className="text-xs">
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isAssigningQuestions || selectedQuestionIdsForAssign.length === 0}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs gap-1.5"
+                >
+                  {isAssigningQuestions ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    'Simpan Plotting Soal'
                   )}
                 </Button>
               </div>
@@ -918,7 +1194,93 @@ export default function ExamsAdminPage() {
               </form>
             </div>
 
-            {/* Results Table */}
+            {/* Results & Essay Grading Tabs */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResultsTab('rekap')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    resultsTab === 'rekap' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Rekap Nilai ({examResults.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResultsTab('esai')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    resultsTab === 'esai' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Koreksi Esai Manual ({essaySubmissions.filter((s) => !s.is_graded).length} Belum Dinilai)
+                </button>
+              </div>
+            </div>
+
+            {resultsTab === 'esai' ? (
+              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                {essaySubmissions.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500 border rounded-lg">
+                    Tidak ada jawaban soal uraian/esai pada ujian ini.
+                  </div>
+                ) : (
+                  essaySubmissions.map((sub) => {
+                    const ansText =
+                      typeof sub.student_answer === 'object' && sub.student_answer !== null
+                        ? (sub.student_answer.text ?? JSON.stringify(sub.student_answer))
+                        : String(sub.student_answer ?? '-');
+
+                    return (
+                      <div key={sub.answer_id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="font-bold text-xs text-slate-900">{sub.student_name}</span>
+                            <span className="text-[11px] text-slate-500 ml-2">NIS: {sub.nis}</span>
+                          </div>
+                          <Badge
+                            className={`text-[10px] ${
+                              sub.is_graded
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : 'bg-amber-100 text-amber-800 border-amber-300'
+                            }`}
+                          >
+                            {sub.is_graded ? `Dinilai: ${sub.current_score}/${sub.max_score}` : `Belum Dinilai (Maks ${sub.max_score})`}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-medium">{sub.question_text}</div>
+                        <div className="p-2.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 whitespace-pre-line">
+                          {ansText}
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <label className="text-[11px] font-semibold text-slate-600">Skor (0–{sub.max_score}):</label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={sub.max_score}
+                            step="0.5"
+                            value={essayScoreInputs[sub.answer_id] ?? ''}
+                            onChange={(e) =>
+                              setEssayScoreInputs((prev) => ({ ...prev, [sub.answer_id]: e.target.value }))
+                            }
+                            className="w-24 h-8 text-xs"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={gradingAnswerId === sub.answer_id}
+                            onClick={() => handleGradeEssay(sub)}
+                            className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white"
+                          >
+                            {gradingAnswerId === sub.answer_id ? 'Menyimpan...' : 'Simpan Nilai'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            ) : (
             <div className="space-y-2">
               <div className="text-xs font-bold text-slate-800">Daftar Nilai Siswa</div>
               <div className="overflow-x-auto max-h-72 border rounded-lg">
@@ -961,6 +1323,11 @@ export default function ExamsAdminPage() {
                           </td>
                           <td className="py-2.5 px-3 text-center font-bold text-slate-900 text-sm">
                             {r.total_score !== null ? r.total_score : '-'}
+                            {r.grading_status === 'pending_essay' && (
+                              <span className="block text-[10px] font-medium text-amber-600">
+                                Menunggu Esai ({r.ungraded_essays_count})
+                              </span>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 text-center">
                             {r.total_score !== null ? (
@@ -987,6 +1354,7 @@ export default function ExamsAdminPage() {
                 </table>
               </div>
             </div>
+            )}
 
             <div className="flex justify-end pt-3 border-t">
               <Button size="sm" variant="outline" onClick={() => setIsResultsModalOpen(false)} className="text-xs">

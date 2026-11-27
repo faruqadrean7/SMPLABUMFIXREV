@@ -39,6 +39,8 @@ class ExamService
 
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
+        } elseif (! empty($filters['exclude_draft_archived'])) {
+            $query->whereNotIn('status', ['draft', 'arsip', 'dibatalkan']);
         }
 
         if (! empty($filters['search'])) {
@@ -256,11 +258,44 @@ class ExamService
     {
         $exam = Exam::findOrFail($id);
         $this->assertCanManage($exam, $request->user());
-        $examRoom = ExamRoom::where('exam_id', $exam->id)->findOrFail($data['exam_room_id']);
+
+        if (! empty($data['exam_room_id'])) {
+            $examRoom = ExamRoom::where('exam_id', $exam->id)->findOrFail($data['exam_room_id']);
+        } else {
+            $examRoom = ExamRoom::where('exam_id', $exam->id)->orderBy('session_no')->first();
+            if (! $examRoom) {
+                $defaultRoom = \App\Models\Room::first();
+                if (! $defaultRoom) {
+                    $defaultRoom = \App\Models\Room::create([
+                        'school_id' => $exam->school_id ?? $request->user()?->school_id,
+                        'code' => 'LAB-CBT-01',
+                        'name' => 'Lab Komputer 1',
+                        'room_type' => 'laboratorium',
+                        'capacity' => 40,
+                    ]);
+                }
+                $examRoom = ExamRoom::create([
+                    'exam_id' => $exam->id,
+                    'room_id' => $defaultRoom->id,
+                    'proctor_id' => $request->user()?->id,
+                    'session_no' => 1,
+                    'token' => strtoupper(Str::random(6)),
+                    'token_expires_at' => $exam->end_at,
+                ]);
+            }
+        }
+
+        $targetClassIds = [];
+        if (! empty($data['class_id'])) {
+            $targetClassIds[] = $data['class_id'];
+        }
+        if (! empty($data['class_ids']) && is_array($data['class_ids'])) {
+            $targetClassIds = array_values(array_unique(array_merge($targetClassIds, $data['class_ids'])));
+        }
 
         $studentIds = collect();
-        if (! empty($data['class_id'])) {
-            $classStudentIds = ClassStudent::where('class_id', $data['class_id'])
+        if (! empty($targetClassIds)) {
+            $classStudentIds = ClassStudent::whereIn('class_id', $targetClassIds)
                 ->whereNull('left_at')
                 ->pluck('student_id');
             $studentIds = $studentIds->merge($classStudentIds);

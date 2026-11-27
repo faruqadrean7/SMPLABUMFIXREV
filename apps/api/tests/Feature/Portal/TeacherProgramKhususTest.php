@@ -5,6 +5,8 @@ namespace Tests\Feature\Portal;
 use App\Models\AcademicYear;
 use App\Models\ClassStudent;
 use App\Models\GradeLevel;
+use App\Models\ProgramMaterial;
+use App\Models\ProgramTarget;
 use App\Models\ProgramTask;
 use App\Models\ProgramTaskSubmission;
 use App\Models\Role;
@@ -443,5 +445,61 @@ class TeacherProgramKhususTest extends TestCase
             'entity_id' => $submission->id,
             'actor_id' => $teacherData['user']->id,
         ]);
+    }
+
+    public function test_be_prog_02_teacher_read_lists_only_their_scoped_program_and_classes(): void
+    {
+        $teacherA = $this->createTeacher('ScopeA');
+        $teacherB = $this->createTeacher('ScopeB');
+
+        $classTahfidz = $this->createClassWithProgram('VII-Tahfidz-Scope', 'tahfidz', $teacherA['teacher']);
+        $classIcp = $this->createClassWithProgram('VII-ICP-Scope', 'icp', $teacherB['teacher']);
+        $studentIcp = $this->createStudentInClass($classIcp, 'icp');
+
+        ProgramMaterial::create([
+            'program_type' => 'tahfidz',
+            'title' => 'Materi Tahfidz A',
+            'material_type' => 'panduan',
+            'class_id' => $classTahfidz->id,
+            'created_by' => $teacherA['user']->id,
+        ]);
+
+        ProgramMaterial::create([
+            'program_type' => 'icp',
+            'title' => 'Materi ICP B',
+            'material_type' => 'reading',
+            'class_id' => $classIcp->id,
+            'created_by' => $teacherB['user']->id,
+        ]);
+
+        ProgramTask::create([
+            'program_type' => 'icp',
+            'title' => 'Tugas ICP B',
+            'class_id' => $classIcp->id,
+            'created_by' => $teacherB['user']->id,
+        ]);
+
+        ProgramTarget::create([
+            'student_id' => $studentIcp['student']->id,
+            'program_type' => 'icp',
+            'title' => 'Target ICP B',
+            'set_by' => $teacherB['user']->id,
+        ]);
+
+        $matRes = $this->actingAs($teacherA['user'])
+            ->getJson('/api/v1/program/materials')
+            ->assertOk();
+        $this->assertCount(1, $matRes->json('data'));
+        $matRes->assertJsonPath('data.0.title', 'Materi Tahfidz A');
+
+        $taskRes = $this->actingAs($teacherA['user'])
+            ->getJson('/api/v1/program/tasks')
+            ->assertOk();
+        $this->assertCount(0, $taskRes->json('data'));
+
+        $targetRes = $this->actingAs($teacherA['user'])
+            ->getJson('/api/v1/program/targets')
+            ->assertOk();
+        $this->assertCount(0, $targetRes->json('data'));
     }
 }
