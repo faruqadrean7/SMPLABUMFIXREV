@@ -9,7 +9,7 @@ class SubmitProgramTaskRequest extends BaseApiRequest
     public function rules(): array
     {
         return [
-            'file_id' => ['nullable', 'uuid', 'required_without_all:link,notes'],
+            'file_id' => ['nullable', 'uuid', 'exists:files,id', 'required_without_all:link,notes'],
             'link' => ['nullable', 'url', 'max:500', 'required_without_all:file_id,notes'],
             'notes' => ['nullable', 'string', 'max:2000', 'required_without_all:file_id,link'],
         ];

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\File;
 use App\Models\ProgramMaterial;
 use App\Models\ProgramTarget;
 use App\Models\ProgramTask;
@@ -24,14 +25,14 @@ class ProgramKhususService
 
     /**
      * Resolusi program belajar efektif siswa.
-     * Prioritas: student.program_type khusus -> class.program_type khusus -> 'reguler'.
+     * Prioritas: student.program_type khusus -> activeClasses.program_type khusus -> 'reguler'.
      */
     public function resolveEffectiveProgram(Student $student): string
     {
-        $student->loadMissing('classes');
+        $student->loadMissing('activeClasses');
 
         $studentProg = $student->program_type;
-        $classProg = $student->classes->first()?->program_type;
+        $classProg = $student->activeClasses->first()?->program_type;
 
         if (empty($studentProg) || ($studentProg === 'reguler' && in_array($classProg, ['tahfidz', 'icp', 'inklusi'], true))) {
             return $classProg ?? 'reguler';
@@ -67,22 +68,22 @@ class ProgramKhususService
         $requestedProgram = $filters['program_type'] ?? null;
         $effectiveProgram = $this->ensureStudentInProgram($student, $requestedProgram);
 
-        $student->loadMissing('classes');
-        $classId = $student->classes->first()?->id;
+        $student->loadMissing('activeClasses');
+        $activeClassIds = $student->activeClasses->pluck('id')->all();
 
         $query = ProgramMaterial::with(['file', 'creator:id,username'])
             ->where('program_type', $effectiveProgram)
-            ->where(function ($q) use ($student, $classId) {
+            ->where(function ($q) use ($student, $activeClassIds) {
                 $q->where('target_scope', 'all')
                     ->orWhere(function ($sub) use ($student) {
                         $sub->where('target_scope', 'student')
                             ->where('assigned_student_id', $student->id);
                     });
 
-                if ($classId) {
-                    $q->orWhere(function ($sub) use ($classId) {
+                if (! empty($activeClassIds)) {
+                    $q->orWhere(function ($sub) use ($activeClassIds) {
                         $sub->where('target_scope', 'class')
-                            ->where('class_id', $classId);
+                            ->whereIn('class_id', $activeClassIds);
                     });
                 }
             });
@@ -143,8 +144,8 @@ class ProgramKhususService
         $requestedProgram = $filters['program_type'] ?? null;
         $effectiveProgram = $this->ensureStudentInProgram($student, $requestedProgram);
 
-        $student->loadMissing('classes');
-        $classId = $student->classes->first()?->id;
+        $student->loadMissing('activeClasses');
+        $activeClassIds = $student->activeClasses->pluck('id')->all();
 
         $query = ProgramTask::with([
             'file',
@@ -154,17 +155,17 @@ class ProgramKhususService
             },
         ])
             ->where('program_type', $effectiveProgram)
-            ->where(function ($q) use ($student, $classId) {
+            ->where(function ($q) use ($student, $activeClassIds) {
                 $q->where('target_scope', 'all')
                     ->orWhere(function ($sub) use ($student) {
                         $sub->where('target_scope', 'student')
                             ->where('assigned_student_id', $student->id);
                     });
 
-                if ($classId) {
-                    $q->orWhere(function ($sub) use ($classId) {
+                if (! empty($activeClassIds)) {
+                    $q->orWhere(function ($sub) use ($activeClassIds) {
                         $sub->where('target_scope', 'class')
-                            ->where('class_id', $classId);
+                            ->whereIn('class_id', $activeClassIds);
                     });
                 }
             });
@@ -203,6 +204,40 @@ class ProgramKhususService
         }
 
         $effectiveProgram = $this->ensureStudentInProgram($student, $task->program_type);
+
+        // P1-28: Isolasi school_id antara tugas program dan siswa
+        if (! empty($task->school_id) && ! empty($student->school_id) && (string) $task->school_id !== (string) $student->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Tugas program berada di luar sekolah Anda.');
+        }
+
+        // P1-28: Validasi target_scope ('student' | 'class' | 'all') menggunakan kelas aktif siswa
+        if ($task->target_scope === 'student') {
+            if ((string) $task->assigned_student_id !== (string) $student->id) {
+                throw new HttpException(403, 'Akses ditolak: Tugas khusus individu ini tidak ditujukan untuk Anda.');
+            }
+        } elseif ($task->target_scope === 'class') {
+            $student->loadMissing('activeClasses');
+            $activeClassIds = $student->activeClasses->pluck('id')->all();
+            if (! $task->class_id || ! in_array($task->class_id, $activeClassIds, true)) {
+                throw new HttpException(403, 'Akses ditolak: Tugas kelas ini berada di luar kelas aktif Anda.');
+            }
+        }
+
+        // P1-28: Validasi kepemilikan file_id untuk mencegah penautan file privat pengguna lain
+        if (! empty($data['file_id'])) {
+            $file = File::find($data['file_id']);
+            if (! $file) {
+                throw new HttpException(422, 'Berkas lampiran tidak ditemukan.');
+            }
+            if (! empty($file->school_id) && ! empty($student->school_id) && (string) $file->school_id !== (string) $student->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Berkas lampiran berasal dari sekolah lain.');
+            }
+            $ownsFile = (string) $file->owner_id === (string) $student->user_id
+                || (string) $file->owner_id === (string) $student->id;
+            if (! $ownsFile) {
+                throw new HttpException(403, 'Akses ditolak: Anda hanya dapat melampirkan berkas milik Anda sendiri.');
+            }
+        }
 
         // Normalize payload representation for idempotency mismatch detection
         $payloadHash = hash('sha256', json_encode([
@@ -295,6 +330,24 @@ class ProgramKhususService
             || $user->hasRole('admin_tu')
             || $user->can('program.manage');
 
+        // P1-28: Isolasi school_id untuk non-super_admin terhadap kelas & siswa sasaran
+        if ($classId !== null) {
+            $targetClass = SchoolClass::find($classId);
+            if ($targetClass && ! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($targetClass->school_id) && (string) $targetClass->school_id !== (string) $user->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Kelas sasaran berada di luar sekolah penugasan Anda.');
+            }
+        }
+
+        if ($studentId !== null) {
+            $targetStudent = Student::with('activeClasses')->find($studentId);
+            if (! $targetStudent) {
+                throw new HttpException(404, 'Data siswa sasaran tidak ditemukan.');
+            }
+            if (! $user->hasRole('super_admin') && ! empty($user->school_id) && ! empty($targetStudent->school_id) && (string) $targetStudent->school_id !== (string) $user->school_id) {
+                throw new HttpException(403, 'Akses ditolak: Siswa sasaran berada di luar sekolah penugasan Anda.');
+            }
+        }
+
         if ($isPrivileged) {
             return true;
         }
@@ -316,21 +369,13 @@ class ProgramKhususService
             }
         }
 
-        // 2. Jika studentId ditentukan
+        // 2. Jika studentId ditentukan (P1-28: gunakan hanya activeClasses dengan left_at IS NULL)
         if ($studentId !== null) {
-            $student = Student::with('classes')->find($studentId);
-            if (! $student) {
-                throw new HttpException(404, 'Data siswa sasaran tidak ditemukan.');
-            }
-
-            $studentClassIds = $student->classes->pluck('id')->filter()->toArray();
-            if ($student->class_id) {
-                $studentClassIds[] = $student->class_id;
-            }
+            $studentClassIds = $targetStudent->activeClasses->pluck('id')->filter()->toArray();
 
             $hasOverlap = ! empty(array_intersect($studentClassIds, $allTaughtClassIds));
             if (! $hasOverlap) {
-                throw new HttpException(403, 'Akses ditolak: Siswa ini berada di luar cakupan kelas binaan Anda.');
+                throw new HttpException(403, 'Akses ditolak: Siswa ini berada di luar cakupan kelas aktif binaan Anda.');
             }
         }
 
@@ -434,6 +479,37 @@ class ProgramKhususService
         return $query->paginate($perPage);
     }
 
+    protected function assertRecordSchoolAccess(User $user, ?string $recordSchoolId): void
+    {
+        if ($user->hasRole('super_admin')) {
+            return;
+        }
+        if (! empty($user->school_id) && ! empty($recordSchoolId) && (string) $recordSchoolId !== (string) $user->school_id) {
+            throw new HttpException(403, 'Akses ditolak: Data program berada di luar sekolah penugasan Anda.');
+        }
+    }
+
+    protected function assertTeacherFileAccess(User $user, ?string $fileId): void
+    {
+        if (empty($fileId)) {
+            return;
+        }
+        $file = File::find($fileId);
+        if (! $file) {
+            throw new HttpException(422, 'Berkas lampiran tidak ditemukan.');
+        }
+        $this->assertRecordSchoolAccess($user, $file->school_id);
+        if ($user->hasRole(['super_admin', 'admin', 'admin_tu']) || $user->can('program.manage')) {
+            return;
+        }
+        $teacherId = $user->teacher?->id;
+        $ownsFile = (string) $file->owner_id === (string) $user->id
+            || ($teacherId !== null && (string) $file->owner_id === (string) $teacherId);
+        if (! $ownsFile) {
+            throw new HttpException(403, 'Akses ditolak: Anda hanya dapat menautkan berkas milik Anda sendiri.');
+        }
+    }
+
     /**
      * Guru/Admin: Tambah materi baru untuk program khusus.
      */
@@ -445,6 +521,7 @@ class ProgramKhususService
             $data['class_id'] ?? null,
             $data['assigned_student_id'] ?? null
         );
+        $this->assertTeacherFileAccess($user, $data['file_id'] ?? null);
 
         $material = ProgramMaterial::create([
             'school_id' => $user->school_id,
@@ -480,6 +557,7 @@ class ProgramKhususService
     public function updateMaterial(User $user, string $id, array $data, ?Request $request = null): ProgramMaterial
     {
         $material = ProgramMaterial::findOrFail($id);
+        $this->assertRecordSchoolAccess($user, $material->school_id);
 
         $this->ensureUserCanManageProgram(
             $user,
@@ -487,6 +565,7 @@ class ProgramKhususService
             $material->class_id,
             $material->assigned_student_id
         );
+        $this->assertTeacherFileAccess($user, $data['file_id'] ?? null);
 
         if (isset($data['class_id']) && $data['class_id'] !== $material->class_id) {
             $this->ensureUserCanManageProgram($user, $material->program_type, $data['class_id'], null);
@@ -515,6 +594,7 @@ class ProgramKhususService
     public function deleteMaterial(User $user, string $id, ?Request $request = null): bool
     {
         $material = ProgramMaterial::findOrFail($id);
+        $this->assertRecordSchoolAccess($user, $material->school_id);
 
         $this->ensureUserCanManageProgram(
             $user,
@@ -552,7 +632,7 @@ class ProgramKhususService
             $query->where(function ($q) use ($scope, $user) {
                 $q->where('set_by', $user->id);
                 if (! empty($scope['class_ids'])) {
-                    $q->orWhereHas('student.classes', function ($cq) use ($scope) {
+                    $q->orWhereHas('student.activeClasses', function ($cq) use ($scope) {
                         $cq->whereIn('classes.id', $scope['class_ids']);
                     });
                 }
@@ -641,6 +721,7 @@ class ProgramKhususService
     public function updateTarget(User $user, string $id, array $data, ?Request $request = null): ProgramTarget
     {
         $target = ProgramTarget::findOrFail($id);
+        $this->assertRecordSchoolAccess($user, $target->school_id);
 
         $this->ensureUserCanManageProgram(
             $user,
@@ -672,6 +753,7 @@ class ProgramKhususService
     public function deleteTarget(User $user, string $id, ?Request $request = null): bool
     {
         $target = ProgramTarget::findOrFail($id);
+        $this->assertRecordSchoolAccess($user, $target->school_id);
 
         $this->ensureUserCanManageProgram(
             $user,
@@ -758,6 +840,7 @@ class ProgramKhususService
             $data['class_id'] ?? null,
             $data['assigned_student_id'] ?? null
         );
+        $this->assertTeacherFileAccess($user, $data['file_id'] ?? null);
 
         $task = ProgramTask::create([
             'school_id' => $user->school_id,
@@ -792,6 +875,8 @@ class ProgramKhususService
     public function updateTask(User $user, string $id, array $data, ?Request $request = null): ProgramTask
     {
         $task = ProgramTask::findOrFail($id);
+        $this->assertRecordSchoolAccess($user, $task->school_id);
+        $this->assertTeacherFileAccess($user, $data['file_id'] ?? null);
 
         $this->ensureUserCanManageProgram(
             $user,
@@ -827,6 +912,7 @@ class ProgramKhususService
     public function deleteTask(User $user, string $id, ?Request $request = null): bool
     {
         $task = ProgramTask::findOrFail($id);
+        $this->assertRecordSchoolAccess($user, $task->school_id);
 
         $this->ensureUserCanManageProgram(
             $user,
@@ -857,6 +943,7 @@ class ProgramKhususService
     public function listSubmissionsForTask(User $user, string $taskId, array $filters = []): LengthAwarePaginator
     {
         $task = ProgramTask::findOrFail($taskId);
+        $this->assertRecordSchoolAccess($user, $task->school_id);
 
         $this->ensureUserCanManageProgram(
             $user,
@@ -884,6 +971,7 @@ class ProgramKhususService
     public function gradeSubmission(User $user, string $submissionId, array $data, ?Request $request = null): ProgramTaskSubmission
     {
         $submission = ProgramTaskSubmission::with(['task'])->findOrFail($submissionId);
+        $this->assertRecordSchoolAccess($user, $submission->task?->school_id);
 
         $this->ensureUserCanManageProgram(
             $user,

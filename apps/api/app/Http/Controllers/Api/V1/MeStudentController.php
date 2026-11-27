@@ -50,10 +50,10 @@ class MeStudentController extends Controller
      */
     protected function resolveProgramType(Student $student): string
     {
-        $student->loadMissing('classes');
+        $student->loadMissing('activeClasses');
 
         $studentProg = $student->program_type;
-        $classProg = $student->classes->first()?->program_type;
+        $classProg = $student->activeClasses->first()?->program_type;
 
         if (empty($studentProg) || ($studentProg === 'reguler' && in_array($classProg, ['tahfidz', 'icp', 'inklusi'], true))) {
             return $classProg ?? 'reguler';
@@ -176,11 +176,17 @@ class MeStudentController extends Controller
         }
 
         $meta = $profile->meta_data ?? [];
-        $meta['daily_mood'] = [
+        $todayKey = now()->toDateString();
+        $moodEntry = [
             'mood' => $validated['mood'],
             'note' => $validated['note'] ?? null,
+            'date' => $todayKey,
             'timestamp' => now()->toISOString(),
         ];
+        $meta['daily_mood'] = $moodEntry;
+        $history = is_array($meta['daily_mood_history'] ?? null) ? $meta['daily_mood_history'] : [];
+        $history[$todayKey] = $moodEntry;
+        $meta['daily_mood_history'] = $history;
         $profile->meta_data = $meta;
         $profile->save();
 
@@ -224,13 +230,19 @@ class MeStudentController extends Controller
         }
 
         $meta = $profile->meta_data ?? [];
-        $meta['mutabaah_today'] = [
+        $todayKey = now()->toDateString();
+        $mutabaahEntry = [
             'sholat_fardhu' => (int) $validated['sholat_fardhu'],
             'tilawah_pages' => (int) $validated['tilawah_pages'],
             'dhuha' => (bool) $validated['dhuha'],
             'tahajud' => (bool) $validated['tahajud'],
+            'date' => $todayKey,
             'updated_at' => now()->toISOString(),
         ];
+        $meta['mutabaah_today'] = $mutabaahEntry;
+        $history = is_array($meta['mutabaah_history'] ?? null) ? $meta['mutabaah_history'] : [];
+        $history[$todayKey] = $mutabaahEntry;
+        $meta['mutabaah_history'] = $history;
         $profile->meta_data = $meta;
         $profile->save();
 
