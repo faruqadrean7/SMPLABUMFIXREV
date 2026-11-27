@@ -105,14 +105,23 @@ flowchart TD
 11. **Bebas 2FA / Autentikasi Dua Faktor Dinonaktifkan**: Sesuai instruksi pengguna, 2FA (TOTP/MFA) dinonaktifkan di seluruh sistem. Login admin, staf, dan civitas langsung menggunakan kredensial (username/email dan kata sandi) tanpa tantangan atau kewajiban aktivasi 2FA.
 
 ## 7. Git & Rilis
+
 | Aturan | Nilai |
 |---|---|
-| Branch | `feat/<ID>-<slug>`, `fix/<slug>`, `chore/<slug>` dari `develop` |
+| Branch kerja | `develop` adalah jalur integrasi utama |
+| Branch fitur | `feat/<ID>-<slug>`, `fix/<slug>`, `chore/<slug>` — **opsional**, dipakai untuk perubahan besar atau berisiko |
 | Commit | Conventional Commits: `feat(be-ppdb-03): tambah simpan draf form bertahap` |
-| PR | Judul memuat ID fitur; isi: tujuan, AC yang dipenuhi, perubahan DB/API, cara uji, risiko, checklist DoD |
+| Push ke `develop` | **Diizinkan** untuk kolaborator (Erik, Hermes). CI wajib hijau sebelum dianggap selesai |
+| Push ke `main` | **Dilarang langsung**. `main` hanya diisi lewat Pull Request dari `develop` |
+| PR | Judul memuat ID fitur; isi: tujuan, AC yang dipenuhi, perubahan DB/API, cara uji, risiko, checklist DoD (template: `.github/pull_request_template.md`) |
 | Ukuran PR | Idealnya < 500 baris perubahan bermakna |
-| Dilarang | Push langsung ke `main`/`develop`, `--force` pada branch bersama, commit file `.env`, commit hasil build |
+| Dilarang | Push langsung ke `main`, `--force` pada branch bersama, commit file `.env`, commit hasil build |
 | Merge | Setelah CI hijau + review manusia |
+
+Catatan: aturan lama melarang push ke `develop`, tetapi dalam praktik pemilik repo dan agen
+memang push ke sana. Aturan disesuaikan agar konsisten dan tidak memblokir kolaborator.
+Alur lengkap: `docs/ALUR_GIT_KOLABORATOR.md`.
+
 
 ## 8. Hal yang HARUS Ditanyakan, Bukan Diputuskan Sendiri
 - Rumus seleksi PPDB, aturan nilai/rapor, bobot poin, ambang peringatan dini (datang dari sekolah).
