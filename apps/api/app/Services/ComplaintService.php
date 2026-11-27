@@ -261,13 +261,13 @@ class ComplaintService
             $complaint->reporter_user_id = null;
         }
 
-        // AC5: Sertakan signed URL berumur pendek (<= 5 menit) dan catat audit baca
+        // AC5 & P1-09: Sertakan signed URL berumur pendek (<= 5 menit) + uid bertanda tangan untuk atribusi audit unduhan
         if ($complaint->attachments->isNotEmpty()) {
-            $complaint->attachments->each(function (File $file) {
+            $complaint->attachments->each(function (File $file) use ($currentUser) {
                 $signedUrl = URL::temporarySignedRoute(
                     'files.download.signed',
                     Carbon::now()->addSeconds(300),
-                    ['id' => $file->id]
+                    ['id' => $file->id, 'uid' => $currentUser->id]
                 );
                 $file->setAttribute('signed_url', $signedUrl);
                 $file->setAttribute('expires_at', Carbon::now()->addSeconds(300)->toIso8601String());

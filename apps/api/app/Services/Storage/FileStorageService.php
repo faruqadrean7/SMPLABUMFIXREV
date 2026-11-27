@@ -303,7 +303,7 @@ class FileStorageService
             $signedUrl = URL::temporarySignedRoute(
                 'files.download.signed',
                 Carbon::now()->addSeconds($ttlSeconds),
-                ['id' => $file->id]
+                ['id' => $file->id, 'uid' => $user->id]
             );
 
             return [
@@ -350,12 +350,17 @@ class FileStorageService
         $disposition = $request->query('disposition', 'inline');
         $filename = basename($file->object_key);
 
-        // BE-GUEST-04: Catat audit_logs setiap kali berkas lampiran pengaduan diunduh/dibuka
+        // BE-GUEST-04 & P1-09: Catat audit_logs setiap kali berkas lampiran pengaduan diunduh/dibuka
+        // dengan atribusi actor_id yang sah (user terautentikasi atau parameter uid bertanda tangan)
         if ($file->owner_type === 'complaint') {
+            $rawSignedUid = $request->query('uid');
+            $actorId = $request->user()?->id
+                ?? (is_string($rawSignedUid) && Str::isUuid($rawSignedUid) ? $rawSignedUid : null);
+
             try {
                 AuditLog::create([
                     'school_id' => $file->school_id,
-                    'actor_id' => $request->user()?->id,
+                    'actor_id' => $actorId,
                     'action' => 'complaint.attachment.downloaded',
                     'entity' => 'File',
                     'entity_id' => $file->id,

@@ -411,7 +411,7 @@ class TeacherHomeroomController extends Controller
                         'entity' => 'StudentPoint',
                         'entity_id' => $point->id,
                         'new_values' => $point->toArray(),
-                        'ip_address' => $request->ip(),
+                        'ip' => $request->ip(),
                         'user_agent' => $request->userAgent(),
                         'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
                     ]);
@@ -462,7 +462,7 @@ class TeacherHomeroomController extends Controller
                     'entity' => 'StudentPoint',
                     'entity_id' => $point->id,
                     'new_values' => $point->toArray(),
-                    'ip_address' => $request->ip(),
+                    'ip' => $request->ip(),
                     'user_agent' => $request->userAgent(),
                     'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
                 ]);
@@ -585,7 +585,7 @@ class TeacherHomeroomController extends Controller
                     'status' => $ref->status,
                     'reason' => '[REDACTED_CONFIDENTIAL_BK]',
                 ],
-                'ip_address' => $request->ip(),
+                'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
             ]);
@@ -729,7 +729,7 @@ class TeacherHomeroomController extends Controller
                 'entity' => 'Booking',
                 'entity_id' => $b->id,
                 'new_values' => $b->toArray(),
-                'ip_address' => $request->ip(),
+                'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
             ]);
@@ -827,7 +827,7 @@ class TeacherHomeroomController extends Controller
                 'entity' => 'Ticket',
                 'entity_id' => $t->id,
                 'new_values' => $t->toArray(),
-                'ip_address' => $request->ip(),
+                'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
             ]);

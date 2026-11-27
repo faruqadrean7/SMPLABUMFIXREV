@@ -197,7 +197,7 @@ class PPDBVerificationService
                 'entity_id' => $entityId,
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
-                'ip_address' => $request->ip(),
+                'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
             ]);
         } catch (\Throwable $e) {

@@ -220,7 +220,7 @@ class PPDBEnrollmentService
             $photoDoc = $applicant->documents()
                 ->where(function ($q) {
                     $q->whereIn('document_type', ['foto', 'pas_foto', 'photo', 'foto_siswa', 'FOTO', 'PAS_FOTO', 'PHOTO', 'FOTO_SISWA'])
-                      ->orWhereRaw("LOWER(document_type) IN ('foto', 'pas_foto', 'photo', 'foto_siswa', 'pasfoto')");
+                        ->orWhereRaw("LOWER(document_type) IN ('foto', 'pas_foto', 'photo', 'foto_siswa', 'pasfoto')");
                 })
                 ->first();
             $photoFileId = $photoDoc?->file_id;
@@ -397,7 +397,7 @@ class PPDBEnrollmentService
                 'entity_id' => $entityId,
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
-                'ip_address' => $request->ip(),
+                'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
             ]);
         } catch (\Throwable $e) {

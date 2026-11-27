@@ -11,6 +11,7 @@ use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Models\Student;
 use App\Models\TeachingAssignment;
+use App\Services\GradeRecorder;
 use App\Traits\ApiResponse;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -334,7 +335,7 @@ class TeacherGradingController extends Controller
                             }
                             // Nilai manual tidak boleh menurunkan nilai otomatis yang
                             // lebih tinggi (kebijakan nilai tertinggi menang).
-                            app(\App\Services\GradeRecorder::class)->recordManual(
+                            app(GradeRecorder::class)->recordManual(
                                 studentId: $studentId,
                                 componentId: $componentId,
                                 periodId: $period->id,
@@ -430,7 +431,7 @@ class TeacherGradingController extends Controller
                     'locked_count' => $count,
                     'locked_at' => $now->toIso8601String(),
                 ],
-                'ip_address' => $request->ip(),
+                'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
             ]);
