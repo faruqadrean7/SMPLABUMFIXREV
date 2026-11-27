@@ -332,11 +332,13 @@ export default function StudentCbtPlayerPage() {
     return () => window.removeEventListener('online', handleOnline);
   }, [flushPendingOfflineData]);
 
-  // Force Submit saat waktu server habis (pastikan antrean offline di-flush lebih dulu)
+  // Force Submit saat waktu server habis (P0-13: batalkan debounce tertunda lalu flush antrean offline lebih dulu)
   const handleForceSubmitTimeout = useCallback(async () => {
     if (isFinishedRef.current) return;
     setIsSubmitting(true);
     try {
+      Object.values(textSaveTimersRef.current).forEach((t) => clearTimeout(t));
+      textSaveTimersRef.current = {};
       await flushPendingOfflineData();
       await cbtApi.finishStudentSession(examId);
       clearOfflineQueues();
@@ -347,6 +349,14 @@ export default function StudentCbtPlayerPage() {
       setIsFinished(true);
     }
   }, [examId, clearOfflineQueues, flushPendingOfflineData]);
+
+  // P0-13: Bersihkan seluruh debounce timer teks saat komponen unmount
+  useEffect(() => {
+    return () => {
+      Object.values(textSaveTimersRef.current).forEach((t) => clearTimeout(t));
+      textSaveTimersRef.current = {};
+    };
+  }, []);
 
   // Load Session Questions & Server State
   useEffect(() => {
@@ -727,6 +737,11 @@ export default function StudentCbtPlayerPage() {
 
   // Save Answer to Server with Offline Queue & Optional Debounce (untuk isian/uraian)
   const persistAnswerToServer = async (questionId: string, answerValue: any, timestamp: number, idempotencyKey: string) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setAutosaveStatus('error');
+      return;
+    }
+
     try {
       await cbtApi.saveStudentAnswer(examId, {
         question_id: questionId,
@@ -793,6 +808,23 @@ export default function StudentCbtPlayerPage() {
     }
 
     await persistAnswerToServer(questionId, answerValue, timestamp, idempotencyKey);
+  };
+
+  // P0-13: Flush segera jawaban teks yang masih menunggu debounce saat blur dari input/textarea
+  const flushDebouncedTextAnswer = (questionId: string) => {
+    if (!textSaveTimersRef.current[questionId]) return;
+    clearTimeout(textSaveTimersRef.current[questionId]);
+    delete textSaveTimersRef.current[questionId];
+
+    const storedQueue = readStoredAnswers();
+    const storedMeta = readStoredAnswersMeta();
+    const pendingVal = storedQueue[questionId] ?? answers[questionId];
+    const meta = storedMeta[questionId];
+    if (pendingVal !== undefined) {
+      const ts = meta?.timestamp ?? Date.now();
+      const key = meta?.idempotency_key ?? `${questionId}_${ts}_blur`;
+      persistAnswerToServer(questionId, pendingVal, ts, key);
+    }
   };
 
   // Toggle Doubt (Ragu-ragu)
@@ -1415,6 +1447,7 @@ export default function StudentCbtPlayerPage() {
                       <Input
                         value={typeof answers[currentQ.question_id] === 'object' ? (answers[currentQ.question_id]?.text ?? '') : (answers[currentQ.question_id] || '')}
                         onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value }, 800)}
+                        onBlur={() => flushDebouncedTextAnswer(currentQ.question_id)}
                         placeholder="Ketikkan jawaban Anda di sini..."
                         className="text-xs h-10 max-w-md"
                       />
@@ -1431,6 +1464,7 @@ export default function StudentCbtPlayerPage() {
                         rows={6}
                         value={typeof answers[currentQ.question_id] === 'object' ? (answers[currentQ.question_id]?.text ?? '') : (answers[currentQ.question_id] || '')}
                         onChange={(e) => handleAnswerChange(currentQ.question_id, { text: e.target.value }, 800)}
+                        onBlur={() => flushDebouncedTextAnswer(currentQ.question_id)}
                         placeholder="Tuliskan penjelasan dan argumen jawaban Anda di sini..."
                         className="text-xs leading-relaxed"
                       />

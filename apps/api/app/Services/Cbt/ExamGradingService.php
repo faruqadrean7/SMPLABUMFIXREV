@@ -11,12 +11,13 @@ use App\Models\ExamQuestion;
 use App\Models\ExamRoom;
 use App\Models\ExamSession;
 use App\Models\Grade;
-use App\Services\GradeRecorder;
 use App\Models\GradeComponent;
 use App\Models\GradePeriod;
 use App\Models\Question;
+use App\Models\Room;
 use App\Models\User;
 use App\Services\Concerns\GuardsExamOwnership;
+use App\Services\GradeRecorder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -199,9 +200,8 @@ class ExamGradingService
         $answer->graded_by = $request->user()?->id;
         $answer->save();
 
-        // Refresh total score sesi siswa
-        $examQuestions = ExamQuestion::where('exam_id', $exam->id)->get()->keyBy('question_id');
-        $this->refreshSessionTotalScore($answer->session, $examQuestions);
+        // P0-12: Refresh total score sesi siswa sesuai paket soal peserta (hindari N+1 & pembagi lintas paket)
+        $this->refreshSessionTotalScore($answer->session);
 
         $this->logAudit(
             $request->user()?->id,
@@ -242,14 +242,20 @@ class ExamGradingService
         $sessions = $query->get();
         $passingGrade = (float) ($exam->passing_grade ?? 75.0);
 
-        $essayQuestionIds = ExamQuestion::where('exam_id', $exam->id)
+        $essayExamQuestions = ExamQuestion::where('exam_id', $exam->id)
             ->whereHas('question', fn ($qq) => $qq->where('question_type', 'uraian'))
-            ->pluck('question_id')
-            ->all();
+            ->get(['question_id', 'package_code']);
+        $participantPackages = ExamParticipant::where('exam_id', $exam->id)
+            ->pluck('package_code', 'student_id');
 
-        $results = $sessions->map(function ($s) use ($passingGrade, $essayQuestionIds) {
+        $results = $sessions->map(function ($s) use ($passingGrade, $essayExamQuestions, $participantPackages) {
             $score = $s->score !== null ? (float) $s->score : null;
             $isPassed = $score !== null && $score >= $passingGrade;
+
+            $pkgCode = $participantPackages->get($s->student_id);
+            $essayQuestionIds = $this->filterQuestionsForPackage($essayExamQuestions, $pkgCode)
+                ->pluck('question_id')
+                ->all();
 
             $ungradedEssaysCount = 0;
             if (! empty($essayQuestionIds)) {
@@ -841,7 +847,7 @@ class ExamGradingService
             }
 
             $firstRoom = $parentExam->rooms->first();
-            $fallbackRoomId = $firstRoom?->room_id ?? \App\Models\Room::value('id');
+            $fallbackRoomId = $firstRoom?->room_id ?? Room::value('id');
             if (! $fallbackRoomId) {
                 throw new HttpException(422, 'Ujian induk belum memiliki ruangan ujian dan belum ada data ruangan di sistem.');
             }
