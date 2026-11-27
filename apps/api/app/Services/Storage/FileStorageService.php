@@ -103,9 +103,14 @@ class FileStorageService
 
     /**
      * BE-FILE-01: Direct upload target for signed URL uploads.
+     * Wajib memverifikasi tanda tangan URL (hasValidSignature) dan magic bytes konten fisik.
      */
     public function uploadSigned(string $token, Request $request): array
     {
+        if (! $request->hasValidSignature()) {
+            throw new HttpException(403, 'Tautan unggahan bertanda tangan tidak valid atau sudah kedaluwarsa.');
+        }
+
         $cacheData = Cache::get('file_presign:'.$token);
         if (! $cacheData) {
             throw new HttpException(410, 'Sesi presign upload telah kedaluwarsa atau tidak valid.');
@@ -116,11 +121,8 @@ class FileStorageService
 
         if ($request->hasFile('file')) {
             $uploadedFile = $request->file('file');
-            $size = $uploadedFile->getSize();
             $content = file_get_contents($uploadedFile->getRealPath());
-            if ($size > 0 && empty($content)) {
-                $content = str_repeat('X', $size);
-            }
+            $size = $content !== false ? strlen($content) : 0;
         } else {
             $content = $request->getContent();
             $size = strlen($content);
@@ -139,6 +141,9 @@ class FileStorageService
         if (($cacheData['purpose'] ?? null) === 'avatar' && $size > 2097152) {
             throw new HttpException(422, 'Ukuran fisik berkas foto profil melebihi batas maksimum 2 MB.');
         }
+
+        // Validasi magic bytes & MIME aktual konten fisik (anti-SVG/XSS/PHP/spoofing)
+        $this->validateUploadedContentMagicBytes($content, (string) ($cacheData['mime_type'] ?? ''));
 
         $disk = $cacheData['visibility'] === 'publik' ? 'public' : 'local';
         Storage::disk($disk)->put($cacheData['object_key'], $content);
@@ -161,7 +166,68 @@ class FileStorageService
     }
 
     /**
+     * Validasi magic bytes & deteksi MIME aktual via finfo untuk mencegah upload berbahaya / spoofing.
+     */
+    protected function validateUploadedContentMagicBytes(string $content, string $declaredMime): void
+    {
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $detectedMime = strtolower((string) $finfo->buffer($content));
+        $declared = strtolower(trim($declaredMime));
+
+        $dangerousDetectedMimes = [
+            'text/x-php',
+            'application/x-httpd-php',
+            'application/x-php',
+            'text/html',
+            'application/xhtml+xml',
+            'image/svg+xml',
+            'text/svg+xml',
+            'application/javascript',
+            'text/javascript',
+            'application/x-dosexec',
+            'application/x-executable',
+            'application/x-sharedlib',
+            'application/x-shellscript',
+            'text/x-shellscript',
+        ];
+
+        if (in_array($detectedMime, $dangerousDetectedMimes, true)) {
+            throw new HttpException(422, 'Konten berkas fisik terdeteksi sebagai format berbahaya dan ditolak demi keamanan.');
+        }
+
+        // Cek tanda tangan skrip/SVG tertanam pada awal konten
+        $headSample = strtolower(substr($content, 0, 2048));
+        if (str_contains($headSample, '<?php') || preg_match('/<\s*svg\b/i', $headSample) === 1 || preg_match('/<\s*script\b/i', $headSample) === 1) {
+            throw new HttpException(422, 'Konten berkas mengandung skrip atau SVG berbahaya dan ditolak.');
+        }
+
+        // Validasi magic bytes spesifik untuk gambar & PDF yang dideklarasikan
+        if ($declared === 'image/jpeg') {
+            if (! str_starts_with($content, "\xFF\xD8\xFF")) {
+                throw new HttpException(422, 'Konten berkas tidak sesuai dengan format gambar JPEG yang sah.');
+            }
+        } elseif ($declared === 'image/png') {
+            if (! str_starts_with($content, "\x89PNG\r\n\x1a\n")) {
+                throw new HttpException(422, 'Konten berkas tidak sesuai dengan format gambar PNG yang sah.');
+            }
+        } elseif ($declared === 'image/webp') {
+            if (! (str_starts_with($content, 'RIFF') && substr($content, 8, 4) === 'WEBP')) {
+                throw new HttpException(422, 'Konten berkas tidak sesuai dengan format gambar WebP yang sah.');
+            }
+        } elseif ($declared === 'image/gif') {
+            if (! (str_starts_with($content, 'GIF87a') || str_starts_with($content, 'GIF89a'))) {
+                throw new HttpException(422, 'Konten berkas tidak sesuai dengan format gambar GIF yang sah.');
+            }
+        } elseif ($declared === 'application/pdf') {
+            if (! str_starts_with(ltrim($content), '%PDF-')) {
+                throw new HttpException(422, 'Konten berkas tidak sesuai dengan format dokumen PDF yang sah.');
+            }
+        }
+    }
+
+    /**
      * BE-FILE-01: Konfirmasi Keberhasilan Upload Berkas.
+     * Pemilik berkas (owner_id/owner_type) dikunci dari sesi presign server-side, bukan dari input klien.
      */
     public function confirmUpload(array $data, User $user): File
     {
@@ -172,6 +238,10 @@ class FileStorageService
             throw new HttpException(422, 'Token presign upload tidak valid atau telah kedaluwarsa.');
         }
 
+        if (! empty($cacheData['owner_id']) && (string) $cacheData['owner_id'] !== (string) $user->id) {
+            throw new HttpException(403, 'Akses ditolak: Sesi presign upload ini bukan milik akun Anda.');
+        }
+
         $disk = $cacheData['visibility'] === 'publik' ? 'public' : 'local';
 
         // Check if file exists in storage
@@ -179,10 +249,11 @@ class FileStorageService
             throw new HttpException(422, 'Berkas fisik belum diunggah ke penyimpanan storage.');
         }
 
+        // Keamanan P0-04: owner_id & owner_type dikunci dari sesi presign (abaikan spoofing input klien)
         $file = File::create([
             'school_id' => $cacheData['school_id'] ?? $user->school_id ?? null,
-            'owner_id' => $data['owner_id'] ?? $cacheData['owner_id'] ?? $user->id,
-            'owner_type' => $data['owner_type'] ?? $cacheData['owner_type'] ?? 'User',
+            'owner_id' => $cacheData['owner_id'] ?? $user->id,
+            'owner_type' => $cacheData['owner_type'] ?? 'User',
             'bucket' => $cacheData['bucket'],
             'object_key' => $cacheData['object_key'],
             'mime_type' => $cacheData['mime_type'],
@@ -300,9 +371,15 @@ class FileStorageService
             }
         }
 
+        $safeInlineMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
+        $resolvedDisposition = ($disposition === 'attachment' || ! in_array(strtolower((string) $file->mime_type), $safeInlineMimes, true))
+            ? 'attachment'
+            : 'inline';
+
         return Storage::disk($disk)->response($file->object_key, $filename, [
             'Content-Type' => $file->mime_type,
-            'Content-Disposition' => ($disposition === 'attachment' ? 'attachment' : 'inline').'; filename="'.$filename.'"',
+            'Content-Disposition' => $resolvedDisposition.'; filename="'.$filename.'"',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 

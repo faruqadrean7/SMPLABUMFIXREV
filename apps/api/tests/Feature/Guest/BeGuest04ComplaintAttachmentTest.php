@@ -134,10 +134,11 @@ class BeGuest04ComplaintAttachmentTest extends TestCase
             ->assertJsonStructure(['data' => ['token', 'upload_url', 'expires_at']]);
 
         $token = $presignRes->json('data.token');
+        $uploadUrl = $presignRes->json('data.upload_url');
 
-        // 2. Upload via signed upload route
+        // 2. Upload via signed upload route (memakai signed URL dari presign)
         $file = UploadedFile::fake()->createWithContent('bukti_kejadian.jpg', $imageBytes);
-        $uploadRes = $this->postJson("/api/v1/files/upload-signed/{$token}", [
+        $uploadRes = $this->post($uploadUrl, [
             'file' => $file,
         ]);
         $uploadRes->assertStatus(200);

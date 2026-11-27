@@ -207,8 +207,8 @@ class FileStorageTest extends TestCase
         $token = $presignRes->json('data.token');
         $uploadUrl = $presignRes->json('data.upload_url');
 
-        // 2. Direct Upload via Signed URL
-        $fakePdf = UploadedFile::fake()->createWithContent('sertifikat_juara.pdf', str_repeat('P', 10240));
+        // 2. Direct Upload via Signed URL (magic bytes PDF valid)
+        $fakePdf = UploadedFile::fake()->createWithContent('sertifikat_juara.pdf', "%PDF-1.4\n".str_repeat('P', 10231));
         $uploadRes = $this->post($uploadUrl, [
             'file' => $fakePdf,
         ]);
@@ -472,7 +472,7 @@ class FileStorageTest extends TestCase
         $token = $presignRes->json('data.token');
         $uploadUrl = $presignRes->json('data.upload_url');
 
-        $fakeImage = UploadedFile::fake()->create('pasfoto_resmi.jpg', 100, 'image/jpeg');
+        $fakeImage = UploadedFile::fake()->createWithContent('pasfoto_resmi.jpg', "\xFF\xD8\xFF\xE0\x00\x10JFIF".str_repeat("\x00", 1024));
         $uploadRes = $this->post($uploadUrl, [
             'file' => $fakeImage,
         ]);
