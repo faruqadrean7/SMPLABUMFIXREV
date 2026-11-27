@@ -23,13 +23,28 @@ class GuardianService
     public function listGuardians(Request $request): LengthAwarePaginator
     {
         $user = $request->user();
+        if (! $user) {
+            throw new HttpException(401, 'Sesi tidak valid atau telah berakhir.');
+        }
+
+        // Deny-by-default (P0-06): hanya pemilik master.student.read/write, super_admin, atau guardian (diri sendiri)
+        $canReadAll = $user->hasRole('super_admin')
+            || $user->hasPermission('master.student.read')
+            || $user->hasPermission('master.student.write');
+
+        $isGuardian = $user->hasRole('guardian');
+
+        if (! $canReadAll && ! $isGuardian) {
+            throw new HttpException(403, 'Anda tidak memiliki izin untuk melihat daftar wali murid.');
+        }
+
         $limit = min($request->integer('limit', 20), 100);
         $q = trim((string) $request->query('q', ''));
 
         $query = Guardian::withCount('students')->with(['user', 'students']);
 
-        // Scoping: If user is a guardian without master.student.read, they can only see themselves
-        if ($user && $user->hasRole('guardian') && ! $user->hasPermission('master.student.read')) {
+        // Scoping: guardian tanpa izin baca penuh hanya melihat data dirinya sendiri
+        if (! $canReadAll) {
             $query->where('user_id', $user->id);
         }
 
