@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\File;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -16,7 +17,7 @@ class OrphanFileService
 {
     /**
      * Peta referensi kanonis relasi tabel bisnis ke files.id
-     * Berdasarkan analisis skema migrasi SISTLABUM (32 relasi foreign key).
+     * Mencakup seluruh foreign key dan kolom UUID non-FK (Program Khusus, Schools, Finance, CBT Import).
      */
     public const CANONICAL_REFERENCES = [
         ['table' => 'achievements', 'column' => 'certificate_file_id'],
@@ -39,9 +40,15 @@ class OrphanFileService
         ['table' => 'library_books', 'column' => 'file_id'],
         ['table' => 'media_items', 'column' => 'file_id'],
         ['table' => 'partnerships', 'column' => 'mou_file_id'],
+        ['table' => 'payments', 'column' => 'proof_file_id'],
         ['table' => 'posts', 'column' => 'cover_file_id'],
+        ['table' => 'program_materials', 'column' => 'file_id'],
+        ['table' => 'program_task_submissions', 'column' => 'file_id'],
+        ['table' => 'program_tasks', 'column' => 'file_id'],
         ['table' => 'progress_reports', 'column' => 'file_id'],
+        ['table' => 'question_import_jobs', 'column' => 'source_file_id'],
         ['table' => 'report_cards', 'column' => 'file_id'],
+        ['table' => 'schools', 'column' => 'logo_file_id'],
         ['table' => 'staff_attendances', 'column' => 'photo_file_id'],
         ['table' => 'student_points', 'column' => 'evidence_file_id'],
         ['table' => 'students', 'column' => 'photo_file_id'],
@@ -51,6 +58,13 @@ class OrphanFileService
         ['table' => 'ticket_events', 'column' => 'file_id'],
         ['table' => 'tickets', 'column' => 'photo_file_id'],
         ['table' => 'trips', 'column' => 'guide_file_id'],
+    ];
+
+    /**
+     * Peta relasi polimorfik berdasarkan files.owner_type -> tabel pemilik.
+     */
+    public const POLYMORPHIC_REFERENCES = [
+        'complaint' => ['table' => 'complaints', 'column' => 'id'],
     ];
 
     /**
@@ -98,10 +112,11 @@ class OrphanFileService
     }
 
     /**
-     * Periksa apakah suatu berkas sedang direferensikan oleh entitas mana pun.
-     * Mengembalikan array [referenced => bool, references => string[]].
+     * Periksa apakah suatu berkas sedang direferensikan oleh entitas mana pun
+     * (FK kanonis, kolom UUID non-FK, relasi polimorfik owner_type, serta referensi URL di site_settings/CMS).
+     * Mengembalikan array [is_referenced => bool, references => string[]].
      */
-    public function checkFileReferences(string $fileId, ?array $referenceMap = null): array
+    public function checkFileReferences(string $fileId, ?array $referenceMap = null, ?File $fileModel = null): array
     {
         $referenceMap = $referenceMap ?? $this->discoverAllFileReferences();
         $matched = [];
@@ -126,6 +141,14 @@ class OrphanFileService
             }
         }
 
+        // Cek relasi polimorfik & referensi URL string pada site_settings/CMS
+        $file = $fileModel ?? File::find($fileId);
+        if ($file) {
+            foreach ($this->checkPolymorphicAndUrlReferences($file) as $extraRef) {
+                $matched[] = $extraRef;
+            }
+        }
+
         return [
             'is_referenced' => count($matched) > 0,
             'references' => $matched,
@@ -133,7 +156,80 @@ class OrphanFileService
     }
 
     /**
+     * Periksa referensi polimorfik (mis. files.owner_type = 'complaint') dan referensi URL/UUID pada site_settings & konten CMS.
+     *
+     * @return string[]
+     */
+    protected function checkPolymorphicAndUrlReferences(File $file): array
+    {
+        $matched = [];
+
+        // 1. Relasi polimorfik (contoh: Complaint::attachments via owner_type = 'complaint')
+        $ownerType = $file->owner_type;
+        if ($ownerType && isset(self::POLYMORPHIC_REFERENCES[$ownerType]) && $file->owner_id) {
+            $poly = self::POLYMORPHIC_REFERENCES[$ownerType];
+            try {
+                if (Schema::hasTable($poly['table'])) {
+                    $exists = DB::table($poly['table'])
+                        ->where($poly['column'], $file->owner_id)
+                        ->exists();
+                    if ($exists) {
+                        $matched[] = "{$poly['table']}.polymorphic({$ownerType})";
+                    }
+                }
+            } catch (Throwable $e) {
+                Log::error("Gagal memeriksa referensi polimorfik {$ownerType} untuk file {$file->id}: ".$e->getMessage());
+                $matched[] = "{$poly['table']}.polymorphic({$ownerType}) (ERROR_ASSUMED_REFERENCED)";
+            }
+        }
+
+        // 2. Referensi URL atau UUID di site_settings.setting_value (logo_url, favicon_url, principal_photo_url, dll.)
+        try {
+            if (Schema::hasTable('site_settings')) {
+                $objectKey = (string) ($file->object_key ?? '');
+                $fileId = (string) $file->id;
+                $settingsValues = DB::table('site_settings')->pluck('setting_value');
+                foreach ($settingsValues as $rawVal) {
+                    $strVal = is_string($rawVal) ? $rawVal : (string) json_encode($rawVal);
+                    if (
+                        ($fileId !== '' && str_contains($strVal, $fileId))
+                        || ($objectKey !== '' && str_contains($strVal, $objectKey))
+                    ) {
+                        $matched[] = 'site_settings.setting_value';
+                        break;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            Log::error("Gagal memeriksa referensi site_settings untuk file {$file->id}: ".$e->getMessage());
+            $matched[] = 'site_settings.setting_value (ERROR_ASSUMED_REFERENCED)';
+        }
+
+        // 3. Referensi object_key tertanam di konten CMS publik (posts.content, pages.content)
+        if (($file->visibility === 'publik' || $file->visibility === 'public') && ! empty($file->object_key)) {
+            foreach (['posts', 'pages'] as $cmsTable) {
+                try {
+                    if (Schema::hasTable($cmsTable) && Schema::hasColumn($cmsTable, 'content')) {
+                        $embedded = DB::table($cmsTable)
+                            ->where('content', 'like', '%'.$file->object_key.'%')
+                            ->exists();
+                        if ($embedded) {
+                            $matched[] = "{$cmsTable}.content(embedded_url)";
+                        }
+                    }
+                } catch (Throwable $e) {
+                    Log::error("Gagal memeriksa referensi {$cmsTable}.content untuk file {$file->id}: ".$e->getMessage());
+                    $matched[] = "{$cmsTable}.content (ERROR_ASSUMED_REFERENCED)";
+                }
+            }
+        }
+
+        return $matched;
+    }
+
+    /**
      * Pindai seluruh kandidat berkas yatim dengan ambang batas usia (default 24 jam).
+     * Menggunakan batch WHERE IN per tabel referensi agar terhindar dari N+1 query.
      */
     public function scanOrphans(int $hoursThreshold = 24, int $limit = 500): array
     {
@@ -149,18 +245,21 @@ class OrphanFileService
             ->limit($limit)
             ->get();
 
+        // 3. Kumpulkan seluruh referensi aktif dalam mode batch (1 query per tabel, bukan N*M)
+        $batchRefMap = $this->buildBatchReferenceMap($candidates, $referenceMap);
+
         $activeReferenced = [];
         $orphanCandidates = [];
         $totalBytesOrphan = 0;
 
         foreach ($candidates as $file) {
-            $check = $this->checkFileReferences($file->id, $referenceMap);
+            $refs = $batchRefMap[(string) $file->id] ?? [];
 
-            if ($check['is_referenced']) {
+            if (! empty($refs)) {
                 $activeReferenced[] = [
                     'id' => $file->id,
                     'created_at' => $file->created_at?->toIso8601String(),
-                    'references' => $check['references'],
+                    'references' => $refs,
                 ];
             } else {
                 $disk = ($file->visibility === 'publik' || $file->visibility === 'public') ? 'public' : 'local';
@@ -190,8 +289,147 @@ class OrphanFileService
             'orphan_candidates_count' => count($orphanCandidates),
             'total_orphan_bytes' => $totalBytesOrphan,
             'orphan_candidates' => $orphanCandidates,
-            'reference_targets_checked_count' => count($referenceMap),
+            'reference_targets_checked_count' => count($referenceMap) + count(self::POLYMORPHIC_REFERENCES),
         ];
+    }
+
+    /**
+     * Bangun peta [file_id => string[] references] secara batch untuk seluruh kandidat.
+     *
+     * @param  Collection<int, File>  $candidates
+     * @return array<string, string[]>
+     */
+    protected function buildBatchReferenceMap($candidates, array $referenceMap): array
+    {
+        $map = [];
+        if ($candidates->isEmpty()) {
+            return $map;
+        }
+
+        $candidateIds = $candidates->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+        // 1. Batch query kolom referensi tabel (1 query WHERE IN per tabel.kolom)
+        foreach ($referenceMap as $ref) {
+            $table = $ref['table'];
+            $column = $ref['column'];
+
+            try {
+                if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $column)) {
+                    continue;
+                }
+
+                $foundIds = DB::table($table)
+                    ->whereIn($column, $candidateIds)
+                    ->distinct()
+                    ->pluck($column);
+
+                foreach ($foundIds as $foundId) {
+                    if ($foundId !== null) {
+                        $map[(string) $foundId][] = "{$table}.{$column}";
+                    }
+                }
+            } catch (Throwable $e) {
+                // Pendekatan konservatif: bila gagal cek tabel, tandai semua kandidat sebagai berpotensi aktif
+                Log::error("Gagal batch-check referensi pada {$table}.{$column}: ".$e->getMessage());
+                foreach ($candidateIds as $cid) {
+                    $map[$cid][] = "{$table}.{$column} (ERROR_ASSUMED_REFERENCED)";
+                }
+            }
+        }
+
+        // 2. Batch query relasi polimorfik (files.owner_type = 'complaint', dst.)
+        foreach (self::POLYMORPHIC_REFERENCES as $ownerType => $poly) {
+            $polyCandidates = $candidates->filter(
+                fn (File $f) => $f->owner_type === $ownerType && ! empty($f->owner_id)
+            );
+            if ($polyCandidates->isEmpty()) {
+                continue;
+            }
+
+            $ownerIds = $polyCandidates->pluck('owner_id')->map(fn ($id) => (string) $id)->unique()->values()->all();
+
+            try {
+                if (Schema::hasTable($poly['table'])) {
+                    $existingOwners = DB::table($poly['table'])
+                        ->whereIn($poly['column'], $ownerIds)
+                        ->pluck($poly['column'])
+                        ->map(fn ($id) => (string) $id)
+                        ->flip();
+
+                    foreach ($polyCandidates as $f) {
+                        if ($existingOwners->has((string) $f->owner_id)) {
+                            $map[(string) $f->id][] = "{$poly['table']}.polymorphic({$ownerType})";
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                Log::error("Gagal batch-check referensi polimorfik {$ownerType}: ".$e->getMessage());
+                foreach ($polyCandidates as $f) {
+                    $map[(string) $f->id][] = "{$poly['table']}.polymorphic({$ownerType}) (ERROR_ASSUMED_REFERENCED)";
+                }
+            }
+        }
+
+        // 3. Batch check referensi URL/UUID di site_settings (1 query total)
+        try {
+            if (Schema::hasTable('site_settings')) {
+                $allSettingsBlob = DB::table('site_settings')
+                    ->pluck('setting_value')
+                    ->map(fn ($v) => is_string($v) ? $v : (string) json_encode($v))
+                    ->implode("\n");
+
+                if ($allSettingsBlob !== '') {
+                    foreach ($candidates as $f) {
+                        $fid = (string) $f->id;
+                        $objKey = (string) ($f->object_key ?? '');
+                        if (
+                            ($fid !== '' && str_contains($allSettingsBlob, $fid))
+                            || ($objKey !== '' && str_contains($allSettingsBlob, $objKey))
+                        ) {
+                            $map[$fid][] = 'site_settings.setting_value';
+                        }
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            Log::error('Gagal batch-check referensi site_settings: '.$e->getMessage());
+            foreach ($candidateIds as $cid) {
+                $map[$cid][] = 'site_settings.setting_value (ERROR_ASSUMED_REFERENCED)';
+            }
+        }
+
+        // 4. Cek object_key tertanam di konten CMS publik hanya untuk kandidat publik yang belum punya referensi
+        $unmatchedPublic = $candidates->filter(
+            fn (File $f) => empty($map[(string) $f->id])
+                && ($f->visibility === 'publik' || $f->visibility === 'public')
+                && ! empty($f->object_key)
+        );
+
+        if ($unmatchedPublic->isNotEmpty()) {
+            foreach (['posts', 'pages'] as $cmsTable) {
+                try {
+                    if (! Schema::hasTable($cmsTable) || ! Schema::hasColumn($cmsTable, 'content')) {
+                        continue;
+                    }
+
+                    foreach ($unmatchedPublic as $f) {
+                        $embedded = DB::table($cmsTable)
+                            ->where('content', 'like', '%'.$f->object_key.'%')
+                            ->exists();
+                        if ($embedded) {
+                            $map[(string) $f->id][] = "{$cmsTable}.content(embedded_url)";
+                        }
+                    }
+                } catch (Throwable $e) {
+                    Log::error("Gagal batch-check referensi {$cmsTable}.content: ".$e->getMessage());
+                    foreach ($unmatchedPublic as $f) {
+                        $map[(string) $f->id][] = "{$cmsTable}.content (ERROR_ASSUMED_REFERENCED)";
+                    }
+                }
+            }
+        }
+
+        return $map;
     }
 
     /**
