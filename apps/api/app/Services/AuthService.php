@@ -31,10 +31,15 @@ class AuthService
         $fcmToken = $credentials['fcm_token'] ?? null;
 
         $rateLimitKey = 'login_attempts:'.sha1(strtolower($identifier).'|'.$request->ip());
+        $ipRateLimitKey = 'login_ip_attempts:'.$request->ip();
+        $maxIpAttempts = 20;
 
-        if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
-            $seconds = RateLimiter::availableIn($rateLimitKey);
-            $minutes = ceil($seconds / 60);
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 5) || RateLimiter::tooManyAttempts($ipRateLimitKey, $maxIpAttempts)) {
+            $seconds = max(
+                RateLimiter::availableIn($rateLimitKey),
+                RateLimiter::availableIn($ipRateLimitKey)
+            );
+            $minutes = max(1, (int) ceil($seconds / 60));
 
             throw new HttpException(
                 429,
@@ -49,6 +54,7 @@ class AuthService
 
         if (! $user || ! Hash::check($password, $user->password_hash)) {
             RateLimiter::hit($rateLimitKey, 15 * 60); // lock window 15 min
+            RateLimiter::hit($ipRateLimitKey, 15 * 60);
 
             if ($user) {
                 $this->logAudit($user->id, 'auth.login_failed', 'User', $user->id, null, [
@@ -83,6 +89,9 @@ class AuthService
         $hasAdminShellRole = ! empty(array_intersect($userRoleCodes, AdminAuthController::ADMIN_ROLES));
 
         if ($hasAdminShellRole) {
+            RateLimiter::hit($rateLimitKey, 15 * 60);
+            RateLimiter::hit($ipRateLimitKey, 15 * 60);
+
             $this->logAudit($user->id, 'auth.login_failed', 'User', $user->id, null, [
                 'identifier' => $identifier,
                 'reason' => 'admin_account_prohibited_on_civitas_portal',
@@ -139,29 +148,94 @@ class AuthService
     }
 
     /**
-     * Rotate refresh token and issue a new access token.
+     * Rotate refresh token and issue a new access token atomically.
      * Detects reuse of previously rotated tokens -> revokes all sessions!
      */
     public function refresh(string $plainRefreshToken, Request $request): array
     {
         $tokenHash = hash('sha256', $plainRefreshToken);
 
-        $refreshToken = RefreshToken::with('user.roles.permissions')
-            ->where('token_hash', $tokenHash)
-            ->first();
+        // P1-04: Bungkus rotasi refresh token dalam transaksi + lockForUpdate agar atomik
+        $outcome = DB::transaction(function () use ($tokenHash) {
+            $refreshToken = RefreshToken::with('user.roles.permissions')
+                ->where('token_hash', $tokenHash)
+                ->lockForUpdate()
+                ->first();
 
-        if (! $refreshToken) {
+            if (! $refreshToken) {
+                return ['status' => 'not_found'];
+            }
+
+            // Reuse detection: kembalikan status agar pencabutan tersimpan permanen di luar rollback
+            if ($refreshToken->revoked_at !== null || $refreshToken->replaced_by !== null) {
+                return [
+                    'status' => 'reuse',
+                    'user_id' => $refreshToken->user_id,
+                    'token_id' => $refreshToken->id,
+                ];
+            }
+
+            // Check if token has expired
+            if ($refreshToken->expires_at->isPast()) {
+                $refreshToken->update(['revoked_at' => now()]);
+
+                return ['status' => 'expired'];
+            }
+
+            $user = $refreshToken->user;
+
+            if (! $user || $user->status !== 'active') {
+                return ['status' => 'inactive'];
+            }
+
+            // Generate new token pair and rotate
+            $newPlainRefreshToken = bin2hex(random_bytes(32));
+            $newTokenHash = hash('sha256', $newPlainRefreshToken);
+
+            $newRefreshToken = RefreshToken::create([
+                'user_id' => $user->id,
+                'device_id' => $refreshToken->device_id,
+                'token_hash' => $newTokenHash,
+                'expires_at' => now()->addDays(14),
+            ]);
+
+            // Invalidate old refresh token
+            $refreshToken->update([
+                'revoked_at' => now(),
+                'replaced_by' => $newRefreshToken->id,
+            ]);
+
+            // Create new Sanctum access token (15 mins)
+            $tokenResult = $user->createToken('access_token', ['*'], now()->addMinutes(15));
+
+            return [
+                'status' => 'ok',
+                'payload' => [
+                    'user' => $this->formatUserResponse($user),
+                    'tokens' => [
+                        'accessToken' => $tokenResult->plainTextToken,
+                        'tokenType' => 'Bearer',
+                        'expiresIn' => 900,
+                        'refreshToken' => $newPlainRefreshToken,
+                    ],
+                ],
+            ];
+        });
+
+        if ($outcome['status'] === 'not_found') {
             throw new HttpException(401, 'Sesi tidak valid atau refresh token tidak ditemukan.', null, [], 401);
         }
 
-        // Reuse detection!
-        if ($refreshToken->revoked_at !== null || $refreshToken->replaced_by !== null) {
-            // Security Incident: Revoke all tokens for this user
-            RefreshToken::where('user_id', $refreshToken->user_id)->update(['revoked_at' => now()]);
-            $refreshToken->user?->tokens()->delete();
+        if ($outcome['status'] === 'reuse') {
+            // Security Incident: Revoke all tokens for this user outside rolled-back transaction
+            RefreshToken::where('user_id', $outcome['user_id'])
+                ->whereNull('revoked_at')
+                ->update(['revoked_at' => now()]);
 
-            $this->logAudit($refreshToken->user_id, 'auth.refresh_token_reuse_detected', 'RefreshToken', $refreshToken->id, null, [
-                'token_id' => $refreshToken->id,
+            User::find($outcome['user_id'])?->tokens()->delete();
+
+            $this->logAudit($outcome['user_id'], 'auth.refresh_token_reuse_detected', 'RefreshToken', $outcome['token_id'], null, [
+                'token_id' => $outcome['token_id'],
                 'ip' => $request->ip(),
             ], $request);
 
@@ -174,47 +248,15 @@ class AuthService
             );
         }
 
-        // Check if token has expired
-        if ($refreshToken->expires_at->isPast()) {
-            $refreshToken->update(['revoked_at' => now()]);
+        if ($outcome['status'] === 'expired') {
             throw new HttpException(401, 'Sesi telah kedaluwarsa. Silakan masuk kembali.', null, [], 401);
         }
 
-        $user = $refreshToken->user;
-
-        if (! $user || $user->status !== 'active') {
+        if ($outcome['status'] === 'inactive') {
             throw new HttpException(403, 'Akun tidak aktif.', null, [], 403);
         }
 
-        // Generate new token pair and rotate
-        $newPlainRefreshToken = bin2hex(random_bytes(32));
-        $newTokenHash = hash('sha256', $newPlainRefreshToken);
-
-        $newRefreshToken = RefreshToken::create([
-            'user_id' => $user->id,
-            'device_id' => $refreshToken->device_id,
-            'token_hash' => $newTokenHash,
-            'expires_at' => now()->addDays(14),
-        ]);
-
-        // Invalidate old refresh token
-        $refreshToken->update([
-            'revoked_at' => now(),
-            'replaced_by' => $newRefreshToken->id,
-        ]);
-
-        // Create new Sanctum access token (15 mins)
-        $tokenResult = $user->createToken('access_token', ['*'], now()->addMinutes(15));
-
-        return [
-            'user' => $this->formatUserResponse($user),
-            'tokens' => [
-                'accessToken' => $tokenResult->plainTextToken,
-                'tokenType' => 'Bearer',
-                'expiresIn' => 900,
-                'refreshToken' => $newPlainRefreshToken,
-            ],
-        ];
+        return $outcome['payload'];
     }
 
     /**

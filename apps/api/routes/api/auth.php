@@ -55,9 +55,9 @@ Route::get('/files/{id}/download', [FileController::class, 'downloadSigned'])->n
 // BE-AUTH-01: Autentikasi & Sesi
 // =========================================================================
 Route::prefix('auth')->group(function () {
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/admin/login', [AdminAuthController::class, 'login']);
-    Route::post('/refresh', [AuthController::class, 'refresh']);
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:60,5');
+    Route::post('/admin/login', [AdminAuthController::class, 'login'])->middleware('throttle:60,5');
+    Route::post('/refresh', [AuthController::class, 'refresh'])->middleware('throttle:30,5');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,15');
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:60,1');
 

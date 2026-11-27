@@ -26,12 +26,22 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->trustProxies(at: env('TRUSTED_PROXIES', '*'));
+        // P1-05: Default aman loopback agar X-Forwarded-For dari internet tidak bisa dipalsukan
+        $trustedProxiesRaw = trim((string) env('TRUSTED_PROXIES', '127.0.0.1'));
+        $trustedProxies = $trustedProxiesRaw === ''
+            ? '127.0.0.1'
+            : (str_contains($trustedProxiesRaw, ',')
+                ? array_values(array_filter(array_map('trim', explode(',', $trustedProxiesRaw))))
+                : $trustedProxiesRaw);
+        $middleware->trustProxies(at: $trustedProxies);
         $middleware->redirectGuestsTo(fn () => null);
         $aliases = [
             'permission' => RequirePermission::class,
         ];
-        if (env('TEST_DISABLE_RATE_LIMIT', false) || env('DISABLE_RATE_LIMITING', false)) {
+        if (
+            env('APP_ENV') === 'testing'
+            && (env('TEST_DISABLE_RATE_LIMIT', false) || env('DISABLE_RATE_LIMITING', false))
+        ) {
             $aliases['throttle'] = BypassThrottle::class;
         }
         $middleware->alias($aliases);
