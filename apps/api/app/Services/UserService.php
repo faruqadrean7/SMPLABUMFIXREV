@@ -101,29 +101,12 @@ class UserService
                 'must_change_password' => $data['must_change_password'] ?? true,
             ]);
 
-            // Assign roles if provided
+            // Assign roles if provided (P0-07: cegah privilege escalation tanpa auth.role.manage / super_admin)
             if (! empty($data['roles'])) {
-                $uuidRoles = array_values(array_filter($data['roles'], fn ($r) => is_string($r) && Str::isUuid($r)));
-                $codeRoles = array_values(array_filter($data['roles'], fn ($r) => is_string($r) && ! Str::isUuid($r)));
-
-                $roleIds = Role::query()
-                    ->where(function ($q) use ($codeRoles, $uuidRoles) {
-                        if (! empty($codeRoles)) {
-                            $q->whereIn('code', $codeRoles);
-                        }
-                        if (! empty($uuidRoles)) {
-                            if (! empty($codeRoles)) {
-                                $q->orWhereIn('id', $uuidRoles);
-                            } else {
-                                $q->whereIn('id', $uuidRoles);
-                            }
-                        }
-                    })
-                    ->pluck('id')
-                    ->all();
-
+                $roleIds = $this->resolveAuthorizedRoleIds($data['roles'], $request->user());
                 if (! empty($roleIds)) {
                     $user->roles()->sync($roleIds);
+                    $user->flushPermissionCache();
                 }
             }
 
@@ -158,6 +141,13 @@ class UserService
     {
         return DB::transaction(function () use ($id, $data, $request) {
             $user = User::with('roles')->findOrFail($id);
+            $actor = $request->user();
+
+            // P0-07: Non-super_admin tidak boleh memodifikasi akun super_admin
+            if ($user->hasRole('super_admin') && ! ($actor?->hasRole('super_admin') ?? false)) {
+                throw new HttpException(403, 'Akses ditolak: Hanya Super Admin yang dapat mengubah akun Super Admin.');
+            }
+
             $oldValues = [
                 'username' => $user->username,
                 'email' => $user->email,
@@ -194,27 +184,18 @@ class UserService
 
             $user->save();
 
-            // Sync roles if provided
+            // Sync roles if provided (P0-07: wajib auth.role.manage & larang eskalasi super_admin)
             if (isset($data['roles'])) {
-                $uuidRoles = array_values(array_filter($data['roles'], fn ($r) => is_string($r) && Str::isUuid($r)));
-                $codeRoles = array_values(array_filter($data['roles'], fn ($r) => is_string($r) && ! Str::isUuid($r)));
+                $requestedRoleIds = $this->findRoleIds($data['roles']);
+                $currentRoleIds = $user->roles->pluck('id')->all();
+                sort($requestedRoleIds);
+                sort($currentRoleIds);
 
-                $roleIds = Role::query()
-                    ->where(function ($q) use ($codeRoles, $uuidRoles) {
-                        if (! empty($codeRoles)) {
-                            $q->whereIn('code', $codeRoles);
-                        }
-                        if (! empty($uuidRoles)) {
-                            if (! empty($codeRoles)) {
-                                $q->orWhereIn('id', $uuidRoles);
-                            } else {
-                                $q->whereIn('id', $uuidRoles);
-                            }
-                        }
-                    })
-                    ->pluck('id')
-                    ->all();
-                $user->roles()->sync($roleIds);
+                if ($requestedRoleIds !== $currentRoleIds) {
+                    $roleIds = $this->resolveAuthorizedRoleIds($data['roles'], $actor, $user);
+                    $user->roles()->sync($roleIds);
+                    $user->flushPermissionCache();
+                }
             }
 
             $user->load('roles:id,code,name,is_system');
@@ -311,6 +292,75 @@ class UserService
             'temporary_password' => $generatedPassword,
             'must_change_password' => $user->must_change_password,
         ];
+    }
+
+    /**
+     * Resolusi daftar ID role dari input kode role atau UUID.
+     *
+     * @param  array<int, mixed>  $rolesInput
+     * @return string[]
+     */
+    protected function findRoleIds(array $rolesInput): array
+    {
+        $uuidRoles = array_values(array_filter($rolesInput, fn ($r) => is_string($r) && Str::isUuid($r)));
+        $codeRoles = array_values(array_filter($rolesInput, fn ($r) => is_string($r) && ! Str::isUuid($r)));
+
+        if (empty($uuidRoles) && empty($codeRoles)) {
+            return [];
+        }
+
+        return Role::query()
+            ->where(function ($q) use ($codeRoles, $uuidRoles) {
+                if (! empty($codeRoles)) {
+                    $q->whereIn('code', $codeRoles);
+                }
+                if (! empty($uuidRoles)) {
+                    if (! empty($codeRoles)) {
+                        $q->orWhereIn('id', $uuidRoles);
+                    } else {
+                        $q->whereIn('id', $uuidRoles);
+                    }
+                }
+            })
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
+     * P0-07: Validasi otorisasi penetapan role dan cegah eskalasi privilege ke super_admin.
+     *
+     * @param  array<int, mixed>  $rolesInput
+     * @return string[]
+     */
+    protected function resolveAuthorizedRoleIds(array $rolesInput, ?User $actor, ?User $targetUser = null): array
+    {
+        $actorIsSuperAdmin = $actor?->hasRole('super_admin') ?? false;
+        $actorCanManageRoles = $actorIsSuperAdmin || ($actor?->hasPermission('auth.role.manage') ?? false);
+
+        if (! $actorCanManageRoles) {
+            throw new HttpException(403, 'Akses ditolak: Anda memerlukan izin auth.role.manage untuk menetapkan atau mengubah role pengguna.');
+        }
+
+        $roleIds = $this->findRoleIds($rolesInput);
+        if (empty($roleIds)) {
+            return [];
+        }
+
+        if (! $actorIsSuperAdmin) {
+            $assigningSuperAdmin = Role::whereIn('id', $roleIds)
+                ->where('code', 'super_admin')
+                ->exists();
+
+            if ($assigningSuperAdmin) {
+                throw new HttpException(403, 'Akses ditolak: Hanya Super Admin yang dapat menetapkan role super_admin.');
+            }
+
+            if ($targetUser && $targetUser->hasRole('super_admin')) {
+                throw new HttpException(403, 'Akses ditolak: Hanya Super Admin yang dapat mengubah role akun Super Admin.');
+            }
+        }
+
+        return $roleIds;
     }
 
     /**
