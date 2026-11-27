@@ -37,6 +37,11 @@ class Student extends Model
         'graduated_at',
     ];
 
+    protected $hidden = [
+        'nik_enc',
+        'nik_hash',
+    ];
+
     protected function casts(): array
     {
         return [

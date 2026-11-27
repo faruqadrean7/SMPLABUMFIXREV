@@ -32,6 +32,11 @@ class Applicant extends Model
         'step_data',
     ];
 
+    protected $hidden = [
+        'nik_enc',
+        'nik_hash',
+    ];
+
     protected function casts(): array
     {
         return [
