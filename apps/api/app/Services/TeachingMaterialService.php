@@ -52,12 +52,13 @@ class TeachingMaterialService
     }
 
     /**
-     * BE-ACD-06: Mengunggah perangkat ajar baru.
+     * BE-ACD-06: Mengunggah perangkat ajar baru (P0-09: hanya guru/admin akademik berwenang).
      */
     public function createTeachingMaterial(array $data, Request $request): TeachingMaterial
     {
-        /** @var User $currentUser */
+        /** @var User|null $currentUser */
         $currentUser = $request->user();
+        $this->authorizeManageOrTeach($currentUser);
 
         $fileId = $data['file_id'] ?? null;
 
@@ -66,18 +67,22 @@ class TeachingMaterialService
             $storagePath = $uploaded->store("teaching-materials/{$currentUser->id}", 'local');
             $checksum = hash_file('sha256', $uploaded->getRealPath());
 
+            // P0-09: Selaraskan disk penyimpanan ('local') dengan visibility ('privat')
             $fileRecord = File::create([
+                'school_id' => $currentUser->school_id ?? null,
                 'owner_id' => $currentUser->id,
                 'owner_type' => 'User',
                 'bucket' => 'teaching-materials',
                 'object_key' => $storagePath,
                 'mime_type' => $uploaded->getMimeType() ?: 'application/octet-stream',
                 'size_bytes' => $uploaded->getSize(),
-                'visibility' => 'publik',
+                'visibility' => 'privat',
                 'checksum' => $checksum,
             ]);
 
             $fileId = $fileRecord->id;
+        } elseif ($fileId) {
+            $this->authorizeFileAttachmentOwnership($fileId, $currentUser);
         }
 
         if (! $fileId) {
@@ -129,15 +134,20 @@ class TeachingMaterialService
     }
 
     /**
-     * BE-ACD-06: Mengunggah versi baru (revisi) dari perangkat ajar.
+     * BE-ACD-06: Mengunggah versi baru (revisi) dari perangkat ajar (P0-09: hanya pemilik atau admin).
      */
     public function createVersion(string $id, array $data, Request $request): TeachingMaterial
     {
-        /** @var User $currentUser */
+        /** @var User|null $currentUser */
         $currentUser = $request->user();
+        $this->authorizeManageOrTeach($currentUser);
 
         $original = TeachingMaterial::findOrFail($id);
         $rootParent = $original->parent_id !== null ? $original->parent : $original;
+
+        if (! $this->isAcademicAdmin($currentUser) && $rootParent->uploaded_by !== $currentUser->id) {
+            throw new HttpException(403, 'Anda hanya dapat mengunggah revisi untuk perangkat ajar milik Anda sendiri.');
+        }
 
         $fileId = $data['file_id'] ?? null;
 
@@ -146,18 +156,22 @@ class TeachingMaterialService
             $storagePath = $uploaded->store("teaching-materials/{$currentUser->id}", 'local');
             $checksum = hash_file('sha256', $uploaded->getRealPath());
 
+            // P0-09: Selaraskan disk penyimpanan ('local') dengan visibility ('privat')
             $fileRecord = File::create([
+                'school_id' => $currentUser->school_id ?? null,
                 'owner_id' => $currentUser->id,
                 'owner_type' => 'User',
                 'bucket' => 'teaching-materials',
                 'object_key' => $storagePath,
                 'mime_type' => $uploaded->getMimeType() ?: 'application/octet-stream',
                 'size_bytes' => $uploaded->getSize(),
-                'visibility' => 'publik',
+                'visibility' => 'privat',
                 'checksum' => $checksum,
             ]);
 
             $fileId = $fileRecord->id;
+        } elseif ($fileId) {
+            $this->authorizeFileAttachmentOwnership($fileId, $currentUser);
         }
 
         if (! $fileId) {
@@ -202,17 +216,14 @@ class TeachingMaterialService
      */
     public function deleteTeachingMaterial(string $id, Request $request): bool
     {
-        /** @var User $currentUser */
+        /** @var User|null $currentUser */
         $currentUser = $request->user();
+        $this->authorizeManageOrTeach($currentUser);
+
         $material = TeachingMaterial::findOrFail($id);
 
-        $isAdmin = $currentUser->hasRole('super_admin')
-            || $currentUser->hasRole('admin_tu')
-            || $currentUser->hasPermission('academic.schedule.manage')
-            || $currentUser->roles()->where('code', 'like', 'admin%')->exists();
-
         // Otorisasi: hanya pemilik (uploader) atau admin yang berhak menghapus
-        if (! $isAdmin && $material->uploaded_by !== $currentUser->id) {
+        if (! $this->isAcademicAdmin($currentUser) && $material->uploaded_by !== $currentUser->id) {
             throw new HttpException(403, 'Anda tidak memiliki hak akses untuk menghapus perangkat ajar ini.');
         }
 
@@ -233,6 +244,61 @@ class TeachingMaterialService
 
             return true;
         });
+    }
+
+    /**
+     * P0-09: Memastikan hanya guru atau administrator akademik yang dapat mengunggah/mengubah perangkat ajar.
+     */
+    protected function authorizeManageOrTeach(?User $user): void
+    {
+        if (! $user) {
+            throw new HttpException(401, 'Unauthenticated');
+        }
+
+        if ($this->isAcademicAdmin($user)) {
+            return;
+        }
+
+        $isTeacher = $user->teacher()->exists()
+            || $user->hasRole('teacher')
+            || $user->hasRole('guru')
+            || $user->hasRole('homeroom')
+            || $user->hasRole('wali_kelas')
+            || $user->hasPermission('academic.journal.write')
+            || $user->hasPermission('academic.assignment.manage')
+            || $user->hasPermission('academic.material.manage');
+
+        if (! $isTeacher) {
+            throw new HttpException(403, 'Akses ditolak: Hanya guru atau administrator akademik yang berwenang mengelola perangkat ajar.');
+        }
+    }
+
+    /**
+     * Cek apakah pengguna adalah administrator akademik.
+     */
+    protected function isAcademicAdmin(User $user): bool
+    {
+        return $user->hasRole('super_admin')
+            || $user->hasRole('admin_tu')
+            || $user->hasRole('principal')
+            || $user->hasRole('curriculum')
+            || $user->hasPermission('academic.schedule.manage')
+            || $user->roles()->where('code', 'like', 'admin%')->exists();
+    }
+
+    /**
+     * P0-09: Cegah IDOR penyematan file_id privat milik pengguna lain pada perangkat ajar.
+     */
+    protected function authorizeFileAttachmentOwnership(string $fileId, User $user): void
+    {
+        if ($this->isAcademicAdmin($user)) {
+            return;
+        }
+
+        $file = File::findOrFail($fileId);
+        if ((string) $file->owner_id !== (string) $user->id) {
+            throw new HttpException(403, 'Akses ditolak: Anda tidak berwenang melampirkan berkas milik pengguna lain.');
+        }
     }
 
     /**
