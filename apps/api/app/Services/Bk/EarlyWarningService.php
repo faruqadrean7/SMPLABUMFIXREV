@@ -11,6 +11,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\User;
+use App\Services\Academic\AttendanceAggregator;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -318,17 +319,18 @@ class EarlyWarningService
             ->where('att_date', '>=', $oneMonthAgo->toDateString())
             ->get();
 
-        $totalRecords = $attendances->count();
-        if ($totalRecords === 0) {
+        // P0-26: Gunakan AttendanceAggregator harian tunggal agar 1 hari (1 gerbang + N sesi kelas) dihitung tepat 1 hari
+        $summary = app(AttendanceAggregator::class)->summarizeDaily($attendances, 1);
+        $totalDays = $summary['total_recorded'];
+        if ($totalDays === 0) {
             return null;
         }
 
-        $hadirCount = $attendances->where('status', 'hadir')->count();
-        $alpaCount = $attendances->where('status', 'alpa')->count();
-        $izinCount = $attendances->where('status', 'izin')->count();
-        $sakitCount = $attendances->where('status', 'sakit')->count();
-
-        $attendancePercent = round(($hadirCount / $totalRecords) * 100, 1);
+        $alpaCount = $summary['alpa'];
+        $izinCount = $summary['izin'];
+        $sakitCount = $summary['sakit'];
+        $terlambatCount = $summary['terlambat'];
+        $attendancePercent = $summary['percentage'];
 
         if ($attendancePercent < $attThreshold || $alpaCount >= $minAbsentDays) {
             $severity = ($attendancePercent < 50.0 || $alpaCount >= 5) ? 'tinggi' : 'sedang';
@@ -342,7 +344,8 @@ class EarlyWarningService
                     'alpa_count' => $alpaCount,
                     'izin_count' => $izinCount,
                     'sakit_count' => $sakitCount,
-                    'total_days_evaluated' => $totalRecords,
+                    'terlambat_count' => $terlambatCount,
+                    'total_days_evaluated' => $totalDays,
                 ],
             ];
         }

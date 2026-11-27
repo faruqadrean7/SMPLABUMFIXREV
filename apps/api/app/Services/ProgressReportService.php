@@ -15,6 +15,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Services\Academic\AttendanceAggregator;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -186,28 +187,21 @@ class ProgressReportService
             ];
         }
 
-        // 4. Rekap Kehadiran Siswa
+        // 4. Rekap Kehadiran Siswa (P0-26: batasi rentang semester/tahun agar tidak tercampur tahun lalu + agregasi harian tunggal)
         $attendanceQuery = Attendance::where('student_id', $student->id);
+        $semester = $period->semester;
+        if ($semester?->start_date && $semester?->end_date) {
+            $attendanceQuery->whereBetween('att_date', [$semester->start_date, $semester->end_date]);
+        } elseif ($period->month) {
+            $fallbackYear = $period->created_at?->year ?? now()->year;
+            $attendanceQuery->whereYear('att_date', $fallbackYear);
+        }
         if ($period->month) {
             $attendanceQuery->whereMonth('att_date', $period->month);
         }
 
         $attendances = $attendanceQuery->get();
-        $hadir = $attendances->where('status', 'hadir')->count();
-        $izin = $attendances->where('status', 'izin')->count();
-        $sakit = $attendances->where('status', 'sakit')->count();
-        $alpa = $attendances->where('status', 'alpa')->count();
-        $totalDays = $hadir + $izin + $sakit + $alpa;
-        $attendancePercentage = $totalDays > 0 ? round(($hadir / $totalDays) * 100, 2) : 100.0;
-
-        $attendanceSnapshot = [
-            'hadir' => $hadir,
-            'izin' => $izin,
-            'sakit' => $sakit,
-            'alpa' => $alpa,
-            'total_recorded' => $totalDays,
-            'percentage' => $attendancePercentage,
-        ];
+        $attendanceSnapshot = app(AttendanceAggregator::class)->summarizeDaily($attendances, 2);
 
         // 5. Catatan Karakter & Catatan Wali Kelas
         $charNote = CharacterNote::with('author')

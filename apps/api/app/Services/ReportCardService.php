@@ -17,6 +17,7 @@ use App\Models\Semester;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Services\Academic\AttendanceAggregator;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -238,11 +239,15 @@ class ReportCardService
         ];
 
         // 3. Nilai Akhir & Deskripsi Capaian per Mapel
+        // P0-14: Cegah kebocoran nilai lintas semester (hanya fallback ke component.semester_id bila period_id NULL)
         $grades = Grade::with(['component.subject'])
             ->where('student_id', $student->id)
             ->where(function ($q) use ($semester) {
                 $q->whereHas('period', fn ($p) => $p->where('semester_id', $semester->id))
-                    ->orWhereHas('component', fn ($c) => $c->where('semester_id', $semester->id));
+                    ->orWhere(function ($sub) use ($semester) {
+                        $sub->whereNull('period_id')
+                            ->whereHas('component', fn ($c) => $c->where('semester_id', $semester->id));
+                    });
             })
             ->get();
 
@@ -256,19 +261,23 @@ class ReportCardService
                 continue;
             }
 
-            $totalWeighted = 0;
-            $totalWeight = 0;
+            // P0-14: Rata-ratakan dulu nilai lintas bulan per component_id, lalu bobotkan setiap komponen TEPAT SATU KALI
+            // (Tidak mengubah kebijakan GradeRecorder max(manual, auto) per sel periode!)
+            $byComponent = $subjGrades->groupBy('component_id');
+            $totalWeighted = 0.0;
+            $totalWeight = 0.0;
 
-            foreach ($subjGrades as $gradeItem) {
-                $weight = (float) ($gradeItem->component?->weight ?? 1.0);
-                $val = (float) $gradeItem->value;
-                $totalWeighted += ($val * $weight);
+            foreach ($byComponent as $compGrades) {
+                $firstCompGrade = $compGrades->first();
+                $weight = (float) ($firstCompGrade->component?->weight ?? 1.0);
+                $componentAvg = (float) $compGrades->avg('value');
+                $totalWeighted += ($componentAvg * $weight);
                 $totalWeight += $weight;
             }
 
             $finalScore = $totalWeight > 0
                 ? round($totalWeighted / $totalWeight, 2)
-                : round($subjGrades->avg('value'), 2);
+                : round((float) $subjGrades->avg('value'), 2);
 
             // Ambang KKTP default = 75.0
             $level = $finalScore >= 75.0 ? 'tuntas' : 'belum';
@@ -296,27 +305,13 @@ class ReportCardService
             ];
         }
 
-        // 4. Rekap Absensi Semester
+        // 4. Rekap Absensi Semester (P0-26: agregasi harian tunggal gerbang + kelas, termasuk terlambat)
         $attQuery = Attendance::where('student_id', $student->id);
         if ($semester->start_date && $semester->end_date) {
             $attQuery->whereBetween('att_date', [$semester->start_date, $semester->end_date]);
         }
         $attendances = $attQuery->get();
-
-        $hadir = $attendances->where('status', 'hadir')->count();
-        $sakit = $attendances->where('status', 'sakit')->count();
-        $izin = $attendances->where('status', 'izin')->count();
-        $alpa = $attendances->where('status', 'alpa')->count();
-        $totalDays = $hadir + $sakit + $izin + $alpa;
-
-        $attendanceSnapshot = [
-            'hadir' => $hadir,
-            'sakit' => $sakit,
-            'izin' => $izin,
-            'alpa' => $alpa,
-            'total_recorded' => $totalDays,
-            'percentage' => $totalDays > 0 ? round(($hadir / $totalDays) * 100, 2) : 100.0,
-        ];
+        $attendanceSnapshot = app(AttendanceAggregator::class)->summarizeDaily($attendances, 2);
 
         // 5. Ekstrakurikuler Siswa
         $extracurriculars = ExtracurricularMember::with('extracurricular')
@@ -726,23 +721,26 @@ class ReportCardService
             ->get()
             ->keyBy('student_id');
 
-        // Nilai semester per siswa
+        // Nilai semester per siswa (P0-14: bebas kebocoran lintas semester)
         $gradesCount = Grade::whereIn('student_id', $studentIds)
             ->where(function ($q) use ($semester) {
                 $q->whereHas('period', fn ($p) => $p->where('semester_id', $semester->id))
-                    ->orWhereHas('component', fn ($c) => $c->where('semester_id', $semester->id));
+                    ->orWhere(function ($sub) use ($semester) {
+                        $sub->whereNull('period_id')
+                            ->whereHas('component', fn ($c) => $c->where('semester_id', $semester->id));
+                    });
             })
             ->select('student_id', DB::raw('count(distinct component_id) as comp_count'))
             ->groupBy('student_id')
             ->pluck('comp_count', 'student_id');
 
-        // Presensi semester per siswa
+        // Presensi semester per siswa (P0-26: hitung hari unik att_date)
         $attendanceQuery = Attendance::whereIn('student_id', $studentIds);
         if ($semester->start_date && $semester->end_date) {
             $attendanceQuery->whereBetween('att_date', [$semester->start_date, $semester->end_date]);
         }
         $attendanceCount = $attendanceQuery
-            ->select('student_id', DB::raw('count(*) as att_count'))
+            ->select('student_id', DB::raw('count(distinct att_date) as att_count'))
             ->groupBy('student_id')
             ->pluck('att_count', 'student_id');
 
