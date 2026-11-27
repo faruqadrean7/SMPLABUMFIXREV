@@ -2,14 +2,35 @@
 
 namespace App\Services\Storage;
 
+use App\Models\Announcement;
+use App\Models\Applicant;
+use App\Models\ApplicantDocument;
+use App\Models\Assignment;
+use App\Models\AssignmentSubmission;
 use App\Models\AuditLog;
 use App\Models\File;
 use App\Models\Guardian;
+use App\Models\LearningMaterial;
 use App\Models\LeaveRequest;
+use App\Models\LibraryBook;
+use App\Models\Partnership;
+use App\Models\Payment;
+use App\Models\ProgramMaterial;
+use App\Models\ProgramTask;
+use App\Models\ProgramTaskSubmission;
+use App\Models\ProgressReport;
+use App\Models\ReportCard;
 use App\Models\SchoolClass;
+use App\Models\StaffAttendance;
 use App\Models\Student;
+use App\Models\StudentPoint;
 use App\Models\Teacher;
+use App\Models\TeacherSalarySlip;
 use App\Models\TeachingAssignment;
+use App\Models\TeachingMaterial;
+use App\Models\Ticket;
+use App\Models\TicketEvent;
+use App\Models\Trip;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -197,6 +218,7 @@ class FileStorageService
      */
     public function getFileUrl(string $id, ?User $user, int $ttlSeconds = 300): array
     {
+        $ttlSeconds = max(30, min($ttlSeconds, 300));
         $file = File::findOrFail($id);
 
         if ($file->visibility === 'privat') {
@@ -307,16 +329,79 @@ class FileStorageService
             return;
         }
 
-        // 3. FIX-GURU-07: Berkas lampiran perizinan / dokumen siswa (Anti-IDOR untuk guru, walas, ortu, siswa)
+        // 3. Berkas Slip Gaji Guru/Staf (sangat sensitif: hanya pemilik slip atau bendahara/HR)
+        $salarySlip = TeacherSalarySlip::with('teacher')->where('file_id', $file->id)->first();
+        if ($salarySlip) {
+            if ($salarySlip->teacher && (string) $salarySlip->teacher->user_id === (string) $user->id) {
+                return;
+            }
+            if ($user->hasRole(['bendahara', 'treasurer', 'admin_tu']) || $user->hasPermission('master.teacher.manage') || $user->hasPermission('finance.report.view')) {
+                return;
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses slip gaji ini.');
+        }
+
+        // 4. Berkas Pendaftar PPDB (KK/Akta/Ijazah: hanya pendaftar pemilik atau panitia PPDB)
+        $applicantDoc = ApplicantDocument::with('applicant')->where('file_id', $file->id)->first();
+        if ($applicantDoc || $file->owner_type === 'Applicant') {
+            $applicant = $applicantDoc?->applicant ?? ($file->owner_id ? Applicant::find($file->owner_id) : null);
+            if ($applicant && (string) $applicant->user_id === (string) $user->id) {
+                return;
+            }
+            if ($user->hasRole('ppdb_committee') || $user->hasPermission('ppdb.applicant.read') || $user->hasPermission('ppdb.applicant.verify')) {
+                return;
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses dokumen PPDB ini.');
+        }
+
+        // 5. Bukti Pembayaran Keuangan (hanya bendahara/admin keuangan, pengaju, siswa pemilik tagihan, atau walinya)
+        $payment = Payment::with('invoice.student')->where('proof_file_id', $file->id)->first();
+        if ($payment) {
+            if ($user->hasRole(['bendahara', 'treasurer']) || $user->hasPermission('finance.payment.verify') || $user->hasPermission('finance.invoice.manage') || $user->hasPermission('finance.report.view')) {
+                return;
+            }
+            if ($payment->submitted_by && (string) $payment->submitted_by === (string) $user->id) {
+                return;
+            }
+            $invoiceStudent = $payment->invoice?->student;
+            if ($invoiceStudent) {
+                if ((string) $invoiceStudent->user_id === (string) $user->id) {
+                    return;
+                }
+                if ($user->hasRole('guardian')) {
+                    $guardian = Guardian::where('user_id', $user->id)->first();
+                    if ($guardian && $guardian->students()->where('students.id', $invoiceStudent->id)->exists()) {
+                        return;
+                    }
+                }
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses bukti pembayaran ini.');
+        }
+
+        // 6. Foto Presensi Staf (hanya pemilik atau admin TU/HR)
+        $staffAtt = StaffAttendance::where('photo_file_id', $file->id)->first();
+        if ($staffAtt) {
+            if ((string) $staffAtt->user_id === (string) $user->id) {
+                return;
+            }
+            if ($user->hasRole('admin_tu') || $user->hasPermission('master.teacher.manage') || $user->hasPermission('academic.schedule.manage')) {
+                return;
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses berkas presensi staf ini.');
+        }
+
+        // 7. FIX-GURU-07: Berkas milik / terkait siswa (perizinan, tugas, rapor, poin, program khusus)
         $studentId = null;
         if ($file->owner_type === 'Student' || $file->bucket === 'leave-attachments') {
             $studentId = $file->owner_id;
         }
         if (! $studentId) {
-            $leaveRequest = LeaveRequest::where('attachment_file_id', $file->id)->first();
-            if ($leaveRequest) {
-                $studentId = $leaveRequest->student_id;
-            }
+            $studentId = LeaveRequest::where('attachment_file_id', $file->id)->value('student_id')
+                ?? AssignmentSubmission::where('file_id', $file->id)->value('student_id')
+                ?? ProgramTaskSubmission::where('file_id', $file->id)->value('student_id')
+                ?? ReportCard::where('file_id', $file->id)->value('student_id')
+                ?? ProgressReport::where('file_id', $file->id)->value('student_id')
+                ?? StudentPoint::where('evidence_file_id', $file->id)->value('student_id');
         }
 
         if ($studentId) {
@@ -359,15 +444,57 @@ class FileStorageService
                 if ($user->hasRole('counselor')) {
                     return;
                 }
+
+                throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang mengakses berkas siswa ini.');
             }
         }
 
-        // 4. Staf akademik & pengajar (sarpras, ppdb, pustakawan) untuk berkas operasional sekolah non-siswa
-        if ($user->hasRole(['teacher', 'homeroom', 'counselor', 'facility_staff', 'ppdb_committee', 'librarian'])) {
-            return;
+        // 8. Berkas materi/tugas/pengumuman akademik (hanya civitas/staf terkait, bukan wildcard umum)
+        if (
+            LearningMaterial::where('file_id', $file->id)->exists()
+            || TeachingMaterial::where('file_id', $file->id)->exists()
+            || Assignment::where('file_id', $file->id)->exists()
+            || ProgramMaterial::where('file_id', $file->id)->exists()
+            || ProgramTask::where('file_id', $file->id)->exists()
+            || Announcement::where('attachment_file_id', $file->id)->exists()
+            || Trip::where('guide_file_id', $file->id)->exists()
+        ) {
+            if ($user->hasRole(['teacher', 'homeroom', 'counselor', 'student', 'guardian', 'admin_tu', 'student_affairs'])) {
+                return;
+            }
         }
 
-        // 5. Orang tua / Wali Murid: periksa apakah berkas milik anaknya
+        // 9. Berkas operasional spesifik per modul (Sarpras/Tiket, Perpustakaan, Humas/MoU)
+        $ticket = Ticket::where('photo_file_id', $file->id)->first();
+        if ($ticket) {
+            if ((string) $ticket->reporter_id === (string) $user->id || $user->hasRole(['facility_staff', 'admin_tu']) || $user->hasPermission('facility.asset.manage')) {
+                return;
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses berkas tiket ini.');
+        }
+
+        if (TicketEvent::where('file_id', $file->id)->exists()) {
+            if ($user->hasRole(['facility_staff', 'admin_tu']) || $user->hasPermission('facility.asset.manage')) {
+                return;
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses lampiran tiket ini.');
+        }
+
+        if (LibraryBook::where('file_id', $file->id)->orWhere('cover_file_id', $file->id)->exists()) {
+            if ($user->hasRole(['librarian', 'teacher', 'homeroom', 'student', 'admin_tu']) || $user->hasPermission('library.book.manage')) {
+                return;
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses berkas perpustakaan ini.');
+        }
+
+        if (Partnership::where('mou_file_id', $file->id)->exists()) {
+            if ($user->hasRole(['public_relations', 'admin_tu']) || $user->hasPermission('public_relations.manage')) {
+                return;
+            }
+            throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses dokumen kemitraan ini.');
+        }
+
+        // 10. Orang tua / Wali Murid: periksa apakah berkas milik anaknya
         if ($user->hasRole('guardian')) {
             $guardian = Guardian::where('user_id', $user->id)->first();
             if ($guardian) {
@@ -381,7 +508,7 @@ class FileStorageService
             }
         }
 
-        // Akses ditolak jika tidak memenuhi salah satu hak akses di atas
+        // Deny-by-default: akses ditolak jika tidak memenuhi salah satu aturan eksplisit di atas
         throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses berkas ini.');
     }
 }

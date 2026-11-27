@@ -85,7 +85,7 @@ class FileController extends Controller
     public function url(string $id, Request $request): JsonResponse
     {
         try {
-            $ttl = (int) $request->query('ttl', 300);
+            $ttl = max(30, min((int) $request->query('ttl', 300), 300));
             $result = $this->fileStorageService->getFileUrl($id, $request->user(), $ttl);
 
             return $this->successResponse($result);
