@@ -43,3 +43,9 @@ Schedule::command('bk:evaluate-early-warnings')->dailyAt('23:30')->withoutOverla
 Schedule::command('reminder:dispatch --type=all')->everyFifteenMinutes()->withoutOverlapping(10)->onOneServer();
 Schedule::command('reminder:dispatch --type=att')->timezone('Asia/Jakarta')->dailyAt('10:00')->withoutOverlapping(10)->onOneServer();
 Schedule::command('reminder:dispatch --recover-stuck')->hourly()->withoutOverlapping(10)->onOneServer();
+
+// 10. finance-send-due-reminders: Harian pagi (Pengingat jatuh tempo tagihan H-3)
+Schedule::command('finance:send-due-reminders --days=3')->timezone('Asia/Jakarta')->dailyAt('07:30')->withoutOverlapping()->onOneServer();
+
+// 11. finance-reconcile: Harian dini hari (Rekonsiliasi status & paid_amount tagihan)
+Schedule::command('finance:reconcile')->timezone('Asia/Jakarta')->dailyAt('01:30')->withoutOverlapping()->onOneServer();

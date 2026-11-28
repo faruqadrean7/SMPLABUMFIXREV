@@ -3,12 +3,15 @@
 namespace App\Services\Finance\Channels;
 
 use App\Models\Invoice;
+use App\Models\SiteSetting;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\ValidationException;
 
 class ManualGiroPaymentChannel implements PaymentChannelInterface
 {
+    public const SETTING_KEY = 'finance_manual_giro';
+
     public function getCode(): string
     {
         return 'manual_transfer';
@@ -31,13 +34,33 @@ class ManualGiroPaymentChannel implements PaymentChannelInterface
 
     public function getPaymentInstructions(Invoice $invoice): array
     {
+        $settingQuery = SiteSetting::where('setting_key', self::SETTING_KEY);
+        if (! empty($invoice->school_id)) {
+            $setting = (clone $settingQuery)->where('school_id', $invoice->school_id)->first()
+                ?? (clone $settingQuery)->whereNull('school_id')->first()
+                ?? $settingQuery->first();
+        } else {
+            $setting = (clone $settingQuery)->whereNull('school_id')->first() ?? $settingQuery->first();
+        }
+
+        $configured = is_array($setting?->setting_value) ? $setting->setting_value : [];
+
+        $bankName = $configured['bank_name']
+            ?? config('services.manual_giro.bank_name', 'Bank Jatim / BNI Cabang Malang');
+        $accountName = $configured['account_name']
+            ?? config('services.manual_giro.account_name', 'SMP Laboratorium Universitas Negeri Malang');
+        $accountNumber = $configured['account_number']
+            ?? config('services.manual_giro.account_number', '015-100-2026');
+        $notesTemplate = $configured['notes']
+            ?? "Harap cantumkan nomor tagihan ({$invoice->invoice_number}) pada berita transfer dan unggah foto/PDF bukti transfer resmi.";
+
         return [
             'channel' => $this->getCode(),
             'name' => $this->getName(),
-            'bank_name' => 'Bank Jatim / BNI Cabang Malang',
-            'account_name' => 'SMP Laboratorium Universitas Negeri Malang',
-            'account_number' => '015-100-2026',
-            'notes' => "Harap cantumkan nomor tagihan ({$invoice->invoice_number}) pada berita transfer dan unggah foto/PDF bukti transfer resmi.",
+            'bank_name' => $bankName,
+            'account_name' => $accountName,
+            'account_number' => $accountNumber,
+            'notes' => str_replace('{invoice_number}', (string) $invoice->invoice_number, $notesTemplate),
             'manual_verification_required' => true,
         ];
     }

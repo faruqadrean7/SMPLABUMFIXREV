@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\Applicant;
 use App\Models\PPDBTrack;
 use App\Models\PPDBWave;
+use App\Models\School;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -38,8 +40,11 @@ class PPDBReceiptAndStatsService
 
         $tokenPayload = $applicant->registration_no.'|'.$applicant->created_at->timestamp;
         $verificationToken = hash('sha256', $tokenPayload);
+        $shortToken = substr($verificationToken, 0, 32);
         $qrContent = 'PPDB-RECEIPT:'.$applicant->registration_no.':'.substr($verificationToken, 0, 16);
-        $verificationUrl = url('/verifikasi/'.substr($verificationToken, 0, 32));
+        $verificationUrl = url('/verifikasi/'.$shortToken);
+
+        Cache::forever("ppdb_verify_token:{$shortToken}", $applicant->id);
 
         $stepData = $applicant->step_data ?? [];
         $personal = $stepData['personal'] ?? [];
@@ -70,6 +75,98 @@ class PPDBReceiptAndStatsService
             'verification_url' => $verificationUrl,
             'signature' => hash_hmac('sha256', $applicant->registration_no.'|'.$applicant->status, config('app.key')),
             'issued_at' => Carbon::now()->toIso8601String(),
+        ];
+    }
+
+    /**
+     * P1-25: Verifikasi publik bukti pendaftaran PPDB dari token QR (32-hex atau string PPDB-RECEIPT).
+     * Mengembalikan metadata aman bebas PII sensitif (tanpa NIK, HP, email, atau alamat).
+     */
+    public function verifyReceiptToken(string $token): ?array
+    {
+        $cleanToken = trim($token);
+        if ($cleanToken === '') {
+            return null;
+        }
+
+        $applicant = null;
+
+        if (str_starts_with($cleanToken, 'PPDB-RECEIPT:')) {
+            $parts = explode(':', $cleanToken, 3);
+            if (count($parts) === 3 && $parts[1] !== '' && $parts[2] !== '') {
+                $candidate = Applicant::with(['wave', 'track'])
+                    ->where('registration_no', $parts[1])
+                    ->where('status', '!=', 'draft')
+                    ->first();
+                if ($candidate && $candidate->created_at) {
+                    $expected16 = substr(hash('sha256', $candidate->registration_no.'|'.$candidate->created_at->timestamp), 0, 16);
+                    if (hash_equals($expected16, $parts[2])) {
+                        $applicant = $candidate;
+                    }
+                }
+            }
+        } elseif (preg_match('/^[a-f0-9]{32}$/i', $cleanToken) === 1) {
+            $normalized = strtolower($cleanToken);
+            $cachedId = Cache::get("ppdb_verify_token:{$normalized}");
+            if ($cachedId) {
+                $candidate = Applicant::with(['wave', 'track'])
+                    ->where('id', $cachedId)
+                    ->where('status', '!=', 'draft')
+                    ->first();
+                if ($candidate && $candidate->created_at) {
+                    $expected32 = substr(hash('sha256', $candidate->registration_no.'|'.$candidate->created_at->timestamp), 0, 32);
+                    if (hash_equals($expected32, $normalized)) {
+                        $applicant = $candidate;
+                    }
+                }
+            }
+
+            if (! $applicant) {
+                Applicant::with(['wave', 'track'])
+                    ->where('status', '!=', 'draft')
+                    ->chunk(200, function ($chunk) use ($normalized, &$applicant) {
+                        foreach ($chunk as $candidate) {
+                            if (! $candidate->created_at) {
+                                continue;
+                            }
+                            $expected32 = substr(hash('sha256', $candidate->registration_no.'|'.$candidate->created_at->timestamp), 0, 32);
+                            if (hash_equals($expected32, $normalized)) {
+                                $applicant = $candidate;
+                                Cache::forever("ppdb_verify_token:{$normalized}", $candidate->id);
+
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    });
+            }
+        }
+
+        if (! $applicant) {
+            return null;
+        }
+
+        $schoolName = $applicant->wave?->school_id
+            ? (School::find($applicant->wave->school_id)?->name ?? 'SMP Laboratorium UM')
+            : 'SMP Laboratorium UM';
+
+        return [
+            'document_type' => 'ppdb_receipt',
+            'is_valid' => true,
+            'status' => $applicant->status,
+            'decision' => $applicant->decision,
+            'verification_token' => $cleanToken,
+            'document_title' => 'Bukti Pendaftaran Resmi PPDB',
+            'school_name' => $schoolName,
+            'registration_no' => $applicant->registration_no,
+            'applicant' => [
+                'name' => $applicant->full_name,
+            ],
+            'wave' => $applicant->wave?->name,
+            'track' => $applicant->track?->name,
+            'submitted_at' => $applicant->created_at?->toIso8601String(),
+            'message' => 'Bukti pendaftaran PPDB ini ASLI dan tercatat secara resmi dalam sistem sekolah.',
         ];
     }
 

@@ -12,9 +12,11 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthService
@@ -366,6 +368,95 @@ class AuthService
         RefreshToken::where('user_id', $user->id)->update(['revoked_at' => now()]);
 
         $this->logAudit($user->id, 'auth.password_reset_success', 'User', $user->id, null, null, $request);
+    }
+
+    /**
+     * P1-25: Periksa validitas token aktivasi akun wali/siswa pasca-enroll PPDB tanpa mengonsumsinya.
+     */
+    public function inspectActivationToken(string $token): array
+    {
+        [$userId, $accountType] = $this->resolveActivationTarget($token, false);
+
+        $user = User::find($userId);
+        if (! $user) {
+            throw new HttpException(404, 'Akun aktivasi tidak ditemukan.');
+        }
+
+        return [
+            'valid' => true,
+            'account_type' => $accountType,
+            'username' => $user->username,
+            'masked_email' => Str::mask((string) $user->email, '*', 3, max(0, strpos((string) $user->email, '@') - 3)),
+        ];
+    }
+
+    /**
+     * P1-25: Aktivasi akun wali/siswa pasca-enroll PPDB menggunakan token sekali pakai.
+     */
+    public function activateWithToken(string $token, string $newPassword, Request $request): array
+    {
+        [$userId, $accountType] = $this->resolveActivationTarget($token, true);
+
+        return DB::transaction(function () use ($userId, $accountType, $newPassword, $request) {
+            $user = User::lockForUpdate()->find($userId);
+            if (! $user) {
+                throw new HttpException(404, 'Akun pengguna tidak ditemukan.');
+            }
+
+            $user->password_hash = Hash::make($newPassword);
+            $user->must_change_password = false;
+            $user->status = 'active';
+            $user->save();
+
+            // Pastikan seluruh sesi lama dicabut bersih
+            $user->tokens()->delete();
+            RefreshToken::where('user_id', $user->id)->update(['revoked_at' => now()]);
+
+            $this->logAudit($user->id, 'auth.guardian_activated', 'User', $user->id, null, ['account_type' => $accountType], $request);
+
+            return [
+                'activated' => true,
+                'account_type' => $accountType,
+                'username' => $user->username,
+                'message' => 'Akun berhasil diaktifkan. Silakan masuk menggunakan username dan kata sandi baru Anda.',
+            ];
+        });
+    }
+
+    /**
+     * Resolusi token aktivasi akun guardian atau siswa dari cache.
+     *
+     * @return array{0: string, 1: string}
+     */
+    protected function resolveActivationTarget(string $token, bool $consume): array
+    {
+        $cleanToken = trim($token);
+        if ($cleanToken === '') {
+            throw new HttpException(404, 'Token aktivasi tidak valid atau telah kedaluwarsa.');
+        }
+
+        $guardianKey = "guardian_activation_token:{$cleanToken}";
+        $studentKey = "student_activation_token:{$cleanToken}";
+
+        $userId = $consume ? Cache::pull($guardianKey) : Cache::get($guardianKey);
+        if ($userId) {
+            if ($consume) {
+                Cache::forget("guardian_activation:{$userId}");
+            }
+
+            return [(string) $userId, 'guardian'];
+        }
+
+        $userId = $consume ? Cache::pull($studentKey) : Cache::get($studentKey);
+        if ($userId) {
+            if ($consume) {
+                Cache::forget("student_activation:{$userId}");
+            }
+
+            return [(string) $userId, 'student'];
+        }
+
+        throw new HttpException(404, 'Tautan aktivasi akun tidak valid atau sudah kedaluwarsa/digunakan.');
     }
 
     /**

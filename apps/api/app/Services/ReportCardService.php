@@ -186,6 +186,10 @@ class ReportCardService
 
         $extracurricularsByStudent = ExtracurricularMember::with('extracurricular')
             ->whereIn('student_id', $allStudentIds)
+            ->whereIn('status', ['aktif', 'active'])
+            ->when($semester->end_date, fn ($q) => $q->where(function ($sub) use ($semester) {
+                $sub->whereNull('joined_at')->orWhereDate('joined_at', '<=', $semester->end_date);
+            }))
             ->get()
             ->groupBy('student_id');
 
@@ -400,9 +404,13 @@ class ReportCardService
         }
         $attendanceSnapshot = ($preloaded['attendance_aggregator'] ?? app(AttendanceAggregator::class))->summarizeDaily($attendances, 2);
 
-        // 5. Ekstrakurikuler Siswa
+        // 5. Ekstrakurikuler Siswa (P1-16: hanya keanggotaan aktif dalam rentang semester)
         $extracurricularModels = $preloaded['extracurriculars'] ?? ExtracurricularMember::with('extracurricular')
             ->where('student_id', $student->id)
+            ->whereIn('status', ['aktif', 'active'])
+            ->when($semester->end_date, fn ($q) => $q->where(function ($sub) use ($semester) {
+                $sub->whereNull('joined_at')->orWhereDate('joined_at', '<=', $semester->end_date);
+            }))
             ->get();
         $extracurriculars = $extracurricularModels
             ->map(fn ($em) => [
@@ -511,8 +519,14 @@ class ReportCardService
         }
 
         return DB::transaction(function () use ($id, $data, $request) {
-            $report = ReportCard::findOrFail($id);
+            $report = ReportCard::lockForUpdate()->findOrFail($id);
             $oldStatus = $report->status;
+
+            // P1-16: Lindungi status disetujui/terbit agar tidak turun ke terkunci/draft
+            if (in_array($oldStatus, ['disetujui', 'terbit'], true)) {
+                throw new HttpException(422, 'E-Rapor yang telah disetujui atau diterbitkan tidak dapat dikunci atau dikembalikan menjadi draf.');
+            }
+
             $isLocked = (bool) $data['is_locked'];
 
             if ($isLocked) {
@@ -731,17 +745,28 @@ class ReportCardService
         if ($reports->isEmpty()) {
             return [
                 'count' => 0,
+                'skipped_published_count' => 0,
+                'skipped_ids' => [],
                 'is_locked' => $isLocked,
                 'items' => [],
             ];
         }
 
         $updatedCount = 0;
+        $skippedPublishedCount = 0;
+        $skippedIds = [];
         $updatedItems = [];
 
-        DB::transaction(function () use ($reports, $isLocked, $currentUser, $request, $data, &$updatedCount, &$updatedItems) {
+        DB::transaction(function () use ($reports, $isLocked, $currentUser, $request, $data, &$updatedCount, &$skippedPublishedCount, &$skippedIds, &$updatedItems) {
             foreach ($reports as $report) {
                 $oldStatus = $report->status;
+                if (in_array($oldStatus, ['disetujui', 'terbit'], true)) {
+                    $skippedPublishedCount++;
+                    $skippedIds[] = $report->id;
+
+                    continue;
+                }
+
                 if ($isLocked) {
                     $report->status = 'terkunci';
                     $report->locked_at = now();
@@ -769,6 +794,8 @@ class ReportCardService
 
         return [
             'count' => $updatedCount,
+            'skipped_published_count' => $skippedPublishedCount,
+            'skipped_ids' => $skippedIds,
             'is_locked' => $isLocked,
             'items' => $updatedItems,
         ];
