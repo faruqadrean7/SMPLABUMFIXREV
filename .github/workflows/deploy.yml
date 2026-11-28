@@ -148,6 +148,7 @@ jobs:
   deploy:
     name: Deploy
     needs: test
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
     runs-on: self-hosted
     environment: production
     steps:
