@@ -3,7 +3,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/providers/auth-provider';
-import { isReadOnlyRole } from '@/lib/rbac/evaluator';
+import { hasPermission, isReadOnlyRole } from '@/lib/rbac/evaluator';
+import { ADMIN_NAV_SECTIONS } from '@/lib/rbac/navigation';
 import { reportsApi } from '@/features/reports/reports-api';
 import { ExecutiveDashboardData, GradeLevelAverage } from '@/features/reports/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -44,8 +45,19 @@ export default function AdminDashboardPage() {
     (isReadOnly ? 'Pengawas / Komite' : 'Administrator');
 
   const userRoles = (user?.roles as string[]) || [];
+  const canViewExecutive = hasPermission(user, [
+    'executive.dashboard.view',
+    'dashboard.executive',
+    'principal',
+  ]);
 
   const loadDashboard = useCallback(async () => {
+    if (!canViewExecutive) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -61,7 +73,7 @@ export default function AdminDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canViewExecutive]);
 
   useEffect(() => {
     loadDashboard();
@@ -82,6 +94,85 @@ export default function AdminDashboardPage() {
           <div className="h-64 rounded-xl bg-slate-200" />
           <div className="h-64 rounded-xl bg-slate-200" />
           <div className="h-64 rounded-xl bg-slate-200" />
+        </div>
+      </div>
+    );
+  }
+
+  // Beranda adaptif untuk role operasional admin non-eksekutif (mencegah 403 GET /dashboard/executive)
+  if (!canViewExecutive) {
+    const accessibleModules = ADMIN_NAV_SECTIONS.flatMap((section) =>
+      section.items
+        .filter((item) => item.href !== '/admin' && hasPermission(user, item.permission))
+        .map((item) => ({
+          sectionTitle: section.title || 'Layanan Utama',
+          ...item,
+          visibleChildren: item.children?.filter((c) => hasPermission(user, c.permission)) ?? [],
+        }))
+    ).filter((item) => !item.children?.length || item.visibleChildren.length > 0);
+
+    return (
+      <div className="space-y-6" data-testid="dashboard-adaptive-workspace">
+        <div className="rounded-xl bg-gradient-to-r from-brand-blue to-blue-900 p-6 text-white shadow-elevated">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge variant="outline" className="text-white border-white/30 bg-white/10 text-xs">
+                  Ruang Kerja Operasional
+                </Badge>
+                {userRoles.length > 0 && (
+                  <span className="text-xs text-blue-200 uppercase font-mono">
+                    {userRoles.join(', ')}
+                  </span>
+                )}
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight">Selamat Datang, {displayName}!</h1>
+              <p className="mt-1 text-sm text-blue-100 max-w-2xl">
+                Pilih modul operasional yang tersedia sesuai wewenang peran Anda untuk mengelola layanan sekolah secara langsung.
+              </p>
+            </div>
+            <Badge variant="default" className="bg-brand-teal text-white border-none px-3 py-1.5 text-xs self-start md:self-auto">
+              <ShieldCheck className="h-3.5 w-3.5 mr-1" />
+              Sesi Terverifikasi
+            </Badge>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {accessibleModules.map((mod) => (
+            <Card key={mod.href + mod.title} className="hover:shadow-elevated transition-shadow flex flex-col justify-between">
+              <CardHeader className="pb-2">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  {mod.sectionTitle}
+                </div>
+                <CardTitle className="text-base text-slate-900">{mod.title}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {mod.visibleChildren.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    {mod.visibleChildren.slice(0, 4).map((child) => (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className="flex items-center justify-between text-xs font-medium text-brand-blue hover:text-blue-800 bg-blue-50/70 hover:bg-blue-100/70 rounded-md px-2.5 py-1.5 transition-colors"
+                      >
+                        <span>{child.title}</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <Link
+                    href={mod.href}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-blue hover:text-blue-800"
+                  >
+                    <span>Buka {mod.title}</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                )}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     );

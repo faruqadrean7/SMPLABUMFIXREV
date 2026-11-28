@@ -250,7 +250,7 @@ class PageService
                     ['title' => 'Visi & Misi', 'url' => '/profil#visi-misi', 'target' => '_self', 'is_active' => true],
                     ['title' => 'Sambutan Kepala Sekolah', 'url' => '/profil#sambutan', 'target' => '_self', 'is_active' => true],
                     ['title' => 'Fasilitas', 'url' => '/profil#fasilitas', 'target' => '_self', 'is_active' => true],
-                    ['title' => 'Guru & Staf', 'url' => '/guru', 'target' => '_self', 'is_active' => true],
+                    ['title' => 'Pendidik & Staf', 'url' => '/pendidik', 'target' => '_self', 'is_active' => true],
                 ],
             ],
             ['title' => 'Berita', 'url' => '/berita', 'target' => '_self', 'is_active' => true],

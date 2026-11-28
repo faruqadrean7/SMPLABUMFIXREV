@@ -9,32 +9,19 @@ import { NotificationBell } from '@/components/notifications/notification-bell';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import {
-  GraduationCap,
-  Users,
-  BookOpen,
   Briefcase,
   LogOut,
   Menu,
   X,
-  Calendar,
   FileText,
-  Monitor,
   Bell,
   Home,
-  User as UserIcon,
   CheckSquare,
-  Layers,
-  Award,
   DollarSign,
   CalendarDays,
   Clock,
-  ShieldCheck,
-  UserCheck,
   Wrench,
   Building,
-  HeartHandshake,
-  Trophy,
-  CreditCard,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -47,10 +34,7 @@ export function PortalShell({ children }: PortalShellProps) {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Tentukan konteks portal dari URL
-  const isStudentPortal = pathname.startsWith('/portal/siswa');
-  const isParentPortal = pathname.startsWith('/portal/ortu');
-  const isTeacherPortal = pathname.startsWith('/portal/guru');
+  // PortalShell melayani /portal/staf, /portal/kepsek, /portal/notifikasi, & /portal
   const isStaffPortal = pathname.startsWith('/portal/staf');
   const isKepsekPortal = pathname.startsWith('/portal/kepsek');
   const isNotificationPortal = pathname.startsWith('/portal/notifikasi');
@@ -59,19 +43,7 @@ export function PortalShell({ children }: PortalShellProps) {
   let portalSubtitle = 'SISTLABUM • SMP Laboratorium UM';
   let PortalIcon = Home;
 
-  if (isStudentPortal) {
-    portalTitle = 'Portal Siswa';
-    portalSubtitle = 'Siswa Aktif Labschool UM';
-    PortalIcon = GraduationCap;
-  } else if (isParentPortal) {
-    portalTitle = 'Portal Orang Tua';
-    portalSubtitle = 'Monitoring Terpadu Ananda';
-    PortalIcon = Users;
-  } else if (isTeacherPortal) {
-    portalTitle = 'Portal Guru';
-    portalSubtitle = 'Sistem Akademik Pengajar';
-    PortalIcon = BookOpen;
-  } else if (isStaffPortal) {
+  if (isStaffPortal) {
     portalTitle = 'Portal Staf & TU';
     portalSubtitle = 'Operasional & Administrasi';
     PortalIcon = Briefcase;
@@ -87,55 +59,6 @@ export function PortalShell({ children }: PortalShellProps) {
 
   // Navigasi kontekstual per portal
   const getNavItems = () => {
-    if (isStudentPortal) {
-      return [
-        { title: 'Beranda', href: '/portal/siswa', icon: Home },
-        { title: 'Jadwal', href: '/portal/siswa/jadwal', icon: Calendar },
-        { title: 'Tugas', href: '/portal/siswa/tugas', icon: Award },
-        { title: 'Buku Nilai', href: '/portal/siswa/nilai', icon: FileText },
-        { title: 'Ujian CBT', href: '/portal/siswa/cbt', icon: Monitor },
-        { title: 'Konseling', href: '/portal/siswa/konseling', icon: HeartHandshake },
-        { title: 'Buku Poin', href: '/portal/siswa/poin', icon: Trophy },
-        { title: 'Tagihan', href: '/portal/siswa/tagihan', icon: CreditCard },
-        { title: 'Notifikasi', href: '/portal/notifikasi', icon: Bell },
-      ];
-    }
-    if (isParentPortal) {
-      return [
-        { title: 'Daftar Anak', href: '/portal/ortu', icon: Users },
-        { title: 'Notifikasi', href: '/portal/notifikasi', icon: Bell },
-      ];
-    }
-    if (isTeacherPortal) {
-      const isHomeroom =
-        user?.roles?.includes('homeroom') ||
-        user?.roles?.includes('super_admin') ||
-        Boolean(user?.profile?.isHomeroom);
-
-      const items = [
-        { title: 'Beranda', href: '/portal/guru', icon: Home },
-        { title: 'Jadwal', href: '/portal/guru/jadwal', icon: Calendar },
-        { title: 'Presensi KBM', href: '/portal/guru/presensi', icon: CheckSquare },
-        { title: 'Jurnal', href: '/portal/guru/jurnal', icon: BookOpen },
-        { title: 'Nilai', href: '/portal/guru/nilai', icon: FileText },
-        { title: 'Materi', href: '/portal/guru/materi', icon: Layers },
-        { title: 'Tugas', href: '/portal/guru/tugas', icon: Award },
-        { title: 'Ujian CBT', href: '/portal/guru/ujian', icon: Monitor },
-        { title: 'Data Siswa & Poin', href: '/portal/guru/siswa', icon: Users },
-        { title: 'Perizinan Siswa', href: '/portal/guru/perizinan', icon: UserCheck },
-        { title: 'Izin & Cuti', href: '/portal/guru/izin-cuti', icon: CalendarDays },
-        { title: 'Slip Gaji', href: '/portal/guru/slip-gaji', icon: DollarSign },
-        { title: 'Presensi Kerja', href: '/portal/guru/presensi-saya', icon: Clock },
-        { title: 'Fasilitas & Sarpras', href: '/portal/guru/fasilitas', icon: Building },
-      ];
-
-      if (isHomeroom) {
-        items.push({ title: 'Wali Kelas', href: '/portal/guru/wali-kelas', icon: ShieldCheck });
-      }
-
-      items.push({ title: 'Notifikasi', href: '/portal/notifikasi', icon: Bell });
-      return items;
-    }
     if (isStaffPortal) {
       return [
         { title: 'Beranda', href: '/portal/staf', icon: Home },

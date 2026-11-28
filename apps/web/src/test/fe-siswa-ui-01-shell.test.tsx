@@ -5,10 +5,14 @@ import * as StudentDataHooks from '@/lib/use-student-data';
 import StudentLayout from '@/app/(portal)/portal/siswa/layout';
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/siswa/dashboard',
+  usePathname: () => '/portal/siswa/dashboard',
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+  }),
 }));
 
-vi.mock('@/lib/auth-context', () => ({
+vi.mock('@/providers/auth-provider', () => ({
   useAuth: () => ({
     user: { username: 'siswa', roles: ['student'], profile: { name: 'Raka', nis: '26001', className: 'VII-A' } },
     logout: vi.fn(),
@@ -16,7 +20,7 @@ vi.mock('@/lib/auth-context', () => ({
 }));
 
 // RoleGuard just renders children in tests so we can inspect the shell.
-vi.mock('@/components/role-guard', () => ({
+vi.mock('@/components/shared/role-guard', () => ({
   RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 

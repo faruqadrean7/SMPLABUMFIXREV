@@ -163,8 +163,9 @@ describe('FE-NAV-404-03: Otomatisasi Uji Validitas Rute Menu Navigasi', () => {
 
   const navigationConfigFiles = [
     path.join(projectRoot, 'src/lib/rbac/navigation.ts'),
-    path.join(projectRoot, 'src/components/shell/portal/parent-header.tsx'),
-    path.join(projectRoot, 'src/components/shell/portal/student-header.tsx'),
+    path.join(projectRoot, 'src/lib/student-navigation.ts'),
+    path.join(projectRoot, 'src/app/(portal)/portal/guru/layout.tsx'),
+    path.join(projectRoot, 'src/app/(portal)/portal/ortu/layout.tsx'),
     path.join(projectRoot, 'src/components/shell/portal/portal-shell.tsx'),
     path.join(projectRoot, 'src/components/shell/admin/admin-sidebar.tsx'),
     path.join(projectRoot, 'src/components/shell/public/PublicHeader.tsx'),

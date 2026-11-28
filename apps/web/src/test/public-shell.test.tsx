@@ -62,27 +62,32 @@ describe('Public Shell & Accessibility Tests (Langkah 1)', () => {
       expect(screen.getByText('P2LP Universitas Negeri Malang')).toBeInTheDocument();
     });
 
-    it('merender seluruh 6 menu navigasi publik dengan tautan URL yang benar', () => {
+    it('merender 6 item navigasi utama ringkas beserta dropdown Profil & Informasi menuju rute valid', () => {
       render(<PublicHeader />);
       const nav = screen.getByRole('navigation', { name: /navigasi utama/i });
       expect(nav).toBeInTheDocument();
 
-      const expectedLinks = [
+      const expectedDirectLinks = [
         { name: 'Beranda', href: '/' },
-        { name: 'Profil', href: '/profil' },
         { name: 'Akademik', href: '/akademik' },
-        { name: 'Berita', href: '/berita' },
-        { name: 'Galeri', href: '/galeri' },
         { name: 'Kontak', href: '/kontak' },
+        { name: /lapor & pengaduan/i, href: '/lapor' },
       ];
 
-      expectedLinks.forEach(({ name, href }) => {
+      expectedDirectLinks.forEach(({ name, href }) => {
         const link = within(nav).getByRole('link', { name });
         expect(link).toHaveAttribute('href', href);
       });
 
-      const laporLink = within(nav).getByRole('link', { name: /lapor & pengaduan/i });
-      expect(laporLink).toHaveAttribute('href', '/lapor');
+      const profilTrigger = within(nav).getByRole('button', { name: /profil/i });
+      fireEvent.click(profilTrigger);
+      expect(within(nav).getByRole('link', { name: /pendidik & staf/i })).toHaveAttribute('href', '/pendidik');
+      expect(within(nav).getByRole('link', { name: /galeri aktivitas/i })).toHaveAttribute('href', '/galeri');
+
+      const infoTrigger = within(nav).getByRole('button', { name: /informasi/i });
+      fireEvent.click(infoTrigger);
+      expect(within(nav).getByRole('link', { name: /berita & pengumuman/i })).toHaveAttribute('href', '/berita');
+      expect(within(nav).getByRole('link', { name: /agenda sekolah/i })).toHaveAttribute('href', '/agenda');
     });
 
     it('merender tombol aksi cepat PPDB Online menuju /ppdb dengan target _blank', () => {

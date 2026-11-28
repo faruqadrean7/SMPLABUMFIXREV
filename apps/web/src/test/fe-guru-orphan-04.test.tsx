@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { PortalShell } from '@/components/shell/portal/portal-shell';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import TeacherLayout from '@/app/(portal)/portal/guru/layout';
 import SarprasRedirectPage from '@/app/(portal)/portal/guru/sarpras/page';
 import * as authProviderModule from '@/providers/auth-provider';
 import * as navigationModule from 'next/navigation';
@@ -11,9 +12,14 @@ vi.mock('@/providers/auth-provider', () => ({
   useAuth: vi.fn(),
 }));
 
+vi.mock('@/components/shared/role-guard', () => ({
+  RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(),
   useRouter: vi.fn(() => ({
+    push: vi.fn(),
     replace: vi.fn(),
   })),
 }));
@@ -24,13 +30,14 @@ describe('FE-GURU-ORPHAN-04: Tautkan Perizinan & Siswa, Konsolidasi Sarpras ke F
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(navigationModule.useRouter).mockReturnValue({
+      push: vi.fn(),
       replace: mockReplace,
     } as any);
   });
 
   describe('1. Portal Shell Teacher Navigation Links (AC1 & AC2)', () => {
-    it('FE-GURU-ORPHAN-04: sidebar portal guru memuat link aktif ke Data Siswa & Poin dan Perizinan Siswa', () => {
-      vi.mocked(navigationModule.usePathname).mockReturnValue('/portal/guru');
+    it('FE-GURU-ORPHAN-04: sidebar portal guru memuat link aktif ke Data Siswa & Poin, Perizinan Siswa, dan seluruh halaman guru', () => {
+      vi.mocked(navigationModule.usePathname).mockReturnValue('/portal/guru/dashboard');
       vi.mocked(authProviderModule.useAuth).mockReturnValue({
         user: {
           id: 'tch-1',
@@ -38,12 +45,19 @@ describe('FE-GURU-ORPHAN-04: Tautkan Perizinan & Siswa, Konsolidasi Sarpras ke F
           roles: ['teacher'],
           profile: { name: 'Bambang Sudarsono, M.Pd' },
         },
+        logout: vi.fn(),
       } as any);
 
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
       render(
-        <PortalShell>
-          <div>Konten Guru</div>
-        </PortalShell>
+        <QueryClientProvider client={queryClient}>
+          <TeacherLayout>
+            <div>Konten Guru</div>
+          </TeacherLayout>
+        </QueryClientProvider>
       );
 
       // Check Data Siswa & Poin

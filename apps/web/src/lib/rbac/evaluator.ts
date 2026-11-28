@@ -425,16 +425,7 @@ export function getPortalRoleOptions(roles: unknown): Array<{
 
   if (
     isSuperAdmin ||
-    safeRoles.some(
-      (r) =>
-        r === 'super_admin' ||
-        r === 'operator_cms' ||
-        r === 'ppdb_committee' ||
-        r === 'treasurer' ||
-        r === 'student_affairs' ||
-        r === 'public_relations' ||
-        r === 'counselor'
-    )
+    safeRoles.some((r) => ADMIN_SHELL_ROLES.includes(r as RoleCode))
   ) {
     result.push({
       portal: 'admin',

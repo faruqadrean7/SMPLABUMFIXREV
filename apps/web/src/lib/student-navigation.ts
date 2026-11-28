@@ -11,6 +11,8 @@ import {
   Target,
   Layers,
   ShieldAlert,
+  Receipt,
+  Bell,
   LucideIcon,
 } from 'lucide-react';
 import { StudentProgramType, StudentProgramProfileData } from './use-student-data';
@@ -34,7 +36,7 @@ export function getStudentNavLinks(
   const baseLinks: StudentNavLink[] = [
     {
       name: 'Ringkasan & Beranda',
-      href: '/siswa/dashboard',
+      href: '/portal/siswa/dashboard',
       icon: LayoutDashboard,
     },
   ];
@@ -44,7 +46,7 @@ export function getStudentNavLinks(
     const currentJuz = programProfile?.current_juz ?? 2;
     baseLinks.push({
       name: 'Hafalan & Tasmi',
-      href: '/siswa/hafalan',
+      href: '/portal/siswa/hafalan',
       icon: BookOpen,
       badge: `${currentJuz} Juz`,
       badgeColor: 'bg-emerald-700 text-white',
@@ -52,7 +54,7 @@ export function getStudentNavLinks(
   } else if (currentProg === 'icp') {
     baseLinks.push({
       name: 'Cambridge & Portofolio',
-      href: '/siswa/cambridge',
+      href: '/portal/siswa/cambridge',
       icon: Globe,
       badge: 'Cambridge',
       badgeColor: 'bg-blue-800 text-white',
@@ -60,7 +62,7 @@ export function getStudentNavLinks(
   } else if (currentProg === 'inklusi') {
     baseLinks.push({
       name: 'Target Mandiri & PPI',
-      href: '/siswa/ppi',
+      href: '/portal/siswa/ppi',
       icon: Target,
       badge: 'PPI Aktif',
       badgeColor: 'bg-purple-700 text-white',
@@ -68,44 +70,54 @@ export function getStudentNavLinks(
   } else if (currentProg === 'reguler') {
     baseLinks.push({
       name: 'Proyek P5 & Karya',
-      href: '/siswa/p5',
+      href: '/portal/siswa/p5',
       icon: Layers,
       badge: 'P5 Aktif',
       badgeColor: 'bg-slate-700 text-white',
     });
   }
 
-  // Modul KBM Umum
+  // Modul KBM & Layanan Umum
   const commonAcademicLinks: StudentNavLink[] = [
     {
       name: 'Ujian CBT Web',
-      href: '/siswa/cbt',
+      href: '/portal/siswa/cbt',
       icon: MonitorPlay,
     },
     {
       name: 'Jadwal & Kalender',
-      href: '/siswa/jadwal',
+      href: '/portal/siswa/jadwal',
       icon: Calendar,
     },
     {
       name: 'Modul & Tugas LMS',
-      href: '/siswa/tugas',
+      href: '/portal/siswa/tugas',
       icon: CheckSquare,
     },
     {
       name: 'Capaian Nilai & Rapor',
-      href: '/siswa/nilai',
+      href: '/portal/siswa/nilai',
       icon: FileSpreadsheet,
     },
     {
       name: 'Poin & Ekstrakurikuler',
-      href: '/siswa/poin',
+      href: '/portal/siswa/poin',
       icon: Award,
     },
     {
+      name: 'Tagihan & Biaya',
+      href: '/portal/siswa/tagihan',
+      icon: Receipt,
+    },
+    {
       name: 'Konseling & Bantuan',
-      href: '/siswa/konseling',
+      href: '/portal/siswa/konseling',
       icon: HeartHandshake,
+    },
+    {
+      name: 'Notifikasi',
+      href: '/portal/notifikasi',
+      icon: Bell,
     },
     {
       name: 'Lapor Bullying',

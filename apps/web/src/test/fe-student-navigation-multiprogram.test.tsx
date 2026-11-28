@@ -3,13 +3,15 @@ import { getStudentNavLinks, StudentProgramType } from '@/lib/student-navigation
 
 describe('FE-PORTAL-STUDENT-02A: Dynamic Navigation by Learning Program', () => {
   const commonLinks = [
-    '/siswa/dashboard',
-    '/siswa/cbt',
-    '/siswa/jadwal',
-    '/siswa/tugas',
-    '/siswa/nilai',
-    '/siswa/poin',
-    '/siswa/konseling',
+    '/portal/siswa/dashboard',
+    '/portal/siswa/cbt',
+    '/portal/siswa/jadwal',
+    '/portal/siswa/tugas',
+    '/portal/siswa/nilai',
+    '/portal/siswa/poin',
+    '/portal/siswa/tagihan',
+    '/portal/siswa/konseling',
+    '/portal/notifikasi',
   ];
 
   it('includes common links for any student program', () => {
@@ -27,7 +29,7 @@ describe('FE-PORTAL-STUDENT-02A: Dynamic Navigation by Learning Program', () => 
 
   it('includes "Hafalan & Tasmi" menu specifically for Tahfidz program', () => {
     const links = getStudentNavLinks('tahfidz', { current_juz: 2 });
-    const tahfidzLink = links.find((l) => l.href === '/siswa/hafalan');
+    const tahfidzLink = links.find((l) => l.href === '/portal/siswa/hafalan');
 
     expect(tahfidzLink).toBeDefined();
     expect(tahfidzLink?.name).toBe('Hafalan & Tasmi');
@@ -35,12 +37,12 @@ describe('FE-PORTAL-STUDENT-02A: Dynamic Navigation by Learning Program', () => 
 
     // Ensure it is not in other programs
     const icpLinks = getStudentNavLinks('icp');
-    expect(icpLinks.find((l) => l.href === '/siswa/hafalan')).toBeUndefined();
+    expect(icpLinks.find((l) => l.href === '/portal/siswa/hafalan')).toBeUndefined();
   });
 
   it('includes "Cambridge & Portofolio" menu specifically for ICP program', () => {
     const links = getStudentNavLinks('icp');
-    const icpLink = links.find((l) => l.href === '/siswa/cambridge');
+    const icpLink = links.find((l) => l.href === '/portal/siswa/cambridge');
 
     expect(icpLink).toBeDefined();
     expect(icpLink?.name).toBe('Cambridge & Portofolio');
@@ -48,12 +50,12 @@ describe('FE-PORTAL-STUDENT-02A: Dynamic Navigation by Learning Program', () => 
 
     // Ensure it is not in reguler
     const regulerLinks = getStudentNavLinks('reguler');
-    expect(regulerLinks.find((l) => l.href === '/siswa/cambridge')).toBeUndefined();
+    expect(regulerLinks.find((l) => l.href === '/portal/siswa/cambridge')).toBeUndefined();
   });
 
   it('includes "Target Mandiri & PPI" menu specifically for Inklusi program', () => {
     const links = getStudentNavLinks('inklusi');
-    const inklusiLink = links.find((l) => l.href === '/siswa/ppi');
+    const inklusiLink = links.find((l) => l.href === '/portal/siswa/ppi');
 
     expect(inklusiLink).toBeDefined();
     expect(inklusiLink?.name).toBe('Target Mandiri & PPI');
@@ -61,12 +63,12 @@ describe('FE-PORTAL-STUDENT-02A: Dynamic Navigation by Learning Program', () => 
 
     // Ensure it is not in tahfidz
     const tahfidzLinks = getStudentNavLinks('tahfidz');
-    expect(tahfidzLinks.find((l) => l.href === '/siswa/ppi')).toBeUndefined();
+    expect(tahfidzLinks.find((l) => l.href === '/portal/siswa/ppi')).toBeUndefined();
   });
 
   it('includes "Proyek P5 & Karya" menu specifically for Reguler program', () => {
     const links = getStudentNavLinks('reguler');
-    const regulerLink = links.find((l) => l.href === '/siswa/p5');
+    const regulerLink = links.find((l) => l.href === '/portal/siswa/p5');
 
     expect(regulerLink).toBeDefined();
     expect(regulerLink?.name).toBe('Proyek P5 & Karya');
@@ -74,6 +76,6 @@ describe('FE-PORTAL-STUDENT-02A: Dynamic Navigation by Learning Program', () => 
 
     // Ensure it is not in icp
     const icpLinks = getStudentNavLinks('icp');
-    expect(icpLinks.find((l) => l.href === '/siswa/p5')).toBeUndefined();
+    expect(icpLinks.find((l) => l.href === '/portal/siswa/p5')).toBeUndefined();
   });
 });
