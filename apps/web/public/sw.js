@@ -64,8 +64,8 @@ self.addEventListener('push', (event) => {
   let payload = {
     title: 'Notifikasi SISTLABUM',
     body: 'Anda memiliki pemberitahuan baru.',
-    icon: '/images/logo-icon.png',
-    badge: '/images/badge-icon.png',
+    icon: '/images/logo.png',
+    badge: '/images/logo.png',
     data: {
       url: '/',
     },
@@ -79,8 +79,17 @@ self.addEventListener('push', (event) => {
       payload.icon = data.icon || payload.icon;
       payload.badge = data.badge || payload.badge;
 
-      // Extract safe deep link URL
-      const targetUrl = data.data?.deep_link || data.data?.url || data.url || '/';
+      // Extract safe deep link URL (target_url kanonis, fallback action_url / deep_link / url)
+      const targetUrl =
+        data.data?.target_url ||
+        data.data?.action_url ||
+        data.data?.deep_link ||
+        data.data?.url ||
+        data.target_url ||
+        data.action_url ||
+        data.deep_link ||
+        data.url ||
+        '/';
       payload.data = {
         ...data.data,
         url: sanitizeTargetUrl(targetUrl),

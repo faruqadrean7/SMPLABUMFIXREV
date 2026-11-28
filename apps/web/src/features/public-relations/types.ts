@@ -65,6 +65,15 @@ export interface ComplaintEvent {
   } | null;
 }
 
+export interface ComplaintAttachment {
+  id: string;
+  object_key?: string;
+  mime_type?: string;
+  size_bytes?: number;
+  signed_url?: string;
+  expires_at?: string;
+}
+
 export interface ComplaintItem {
   id: string;
   school_id?: string | null;
@@ -94,6 +103,7 @@ export interface ComplaintItem {
     email?: string;
   } | null;
   events?: ComplaintEvent[];
+  attachments?: ComplaintAttachment[];
 }
 
 export interface CreateComplaintPayload {

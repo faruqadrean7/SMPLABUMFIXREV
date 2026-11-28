@@ -15,14 +15,23 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Settings2,
 } from 'lucide-react';
 import { notificationsApi } from '@/features/notifications/notifications-api';
 import { NotificationItem, NotificationMeta } from '@/features/notifications/types';
+import {
+  getNotificationPermission,
+  isPushNotificationSupported,
+  registerServiceWorker,
+  requestNotificationPermission,
+  subscribeToWebPush,
+  syncSubscriptionWithBackend,
+} from '@/features/notifications/web-push';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { getSafeDeepLink } from './notification-bell';
+import { extractNotificationTargetUrl, getSafeDeepLink } from './notification-bell';
 
 interface NotificationInboxViewProps {
   portalName: string;
@@ -44,6 +53,95 @@ export function NotificationInboxView({ portalName }: NotificationInboxViewProps
   const [statusFilter, setStatusFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+
+  // P1-18: Panel Preferensi Notifikasi & Push Browser
+  const [showPrefs, setShowPrefs] = useState(false);
+  const [prefsLoading, setPrefsLoading] = useState(false);
+  const [prefsSaving, setPrefsSaving] = useState(false);
+  const [prefsError, setPrefsError] = useState<string | null>(null);
+  const [prefsNotice, setPrefsNotice] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<string>(() => {
+    if (!isPushNotificationSupported()) return 'unsupported';
+    return getNotificationPermission();
+  });
+  const [preferences, setPreferences] = useState<
+    Array<{
+      notif_type: string;
+      label?: string;
+      description?: string;
+      is_enabled: boolean;
+      channel_push: boolean;
+      channel_wa?: boolean;
+      channel_email?: boolean;
+    }>
+  >([]);
+
+  const loadPreferences = useCallback(async () => {
+    setPrefsLoading(true);
+    setPrefsError(null);
+    try {
+      const res = await notificationsApi.getPreferences();
+      setPreferences(Array.isArray(res.data) ? res.data : []);
+    } catch (err: unknown) {
+      setPrefsError(err instanceof Error ? err.message : 'Gagal memuat preferensi notifikasi.');
+    } finally {
+      setPrefsLoading(false);
+    }
+  }, []);
+
+  const handleTogglePreference = (notifType: string, field: 'is_enabled' | 'channel_push' | 'channel_wa' | 'channel_email') => {
+    setPreferences((prev) =>
+      prev.map((item) =>
+        item.notif_type === notifType ? { ...item, [field]: !Boolean(item[field]) } : item
+      )
+    );
+  };
+
+  const handleSavePreferences = async () => {
+    setPrefsSaving(true);
+    setPrefsError(null);
+    setPrefsNotice(null);
+    try {
+      await notificationsApi.updatePreferences({
+        preferences: preferences.map((p) => ({
+          notif_type: p.notif_type,
+          topic: p.notif_type,
+          is_enabled: p.is_enabled,
+          enabled: p.is_enabled,
+          channel_push: p.channel_push,
+          channel_wa: p.channel_wa,
+          channel_email: p.channel_email,
+        })),
+      });
+      setPrefsNotice('Preferensi notifikasi berhasil disimpan.');
+    } catch (err: unknown) {
+      setPrefsError(err instanceof Error ? err.message : 'Gagal menyimpan preferensi notifikasi ke server.');
+    } finally {
+      setPrefsSaving(false);
+    }
+  };
+
+  const handleEnableBrowserPush = async () => {
+    setPrefsError(null);
+    setPrefsNotice(null);
+    const perm = await requestNotificationPermission();
+    setPushStatus(perm);
+    if (perm !== 'granted') {
+      setPrefsError('Izin notifikasi browser belum diberikan.');
+      return;
+    }
+    const reg = await registerServiceWorker('/sw.js');
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+    if (reg && vapidKey) {
+      const sub = await subscribeToWebPush(reg, vapidKey);
+      if (sub) {
+        const synced = await syncSubscriptionWithBackend(sub);
+        setPrefsNotice(synced ? 'Push notifikasi browser berhasil diaktifkan.' : 'Gagal mendaftarkan perangkat ke server.');
+        return;
+      }
+    }
+    setPrefsNotice('Izin browser aktif. Notifikasi in-app otomatis disinkronkan.');
+  };
 
   const fetchInbox = useCallback(async () => {
     setIsLoading(true);
@@ -118,11 +216,7 @@ export function NotificationInboxView({ portalName }: NotificationInboxViewProps
     if (!notif.read_at) {
       await handleMarkAsRead(notif.id);
     }
-    const rawTarget =
-      (notif.data && typeof notif.data === 'object' && ('target_url' in notif.data ? notif.data.target_url : notif.data.url)) ||
-      null;
-
-    const safeUrl = getSafeDeepLink(rawTarget);
+    const safeUrl = getSafeDeepLink(extractNotificationTargetUrl(notif.data));
     if (safeUrl) {
       router.push(safeUrl);
     }
@@ -160,12 +254,117 @@ export function NotificationInboxView({ portalName }: NotificationInboxViewProps
               Tandai Semua Dibaca
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const next = !showPrefs;
+              setShowPrefs(next);
+              if (next && preferences.length === 0) {
+                loadPreferences();
+              }
+            }}
+            className="gap-2"
+          >
+            <Settings2 className="h-4 w-4" />
+            Preferensi & Push
+          </Button>
           <Button variant="outline" size="sm" onClick={fetchInbox} disabled={isLoading} className="gap-2">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Segarkan
           </Button>
         </div>
       </div>
+
+      {/* P1-18: Panel Pengaturan Preferensi & WebPush */}
+      {showPrefs && (
+        <Card className="rounded-sm border-slate-200">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Pengaturan Preferensi Notifikasi</h2>
+                <p className="text-xs text-slate-500">
+                  Pilih topik dan kanal pemberitahuan yang aktif. Status Push Browser: <span className="font-semibold">{pushStatus}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {pushStatus !== 'unsupported' && pushStatus !== 'granted' && (
+                  <Button type="button" variant="outline" size="sm" onClick={handleEnableBrowserPush}>
+                    Aktifkan Push Browser
+                  </Button>
+                )}
+                <Button type="button" size="sm" onClick={handleSavePreferences} disabled={prefsSaving || prefsLoading}>
+                  {prefsSaving ? 'Menyimpan...' : 'Simpan Preferensi'}
+                </Button>
+              </div>
+            </div>
+
+            {prefsError && (
+              <div className="rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {prefsError}
+              </div>
+            )}
+            {prefsNotice && (
+              <div className="rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                {prefsNotice}
+              </div>
+            )}
+
+            {prefsLoading ? (
+              <p className="text-xs text-slate-500">Memuat preferensi notifikasi...</p>
+            ) : preferences.length === 0 ? (
+              <p className="text-xs text-slate-500">Belum ada topik preferensi tersedia.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {preferences.map((pref) => (
+                  <div key={pref.notif_type} className="rounded-sm border border-slate-200 p-3 space-y-2 bg-slate-50/50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-900">{pref.label || pref.notif_type}</p>
+                        {pref.description && <p className="text-[11px] text-slate-500">{pref.description}</p>}
+                      </div>
+                      <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pref.is_enabled}
+                          onChange={() => handleTogglePreference(pref.notif_type, 'is_enabled')}
+                        />
+                        <span>Aktif</span>
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-4 text-[11px] text-slate-600 pt-1 border-t border-slate-200/70">
+                      <label className="inline-flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pref.channel_push}
+                          onChange={() => handleTogglePreference(pref.notif_type, 'channel_push')}
+                        />
+                        <span>In-App/Push</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(pref.channel_wa)}
+                          onChange={() => handleTogglePreference(pref.notif_type, 'channel_wa')}
+                        />
+                        <span>WhatsApp</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(pref.channel_email)}
+                          onChange={() => handleTogglePreference(pref.notif_type, 'channel_email')}
+                        />
+                        <span>Email</span>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filter Bar */}
       <Card className="rounded-sm">
@@ -234,10 +433,7 @@ export function NotificationInboxView({ portalName }: NotificationInboxViewProps
         <div className="space-y-3">
           {filteredNotifications.map((item) => {
             const isUnread = !item.read_at;
-            const rawTarget =
-              (item.data && typeof item.data === 'object' && ('target_url' in item.data ? item.data.target_url : item.data.url)) ||
-              null;
-            const hasSafeLink = Boolean(getSafeDeepLink(rawTarget));
+            const hasSafeLink = Boolean(getSafeDeepLink(extractNotificationTargetUrl(item.data)));
 
             return (
               <Card

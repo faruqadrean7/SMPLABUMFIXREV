@@ -139,12 +139,22 @@ class NotificationService
             $userIds = $query->pluck('id');
         } elseif ($targetType === 'class') {
             $classId = $data['target_class_id'];
-            $query = Student::whereHas('classes', fn ($q) => $q->where('classes.id', $classId))
-                ->whereNotNull('user_id');
+            $activeStudentsQuery = Student::whereHas('classes', fn ($q) => $q
+                ->where('classes.id', $classId)
+                ->whereNull('class_students.left_at'));
             if ($schoolId && ! $isSuperAdmin) {
-                $query->where('school_id', $schoolId);
+                $activeStudentsQuery->where('school_id', $schoolId);
             }
-            $userIds = $query->pluck('user_id');
+
+            $activeStudentIds = (clone $activeStudentsQuery)->pluck('id');
+            $studentUserIds = (clone $activeStudentsQuery)->whereNotNull('user_id')->pluck('user_id');
+
+            $guardianUserIds = User::whereHas('guardian.students', fn ($q) => $q->whereIn('students.id', $activeStudentIds))
+                ->where('status', 'active')
+                ->when($schoolId && ! $isSuperAdmin, fn ($q) => $q->where('school_id', $schoolId))
+                ->pluck('id');
+
+            $userIds = $studentUserIds->merge($guardianUserIds);
         } elseif ($targetType === 'users') {
             $query = User::whereIn('id', $data['user_ids']);
             if ($schoolId && ! $isSuperAdmin) {

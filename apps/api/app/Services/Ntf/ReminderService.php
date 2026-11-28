@@ -114,6 +114,7 @@ class ReminderService
                         'exam_id' => $exam->id,
                         'exam_title' => $exam->title,
                         'start_at' => $exam->start_at->toIso8601String(),
+                        'target_url' => '/portal/siswa/cbt',
                         'deep_link' => '/portal/siswa/cbt',
                     ];
 
@@ -213,6 +214,7 @@ class ReminderService
                         'assignment_id' => $assignment->id,
                         'assignment_title' => $assignment->title,
                         'due_at' => $assignment->due_at->toIso8601String(),
+                        'target_url' => '/portal/siswa/tugas',
                         'deep_link' => '/portal/siswa/tugas',
                     ];
 
@@ -286,6 +288,7 @@ class ReminderService
                     'class_id' => $class->id,
                     'class_name' => $class->name,
                     'date' => $today,
+                    'target_url' => '/portal/guru/presensi',
                     'deep_link' => '/portal/guru/presensi',
                 ];
 
@@ -342,7 +345,8 @@ class ReminderService
                     'student_id' => $student->id,
                     'attendance_id' => $attendance->id,
                     'date' => $today,
-                    'deep_link' => '/portal/wali/presensi',
+                    'target_url' => '/portal/ortu/presensi',
+                    'deep_link' => '/portal/ortu/presensi',
                 ];
 
                 $result = $this->createAndDispatch(

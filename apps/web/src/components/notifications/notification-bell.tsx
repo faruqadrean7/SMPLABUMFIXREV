@@ -8,6 +8,14 @@ import { NotificationItem } from '@/features/notifications/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
+export function extractNotificationTargetUrl(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  const candidate =
+    record.target_url ?? record.action_url ?? record.deep_link ?? record.url ?? null;
+  return typeof candidate === 'string' ? candidate : null;
+}
+
 export function getSafeDeepLink(targetUrl?: unknown): string | null {
   if (typeof targetUrl !== 'string') return null;
   const trimmed = targetUrl.trim();
@@ -41,23 +49,52 @@ export function NotificationBell({ portal }: NotificationBellProps) {
 
   const inboxHref = portal === 'admin' ? '/admin/notifications' : '/portal/notifikasi';
 
-  const fetchLatestNotifications = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const fetchLatestNotifications = useCallback(async (silent = false) => {
+    if (!silent) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       const res = await notificationsApi.getNotifications({ page: 1, per_page: 5 });
       setNotifications(res.data || []);
       setUnreadCount(res.meta?.unread_count ?? 0);
+      if (silent) {
+        setError(null);
+      }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal memuat notifikasi.';
-      setError(msg);
+      if (!silent) {
+        const msg = err instanceof Error ? err.message : 'Gagal memuat notifikasi.';
+        setError(msg);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    fetchLatestNotifications();
+    fetchLatestNotifications(false);
+
+    const POLL_INTERVAL_MS = 60_000;
+    const timer = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      fetchLatestNotifications(true);
+    }, POLL_INTERVAL_MS);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLatestNotifications(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [fetchLatestNotifications]);
 
   // Click outside listener & ESC key listener
@@ -121,11 +158,7 @@ export function NotificationBell({ portal }: NotificationBellProps) {
     }
     setIsOpen(false);
 
-    const rawTarget =
-      (notif.data && typeof notif.data === 'object' && ('target_url' in notif.data ? notif.data.target_url : notif.data.url)) ||
-      null;
-
-    const safeUrl = getSafeDeepLink(rawTarget);
+    const safeUrl = getSafeDeepLink(extractNotificationTargetUrl(notif.data));
     if (safeUrl) {
       router.push(safeUrl);
     } else {
@@ -204,7 +237,7 @@ export function NotificationBell({ portal }: NotificationBellProps) {
                   <span>{error}</span>
                 </div>
                 <div>
-                  <Button variant="outline" size="sm" onClick={fetchLatestNotifications} className="text-xs h-7 px-2">
+                  <Button variant="outline" size="sm" onClick={() => fetchLatestNotifications(false)} className="text-xs h-7 px-2">
                     Coba Lagi
                   </Button>
                 </div>

@@ -24,6 +24,20 @@ import { useGuardian } from '@/lib/guardian-context';
 import { GuardianCounselingItem } from '@/types/guardian';
 import { useGuardianCounselingRequests, useCreateGuardianCounselingRequest } from '@/lib/use-guardian-data';
 
+type LocalCounselingStatus = 'menunggu' | 'terjadwal' | 'selesai' | 'ditolak';
+
+function formatWhatsAppUrl(phone?: string | null): string | null {
+  if (!phone || phone === '-') return null;
+  const digits = phone.replace(/[^0-9]/g, '');
+  if (digits.length < 8) return null;
+  const normalized = digits.startsWith('0')
+    ? `62${digits.slice(1)}`
+    : digits.startsWith('8')
+    ? `62${digits}`
+    : digits;
+  return `https://wa.me/${normalized}`;
+}
+
 export default function GuardianKonselingPage() {
   const { activeChild } = useGuardian();
   const { data: rawAppointments = [], isLoading: isCslLoading } = useGuardianCounselingRequests();
@@ -38,7 +52,7 @@ export default function GuardianKonselingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter and map appointments for active child
-  const childAppointments = React.useMemo<GuardianCounselingItem[]>(() => {
+  const childAppointments = React.useMemo<Array<Omit<GuardianCounselingItem, 'status'> & { status: LocalCounselingStatus }>>(() => {
     return rawAppointments
       .filter(a => !a.student_id || a.student_id === activeChild.id)
       .map((item) => ({
@@ -49,22 +63,18 @@ export default function GuardianKonselingPage() {
         target_role: item.counselorName?.includes('BK') ? 'Guru BK' : 'Wali Kelas',
         target_name: item.counselorName || activeChild.homeroom_teacher,
         requested_date: item.scheduledTime || item.preferredSchedule || 'Jadwal Ditentukan',
-        status: (item.status === 'dijadwalkan' || item.status === 'terjadwal' 
-          ? 'terjadwal' 
-          : item.status === 'selesai' 
-          ? 'selesai' 
-          : 'menunggu') as 'menunggu' | 'terjadwal' | 'selesai',
+        status: (item.status === 'dijadwalkan' || item.status === 'terjadwal'
+          ? 'terjadwal'
+          : item.status === 'selesai'
+          ? 'selesai'
+          : item.status === 'ditolak'
+          ? 'ditolak'
+          : 'menunggu') as LocalCounselingStatus,
         location: item.room || item.roomName || 'Ruang Konseling Labschool',
         notes: item.notes || 'Permohonan konsultasi perkembangan siswa.',
       }));
   }, [rawAppointments, activeChild]);
 
-  // Dynamic Homeroom Teacher Photo
-  const getHomeroomPhoto = () => {
-    return '';
-  };
-
-  const bkPhoto = '';
   const getInitials = (n?: string) => (n || '').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'GR';
 
   const handleCreateAppointment = async (e: React.FormEvent) => {
@@ -82,7 +92,8 @@ export default function GuardianKonselingPage() {
         category: targetRole === 'Wali Kelas' ? 'akademik' : 'sosial',
         reason: notes,
         preferred_schedule: requestedDate,
-        counselor_name: targetRole === 'Wali Kelas' ? activeChild.homeroom_teacher : 'Guru BK Labschool UM',
+        target_role: targetRole,
+        counselor_name: targetRole === 'Wali Kelas' ? activeChild.homeroom_teacher : 'Guru BK',
       });
 
       setIsSubmitting(false);
@@ -152,51 +163,59 @@ export default function GuardianKonselingPage() {
             </div>
           </div>
 
-          {activeChild.homeroom_phone && activeChild.homeroom_phone !== '-' && activeChild.homeroom_phone.replace(/[^0-9]/g, '').length >= 8 ? (
-            <a
-              href={`https://wa.me/${activeChild.homeroom_phone.replace(/[^0-9]/g, '')}`}
-              target="_blank"
-              rel="noreferrer"
-              className="px-3 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold shrink-0 transition-colors flex items-center gap-1.5 shadow-2xs ml-3"
-            >
-              <Phone className="w-3.5 h-3.5" />
-              <span>WhatsApp</span>
-            </a>
-          ) : (
-            <span className="px-3 py-2 rounded-xl bg-slate-100 text-slate-400 text-xs font-medium shrink-0 ml-3">
-              Kontak belum tersedia
-            </span>
-          )}
+          {(() => {
+            const walasWaUrl = formatWhatsAppUrl(activeChild.homeroom_phone);
+            if (walasWaUrl) {
+              return (
+                <a
+                  href={walasWaUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold shrink-0 transition-colors flex items-center gap-1.5 shadow-2xs ml-3"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  <span>WhatsApp</span>
+                </a>
+              );
+            }
+            return (
+              <span className="px-3 py-2 rounded-xl bg-slate-100 text-slate-400 text-xs font-medium shrink-0 ml-3">
+                Kontak belum tersedia
+              </span>
+            );
+          })()}
         </div>
 
         {/* Card 2: Guidance Counselor (BK) */}
         <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-xs flex items-center justify-between hover:border-slate-300 transition-all">
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 relative shadow-2xs">
-              <span className="w-full h-full flex items-center justify-center bg-blue-900 text-white font-bold text-sm">{getInitials('Ratna Dewi')}</span>
+              <span className="w-full h-full flex items-center justify-center bg-blue-900 text-white font-bold text-sm">BK</span>
             </div>
             <div className="min-w-0">
               <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-teal-800 text-white uppercase">
-                Koordinator BK Labschool
+                Unit Bimbingan & Konseling
               </span>
               <h3 className="text-sm font-bold text-slate-900 truncate mt-1">
-                Ibu Ratna Dewi, S.Pd., Kons.
+                Tim Guru BK Sekolah
               </h3>
               <p className="text-xs text-slate-500 font-medium">
-                Layanan: 07.30 - 15.00 WIB • Ruang Konseling BK Lantai 2
+                Layanan Senin–Jumat • Ruang Konseling BK
               </p>
             </div>
           </div>
 
-          <a
-            href="https://wa.me/6281334567895"
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={() => {
+              setTargetRole('Guru BK');
+              setIsModalOpen(true);
+            }}
             className="px-3 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold shrink-0 transition-colors flex items-center gap-1.5 shadow-2xs ml-3"
           >
-            <Phone className="w-3.5 h-3.5" />
-            <span>WhatsApp BK</span>
-          </a>
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Jadwalkan BK</span>
+          </button>
         </div>
       </div>
 
@@ -262,10 +281,12 @@ export default function GuardianKonselingPage() {
                       </div>
                       <span className={`px-2.5 py-0.5 rounded-md text-xs font-bold ${
                         item.status === 'terjadwal' ? 'bg-blue-800 text-white' :
-                        item.status === 'selesai' ? 'bg-emerald-800 text-white' : 'bg-amber-600 text-white'
+                        item.status === 'selesai' ? 'bg-emerald-800 text-white' :
+                        item.status === 'ditolak' ? 'bg-rose-700 text-white' : 'bg-amber-600 text-white'
                       }`}>
                         {item.status === 'terjadwal' ? 'Jadwal Disetujui' :
-                         item.status === 'selesai' ? 'Selesai Dilaksanakan' : 'Menunggu Konfirmasi'}
+                         item.status === 'selesai' ? 'Selesai Dilaksanakan' :
+                         item.status === 'ditolak' ? 'Perlu Penjadwalan Ulang' : 'Menunggu Konfirmasi'}
                       </span>
                     </div>
 

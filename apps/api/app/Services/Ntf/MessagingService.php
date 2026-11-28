@@ -10,6 +10,9 @@ use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -275,7 +278,7 @@ class MessagingService
 
     protected function dispatchToProvider(string $channel, string $recipient, ?string $subject, string $body): array
     {
-        // Simulasi kegagalan provider bila nomor/email mengandung kata "fail" atau "invalid"
+        // Pertahankan simulasi gagal eksplisit untuk uji negatif kontrak penerima
         if (str_contains(strtolower($recipient), 'invalid') || str_contains(strtolower($recipient), 'fail')) {
             return [
                 'status' => 'failed',
@@ -284,17 +287,108 @@ class MessagingService
             ];
         }
 
-        $refId = match ($channel) {
-            'wa', 'whatsapp' => 'wa_msg_'.Str::random(16),
-            'email' => 'email_msg_'.Str::random(16),
-            default => 'push_msg_'.Str::random(16),
-        };
+        if ($channel === 'email') {
+            try {
+                Mail::raw($body, function ($message) use ($recipient, $subject) {
+                    $message->to($recipient)
+                        ->subject($subject ?: 'Notifikasi Sekolah Labschool UM');
+                });
+
+                return [
+                    'status' => 'sent',
+                    'provider_ref' => 'mail_'.Str::random(12),
+                    'error' => null,
+                ];
+            } catch (\Throwable $e) {
+                Log::error("Gagal mengirim email notifikasi ke {$recipient}: {$e->getMessage()}");
+
+                return [
+                    'status' => 'failed',
+                    'provider_ref' => null,
+                    'error' => 'Gagal mengirim email melalui mailer: '.$e->getMessage(),
+                ];
+            }
+        }
+
+        if ($channel === 'wa' || $channel === 'whatsapp') {
+            $normalizedPhone = $this->normalizeWhatsAppNumber($recipient);
+            $endpoint = config('services.whatsapp.endpoint');
+
+            if (! empty($endpoint)) {
+                try {
+                    $request = Http::timeout((int) config('services.whatsapp.timeout', 10));
+                    $token = config('services.whatsapp.token');
+                    if (! empty($token)) {
+                        $request = $request->withToken($token);
+                    }
+
+                    $response = $request->post($endpoint, [
+                        'target' => $normalizedPhone,
+                        'phone' => $normalizedPhone,
+                        'message' => $body,
+                    ]);
+
+                    if ($response->successful()) {
+                        $remoteRef = $response->json('id') ?? $response->json('data.id') ?? $response->json('message_id');
+
+                        return [
+                            'status' => 'sent',
+                            'provider_ref' => $remoteRef ? (string) $remoteRef : 'wa_'.Str::random(12),
+                            'error' => null,
+                        ];
+                    }
+
+                    return [
+                        'status' => 'failed',
+                        'provider_ref' => null,
+                        'error' => 'Gateway WhatsApp mengembalikan HTTP '.$response->status(),
+                    ];
+                } catch (\Throwable $e) {
+                    Log::error("Gagal menghubungi gateway WhatsApp: {$e->getMessage()}");
+
+                    return [
+                        'status' => 'failed',
+                        'provider_ref' => null,
+                        'error' => 'Gateway WhatsApp gagal dihubungi: '.$e->getMessage(),
+                    ];
+                }
+            }
+
+            // Tanpa endpoint gateway di produksi: fail-honest alih-alih melabeli 'sent' palsu
+            if (app()->isProduction()) {
+                return [
+                    'status' => 'failed',
+                    'provider_ref' => null,
+                    'error' => 'Gateway WhatsApp belum dikonfigurasi (WHATSAPP_GATEWAY_URL kosong).',
+                ];
+            }
+
+            Log::info('[WA-DEV-LOG] Simulasi lokal pengiriman WhatsApp', [
+                'target' => $normalizedPhone,
+            ]);
+
+            return [
+                'status' => 'sent',
+                'provider_ref' => 'wa_local_'.Str::random(12),
+                'error' => null,
+            ];
+        }
 
         return [
             'status' => 'sent',
-            'provider_ref' => $refId,
+            'provider_ref' => 'push_msg_'.Str::random(16),
             'error' => null,
         ];
+    }
+
+    protected function normalizeWhatsAppNumber(string $recipient): string
+    {
+        $digits = preg_replace('/[^0-9]/', '', $recipient) ?? '';
+        if (str_starts_with($digits, '0')) {
+            return '62'.substr($digits, 1);
+        }
+
+        return $digits;
     }
 
     protected function validateRecipientFormat(string $channel, string $recipient): void

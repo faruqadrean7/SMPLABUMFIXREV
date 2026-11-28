@@ -82,7 +82,7 @@ Route::prefix('auth')->group(function () {
 });
 
 // BE-AUTH-04: Registrasi Token Perangkat FCM
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:30,1'])->group(function () {
     Route::post('/devices', [AuthController::class, 'registerDevice']);
 });
 

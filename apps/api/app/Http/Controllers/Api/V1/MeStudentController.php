@@ -644,12 +644,21 @@ class MeStudentController extends Controller
             'reason' => 'required|string|max:1000',
             'preferred_date' => 'nullable|date',
             'preferred_time' => 'nullable|string|max:100',
+            'preferred_counselor_id' => 'nullable|uuid|exists:users,id',
+            'target_role' => 'nullable|string|max:50',
             'is_urgent' => 'nullable|boolean',
         ]);
 
         $topic = (isset($validated['topic']) && trim($validated['topic']) !== '')
             ? trim($validated['topic'])
             : mb_substr($validated['reason'], 0, 200);
+
+        $preferredCounselorId = $validated['preferred_counselor_id'] ?? null;
+        $targetRole = $validated['target_role'] ?? $request->input('target_role');
+        if (! $preferredCounselorId && is_string($targetRole) && stripos($targetRole, 'wali') !== false) {
+            $activeClass = $student->classes()->wherePivotNull('left_at')->with('homeroomTeacher')->first();
+            $preferredCounselorId = $activeClass?->homeroomTeacher?->user_id;
+        }
 
         $counseling = CounselingRequest::create([
             'student_id' => $student->id,
@@ -659,8 +668,11 @@ class MeStudentController extends Controller
             'notes' => $validated['reason'] ?? null,
             'preferred_date' => $validated['preferred_date'] ?? null,
             'preferred_time' => $validated['preferred_time'] ?? null,
+            'preferred_counselor_id' => $preferredCounselorId,
             'status' => 'pending',
         ]);
+
+        $counseling->loadMissing(['preferredCounselor', 'counselor']);
 
         $counselingData = $counseling->toArray();
         $counselingData['category'] = $request->input('category', 'Pengembangan Diri');
@@ -670,8 +682,36 @@ class MeStudentController extends Controller
             $prefDateStr = is_string($counseling->preferred_date) ? substr($counseling->preferred_date, 0, 10) : $counseling->preferred_date->format('Y-m-d');
         }
         $counselingData['preferredSchedule'] = trim($prefDateStr.' '.($counseling->preferred_time ?? ''));
-        $counselingData['counselorName'] = 'Guru BK';
+        $counselingData['counselorName'] = $counseling->counselor?->name ?? ($counseling->preferredCounselor?->name ?? ($targetRole ?: 'Guru BK'));
         $counselingData['notes'] = $counseling->notes;
+
+        try {
+            $counselorQuery = User::where('status', 'active')
+                ->whereHas('roles', fn ($q) => $q->whereIn('code', ['counselor', 'guru_bk']));
+            if (! empty($student->school_id)) {
+                $counselorQuery->where(function ($q) use ($student) {
+                    $q->where('school_id', $student->school_id)->orWhereNull('school_id');
+                });
+            }
+            $recipientIds = $counselorQuery->pluck('id');
+            if ($preferredCounselorId) {
+                $recipientIds->push($preferredCounselorId);
+            }
+            foreach ($recipientIds->filter(fn ($uid) => ! empty($uid) && $uid !== $request->user()->id)->unique() as $recipientId) {
+                Notification::create([
+                    'user_id' => $recipientId,
+                    'notif_type' => 'counseling_update',
+                    'title' => 'Permohonan Konseling Baru',
+                    'body' => 'Permohonan layanan konseling baru telah diterima dan menunggu penjadwalan.',
+                    'data' => [
+                        'counseling_request_id' => $counseling->id,
+                        'target_url' => '/admin/counseling',
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return $this->successResponse($counselingData, 201);
     }

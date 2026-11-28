@@ -385,7 +385,8 @@ class ReminderEngineTest extends TestCase
         $this->assertNotNull($notif);
         $this->assertStringContainsString('Pemberitahuan Presensi', $notif->title);
         $this->assertStringContainsString('Ahmad Siswa', $notif->body);
-        $this->assertEquals('/portal/wali/presensi', $notif->data['deep_link']);
+        $this->assertEquals('/portal/ortu/presensi', $notif->data['target_url']);
+        $this->assertEquals('/portal/ortu/presensi', $notif->data['deep_link']);
     }
 
     public function test_be_ntf_01_respects_user_notification_preference(): void

@@ -619,7 +619,7 @@ class LmsService
             throw new HttpException(422, 'Berkas pengerjaan, tautan berkas/drive, atau catatan tugas wajib disertakan.');
         }
 
-        return DB::transaction(function () use ($assignment, $student, $fileId, $data, $currentUser, $request) {
+        $submission = DB::transaction(function () use ($assignment, $student, $fileId, $data, $currentUser, $request) {
             $existing = AssignmentSubmission::where('assignment_id', $assignment->id)
                 ->where('student_id', $student->id)
                 ->first();
@@ -661,6 +661,28 @@ class LmsService
 
             return $submission->load(['assignment', 'student', 'file']);
         });
+
+        try {
+            $assignment->loadMissing('teacher');
+            $teacherUserId = $assignment->teacher?->user_id;
+            if (! empty($teacherUserId) && $teacherUserId !== $currentUser->id) {
+                Notification::create([
+                    'user_id' => $teacherUserId,
+                    'notif_type' => 'assignment_submissions',
+                    'title' => "Tugas Dikumpulkan: {$assignment->title}",
+                    'body' => "Siswa {$student->full_name} telah mengumpulkan tugas '{$assignment->title}'.",
+                    'data' => [
+                        'assignment_id' => $assignment->id,
+                        'submission_id' => $submission->id,
+                        'target_url' => "/portal/guru/tugas/{$assignment->id}/penilaian",
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return $submission;
     }
 
     /**
@@ -774,6 +796,7 @@ class LmsService
                     'data' => [
                         'assignment_id' => $assignment->id,
                         'submission_id' => $submission->id,
+                        'target_url' => '/portal/siswa/nilai',
                     ],
                 ]);
             }

@@ -438,36 +438,62 @@ export async function syncFetchNotificationPreferences(
   return cached;
 }
 
+export const FE_TO_BE_TOPIC_MAP: Record<NotificationTopic, string> = {
+  announcement: 'academic_announcement',
+  assignment: 'academic_announcement',
+  teaching_material: 'academic_announcement',
+  cbt_exam: 'academic_announcement',
+  attendance: 'attendance_alert',
+  leave_request: 'attendance_alert',
+  grade: 'grade_report',
+  report_card: 'grade_report',
+  schedule_change: 'teacher_agenda',
+  character_note: 'counseling_update',
+  early_warning: 'counseling_update',
+  salary_slip: 'system_alert',
+  sarpras_ticket: 'system_alert',
+  school_facility: 'system_alert',
+};
+
+export function mapTopicToBackendNotifType(topic: NotificationTopic): string {
+  return FE_TO_BE_TOPIC_MAP[topic] || 'system_alert';
+}
+
 /**
- * GAP-11: Menyimpan preferensi notifikasi ke server dan cache offline lokal.
+ * GAP-11 / P1-18: Menyimpan preferensi notifikasi ke server (dengan mapping kanonis BE) dan cache offline lokal.
  */
 export async function syncSaveNotificationPreferences(
   prefs: NotificationPreferenceSettings
 ): Promise<boolean> {
   // 1. Simpan segera ke localStorage sebagai cache offline
-  const localSaved = saveStoredNotificationPreferences(prefs);
+  saveStoredNotificationPreferences(prefs);
 
-  // 2. Sinkronisasikan ke endpoint backend /me/notification-preferences
+  // 2. Sinkronisasikan ke endpoint backend /me/notification-preferences memakai key kanonis BE
   try {
     const relevantOptions = ROLE_NOTIFICATION_TOPICS[prefs.role] || [];
-    const serverPayload = relevantOptions.map((opt) => {
+    const groupedByBeType = new Map<string, boolean>();
+
+    for (const opt of relevantOptions) {
+      const beType = mapTopicToBackendNotifType(opt.id);
       const isOptedIn = prefs.enabledTopics.includes(opt.id);
-      return {
-        topic: opt.id,
-        notif_type: opt.id,
-        is_enabled: isOptedIn,
-        enabled: isOptedIn,
-        channel_push: isOptedIn,
-      };
-    });
+      groupedByBeType.set(beType, Boolean(groupedByBeType.get(beType)) || isOptedIn);
+    }
+
+    const serverPayload = Array.from(groupedByBeType.entries()).map(([beType, isOptedIn]) => ({
+      topic: beType,
+      notif_type: beType,
+      is_enabled: isOptedIn,
+      enabled: isOptedIn,
+      channel_push: isOptedIn,
+    }));
 
     await notificationsApi.updatePreferences({
       preferences: serverPayload,
     });
     return true;
   } catch {
-    // Jika offline/gagal, cache lokal tetap aman
-    return localSaved;
+    // Kembalikan false agar UI tahu sinkronisasi server gagal (tidak silent-swallow 422/network error)
+    return false;
   }
 }
 

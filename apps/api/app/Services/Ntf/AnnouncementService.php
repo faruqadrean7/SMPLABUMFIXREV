@@ -5,8 +5,12 @@ namespace App\Services\Ntf;
 use App\Models\Announcement;
 use App\Models\AnnouncementRead;
 use App\Models\AuditLog;
+use App\Models\ClassStudent;
+use App\Models\Guardian;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\Teacher;
+use App\Models\TeachingAssignment;
 use App\Models\User;
 use App\Support\PaginationHelper;
 use Carbon\Carbon;
@@ -22,7 +26,8 @@ class AnnouncementService
     public function listAnnouncements(array $filters, Request $request): LengthAwarePaginator
     {
         $user = $request->user();
-        $isStaff = $this->isStaffOrAdmin($user);
+        $isSchoolAdmin = $this->isSchoolAnnouncementAdmin($user);
+        $isTeacher = $this->isTeacherOnly($user);
 
         $query = Announcement::with(['author:id,username', 'attachment']);
 
@@ -37,21 +42,29 @@ class AnnouncementService
             $query->withExists(['reads as is_read' => fn ($q) => $q->where('user_id', $user->id)]);
         }
 
-        // Filter visibilitas waktu terbit
-        $publishedOnly = filter_var($filters['published_only'] ?? (! $isStaff), FILTER_VALIDATE_BOOLEAN);
-        if ($publishedOnly) {
+        // Filter visibilitas waktu terbit: non-admin hanya melihat terbitan (kecuali guru melihat draf miliknya sendiri)
+        $publishedOnly = filter_var($filters['published_only'] ?? (! $isSchoolAdmin), FILTER_VALIDATE_BOOLEAN);
+        if (! $isSchoolAdmin) {
+            if (! $publishedOnly && $isTeacher && $user) {
+                $query->where(function ($q) use ($user) {
+                    $q->published()->orWhere('author_id', $user->id);
+                });
+            } else {
+                $query->published();
+            }
+        } elseif ($publishedOnly) {
             $query->published();
         }
 
-        // Segmentasi audiens untuk non-staff
-        if (! $isStaff && $user) {
+        // Segmentasi audiens untuk non-admin (siswa, wali murid, maupun guru)
+        if (! $isSchoolAdmin && $user) {
             $roleCodes = $user->roles()->pluck('code')->toArray();
-            $classIds = Student::where('user_id', $user->id)->first()?->classes()->pluck('classes.id')->toArray() ?? [];
-            $gradeLevelIds = ! empty($classIds)
-                ? SchoolClass::whereIn('id', $classIds)->pluck('grade_level_id')->filter()->unique()->toArray()
-                : [];
+            $context = $this->resolveUserStudentContexts($user);
+            $classIds = $context['class_ids'];
+            $gradeLevelIds = $context['grade_level_ids'];
+            $teacherClassIds = $isTeacher ? $this->resolveTeacherClassIds($user) : [];
 
-            $query->where(function ($sub) use ($user, $roleCodes, $classIds, $gradeLevelIds) {
+            $query->where(function ($sub) use ($user, $roleCodes, $classIds, $gradeLevelIds, $teacherClassIds) {
                 // 1. Author sendiri
                 $sub->where('author_id', $user->id)
                     // 2. Ditujukan ke semua audiens
@@ -67,9 +80,10 @@ class AnnouncementService
                     }
                 }
 
-                // 4. Berdasarkan kelas siswa
-                if (! empty($classIds)) {
-                    foreach ($classIds as $cId) {
+                // 4. Berdasarkan kelas siswa/perwalian/binaan guru
+                $visibleClassIds = array_values(array_unique(array_merge($classIds, $teacherClassIds)));
+                if (! empty($visibleClassIds)) {
+                    foreach ($visibleClassIds as $cId) {
                         $sub->orWhere(function ($q) use ($cId) {
                             $q->where('target_type', 'kelas')
                                 ->whereJsonContains('target_ids', $cId);
@@ -77,7 +91,7 @@ class AnnouncementService
                     }
                 }
 
-                // 5. Berdasarkan tingkat/jenjang siswa
+                // 5. Berdasarkan tingkat/jenjang siswa/perwalian
                 if (! empty($gradeLevelIds)) {
                     foreach ($gradeLevelIds as $gId) {
                         $sub->orWhere(function ($q) use ($gId) {
@@ -132,14 +146,14 @@ class AnnouncementService
     public function getAnnouncement(string $id, Request $request): Announcement
     {
         $user = $request->user();
-        $isStaff = $this->isStaffOrAdmin($user);
+        $isSchoolAdmin = $this->isSchoolAnnouncementAdmin($user);
 
         $announcement = Announcement::with(['author:id,username', 'attachment'])
             ->findOrFail($id);
 
         $this->assertSameSchool($user, $announcement->school_id);
 
-        if (! $isStaff && $announcement->author_id !== $user?->id) {
+        if (! $isSchoolAdmin && $announcement->author_id !== $user?->id) {
             // Harus sudah terbit & belum kedaluwarsa
             $now = Carbon::now();
             if ($announcement->publish_at > $now || ($announcement->expires_at && $announcement->expires_at < $now)) {
@@ -159,12 +173,13 @@ class AnnouncementService
     }
 
     /**
-     * BE-NTF-03: Buat pengumuman baru (staf/admin/guru).
+     * BE-NTF-03: Buat pengumuman baru (staf/admin/guru sesuai batas cakupan).
      */
     public function createAnnouncement(array $data, Request $request): Announcement
     {
         $user = $request->user();
         $this->authorizeStaffOrAdmin($user);
+        $this->assertTeacherTargetScope($user, $data['target_type'], $data['target_ids'] ?? null);
 
         // P0-20: Jangan pernah mempercayai school_id dari payload klien; gunakan school_id pengguna terautentikasi
         $announcement = Announcement::create([
@@ -197,6 +212,11 @@ class AnnouncementService
         $announcement = Announcement::findOrFail($id);
         $this->assertSameSchool($user, $announcement->school_id);
         $this->authorizeAuthorOrAdmin($user, $announcement);
+        $this->assertTeacherTargetScope(
+            $user,
+            $data['target_type'] ?? $announcement->target_type,
+            array_key_exists('target_ids', $data) ? $data['target_ids'] : $announcement->target_ids
+        );
 
         unset($data['school_id']);
         $oldValues = $announcement->toArray();
@@ -239,10 +259,10 @@ class AnnouncementService
 
         $announcement = Announcement::findOrFail($id);
         $this->assertSameSchool($user, $announcement->school_id);
-        $isStaff = $this->isStaffOrAdmin($user);
+        $isSchoolAdmin = $this->isSchoolAnnouncementAdmin($user);
 
         // Pastikan pengguna berhak melihat pengumuman ini
-        if (! $isStaff && $announcement->author_id !== $user->id) {
+        if (! $isSchoolAdmin && $announcement->author_id !== $user->id) {
             $now = Carbon::now();
             if ($announcement->publish_at > $now || ($announcement->expires_at && $announcement->expires_at < $now)) {
                 throw new HttpException(403, 'Akses ditolak: Pengumuman ini belum diterbitkan atau sudah kedaluwarsa.');
@@ -308,14 +328,96 @@ class AnnouncementService
         }
     }
 
+    public function isSchoolAnnouncementAdmin(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return $user->hasRole(['super_admin', 'admin', 'admin_tu', 'principal', 'kepala_sekolah', 'humas', 'kesiswaan']) ||
+            $user->hasPermission('notification.broadcast');
+    }
+
+    public function isTeacherOnly(?User $user): bool
+    {
+        return (bool) ($user && ! $this->isSchoolAnnouncementAdmin($user) && $user->hasRole('teacher'));
+    }
+
     public function isStaffOrAdmin(?User $user): bool
     {
         if (! $user) {
             return false;
         }
 
-        return $user->hasRole(['super_admin', 'admin', 'teacher', 'admin_tu', 'principal', 'humas', 'kesiswaan']) ||
-            $user->hasPermission('notification.broadcast');
+        return $this->isSchoolAnnouncementAdmin($user) || $user->hasRole('teacher');
+    }
+
+    protected function resolveTeacherClassIds(User $user): array
+    {
+        $teacher = Teacher::where('user_id', $user->id)->first();
+        if (! $teacher) {
+            return [];
+        }
+
+        $homeroomIds = SchoolClass::where('homeroom_teacher_id', $teacher->id)
+            ->pluck('id')
+            ->toArray();
+
+        $teachingIds = TeachingAssignment::where('teacher_id', $teacher->id)
+            ->pluck('class_id')
+            ->toArray();
+
+        return array_values(array_unique(array_merge($homeroomIds, $teachingIds)));
+    }
+
+    protected function assertTeacherTargetScope(?User $user, string $targetType, mixed $targetIds): void
+    {
+        if (! $user || ! $this->isTeacherOnly($user)) {
+            return;
+        }
+
+        if ($targetType !== 'kelas') {
+            throw new HttpException(403, 'Akses ditolak: Guru hanya dapat mengirim pengumuman untuk kelas yang diampu atau perwaliannya.');
+        }
+
+        $requestedClassIds = array_values(array_filter(array_map('strval', (array) $targetIds)));
+        $allowedClassIds = $this->resolveTeacherClassIds($user);
+
+        if (empty($requestedClassIds) || ! empty(array_diff($requestedClassIds, $allowedClassIds))) {
+            throw new HttpException(403, 'Akses ditolak: Anda hanya dapat membuat pengumuman untuk kelas ajar atau kelas perwalian Anda sendiri.');
+        }
+    }
+
+    protected function resolveUserStudentContexts(User $user): array
+    {
+        $studentIds = Student::where('user_id', $user->id)->pluck('id')->toArray();
+
+        $guardian = Guardian::where('user_id', $user->id)->first();
+        if ($guardian) {
+            $wardIds = $guardian->students()->pluck('students.id')->toArray();
+            $studentIds = array_values(array_unique(array_merge($studentIds, $wardIds)));
+        }
+
+        if (empty($studentIds)) {
+            return ['class_ids' => [], 'grade_level_ids' => []];
+        }
+
+        $classIds = ClassStudent::whereIn('student_id', $studentIds)
+            ->whereNull('left_at')
+            ->pluck('class_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $gradeLevelIds = ! empty($classIds)
+            ? SchoolClass::whereIn('id', $classIds)->pluck('grade_level_id')->filter()->unique()->values()->toArray()
+            : [];
+
+        return [
+            'class_ids' => $classIds,
+            'grade_level_ids' => $gradeLevelIds,
+        ];
     }
 
     protected function authorizeStaffOrAdmin(?User $user): void
@@ -335,7 +437,7 @@ class AnnouncementService
             throw new HttpException(401, 'Unauthenticated');
         }
 
-        $isAdmin = $user->hasRole(['super_admin', 'admin', 'admin_tu', 'principal']);
+        $isAdmin = $user->hasRole(['super_admin', 'admin', 'admin_tu', 'principal', 'kepala_sekolah']);
         if (! $isAdmin && $announcement->author_id !== $user->id) {
             throw new HttpException(403, 'Akses ditolak: Anda hanya dapat mengubah atau melihat analitik pengumuman yang Anda buat sendiri.');
         }
@@ -359,25 +461,18 @@ class AnnouncementService
             return ! empty(array_intersect($targetIds, $userRoles));
         }
 
-        if ($announcement->target_type === 'kelas') {
-            $student = Student::where('user_id', $user->id)->first();
-            if (! $student) {
-                return false;
-            }
-            $studentClassIds = $student->classes()->pluck('classes.id')->toArray();
+        $context = $this->resolveUserStudentContexts($user);
+        $visibleClassIds = $context['class_ids'];
+        if ($user->hasRole('teacher')) {
+            $visibleClassIds = array_values(array_unique(array_merge($visibleClassIds, $this->resolveTeacherClassIds($user))));
+        }
 
-            return ! empty(array_intersect($targetIds, $studentClassIds));
+        if ($announcement->target_type === 'kelas') {
+            return ! empty(array_intersect($targetIds, $visibleClassIds));
         }
 
         if ($announcement->target_type === 'tingkat') {
-            $student = Student::where('user_id', $user->id)->first();
-            if (! $student) {
-                return false;
-            }
-            $studentClassIds = $student->classes()->pluck('classes.id')->toArray();
-            $studentGradeLevelIds = SchoolClass::whereIn('id', $studentClassIds)->pluck('grade_level_id')->filter()->unique()->toArray();
-
-            return ! empty(array_intersect($targetIds, $studentGradeLevelIds));
+            return ! empty(array_intersect($targetIds, $context['grade_level_ids']));
         }
 
         return false;

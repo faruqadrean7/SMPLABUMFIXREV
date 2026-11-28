@@ -5,9 +5,11 @@ namespace App\Services\Rpt;
 use App\Models\Attendance;
 use App\Models\AuditLog;
 use App\Models\Booking;
+use App\Models\ClassStudent;
 use App\Models\LeaveRequest;
 use App\Models\Notification;
 use App\Models\ReportCard;
+use App\Models\SchoolClass;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -263,6 +265,7 @@ class ApprovalService
                             'student_id' => $leave->student_id,
                             'status' => $newStatus,
                             'decision_notes' => $notes,
+                            'target_url' => '/portal/ortu/presensi',
                         ],
                     ]);
                 }
@@ -363,6 +366,24 @@ class ApprovalService
                     'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
                 ]);
 
+                if (! empty($booking->requested_by) && $booking->requested_by !== $user->id) {
+                    $booking->loadMissing('facility');
+                    $facilityName = $booking->facility?->name ?? 'Fasilitas';
+                    $statusLabel = $isApprove ? 'disetujui' : 'ditolak';
+
+                    Notification::create([
+                        'user_id' => $booking->requested_by,
+                        'notif_type' => 'booking.decision',
+                        'title' => "Peminjaman {$facilityName} Telah {$statusLabel}",
+                        'body' => "Pengajuan peminjaman {$facilityName} Anda telah {$statusLabel} oleh pimpinan.",
+                        'data' => [
+                            'booking_id' => $booking->id,
+                            'status' => $newStatus,
+                            'target_url' => '/portal/guru/fasilitas',
+                        ],
+                    ]);
+                }
+
                 return [
                     'success' => true,
                     'message' => $isApprove ? 'Pengajuan sarpras berhasil disetujui.' : 'Pengajuan sarpras berhasil ditolak.',
@@ -419,6 +440,34 @@ class ApprovalService
                     'user_agent' => $request->userAgent(),
                     'request_id' => $request->header('X-Request-Id') ?? (string) Str::uuid(),
                 ]);
+
+                if (! empty($reportCard->student_id)) {
+                    $activeClassIds = ClassStudent::where('student_id', $reportCard->student_id)
+                        ->whereNull('left_at')
+                        ->pluck('class_id');
+                    $homeroomUserIds = SchoolClass::whereIn('id', $activeClassIds)
+                        ->whereNotNull('homeroom_teacher_id')
+                        ->with('homeroomTeacher')
+                        ->get()
+                        ->pluck('homeroomTeacher.user_id')
+                        ->filter(fn ($tid) => ! empty($tid) && $tid !== $user->id)
+                        ->unique();
+
+                    $statusLabel = $isApprove ? 'disahkan' : 'dikembalikan ke draf';
+                    foreach ($homeroomUserIds as $teacherUserId) {
+                        Notification::create([
+                            'user_id' => $teacherUserId,
+                            'notif_type' => 'report_card.decision',
+                            'title' => 'Status Pengesahan E-Rapor Diperbarui',
+                            'body' => "E-Rapor siswa binaan Anda telah {$statusLabel} oleh pimpinan.",
+                            'data' => [
+                                'report_card_id' => $reportCard->id,
+                                'status' => $newStatus,
+                                'target_url' => '/admin/academic/report-cards',
+                            ],
+                        ]);
+                    }
+                }
 
                 return [
                     'success' => true,

@@ -57,6 +57,29 @@ class NotificationController extends Controller
     }
 
     /**
+     * P1-24: Hapus token perangkat via body JSON (mendukung token WebPush panjang yang mengandung '/').
+     * DELETE /api/v1/devices
+     */
+    public function destroyDeviceByBody(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'fcm_token' => ['required_without:token', 'nullable', 'string', 'max:2000'],
+            'token' => ['required_without:fcm_token', 'nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $token = (string) ($validated['fcm_token'] ?? $validated['token']);
+            $this->service->removeDevice($request->user(), $token);
+
+            return $this->successResponse(['message' => 'Perangkat berhasil dihapus.']);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorResponse('Gagal menghapus perangkat.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
+    /**
      * BE-NTF-01: Inbox notifikasi in-app pengguna.
      * GET /api/v1/notifications
      */

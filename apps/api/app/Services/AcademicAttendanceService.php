@@ -227,7 +227,7 @@ class AcademicAttendanceService
             $attachmentFileId = $fileRecord->id;
         }
 
-        return DB::transaction(function () use ($data, $attachmentFileId, $currentUser, $request) {
+        $leave = DB::transaction(function () use ($data, $attachmentFileId, $currentUser, $request) {
             $leave = LeaveRequest::create([
                 'student_id' => $data['student_id'],
                 'requested_by' => $currentUser->id,
@@ -251,6 +251,41 @@ class AcademicAttendanceService
 
             return $leave->load(['student', 'attachmentFile']);
         });
+
+        try {
+            $activeClassIds = ClassStudent::where('student_id', $leave->student_id)
+                ->whereNull('left_at')
+                ->pluck('class_id');
+
+            if ($activeClassIds->isNotEmpty()) {
+                $homeroomUserIds = SchoolClass::whereIn('id', $activeClassIds)
+                    ->whereNotNull('homeroom_teacher_id')
+                    ->with('homeroomTeacher')
+                    ->get()
+                    ->pluck('homeroomTeacher.user_id')
+                    ->filter(fn ($id) => ! empty($id) && $id !== $currentUser->id)
+                    ->unique();
+
+                $studentName = $leave->student?->full_name ?? 'Siswa';
+                foreach ($homeroomUserIds as $teacherUserId) {
+                    Notification::create([
+                        'user_id' => $teacherUserId,
+                        'notif_type' => 'leave_request.created',
+                        'title' => 'Pengajuan Izin Siswa Baru',
+                        'body' => "Terdapat pengajuan {$leave->leave_type} baru untuk {$studentName}. Silakan tinjau melalui portal guru.",
+                        'data' => [
+                            'leave_request_id' => $leave->id,
+                            'student_id' => $leave->student_id,
+                            'target_url' => '/portal/guru/perizinan',
+                        ],
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return $leave;
     }
 
     /**
