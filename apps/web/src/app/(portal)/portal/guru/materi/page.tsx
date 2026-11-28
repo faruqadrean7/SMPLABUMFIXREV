@@ -66,8 +66,13 @@ export default function GuruMateriPage() {
       setDescription('');
       setSelectedFile(null);
     },
-    onError: () => {
-      toast.error('Gagal mengunggah modul ajar.');
+    onError: (err: any) => {
+      const msg =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Gagal mengunggah modul ajar.';
+      toast.error(msg);
     }
   });
 
@@ -77,16 +82,19 @@ export default function GuruMateriPage() {
       toast.error('Judul modul ajar wajib diisi.');
       return;
     }
+    if (!selectedFile) {
+      toast.error('Berkas modul ajar wajib dipilih sebelum mengunggah.');
+      return;
+    }
     const fd = new FormData();
     fd.append('title', title);
     fd.append('description', description);
     fd.append('category', category);
+    fd.append('material_type', category);
     fd.append('version', version);
     fd.append('class_id', classId);
     fd.append('subject_id', subjectId);
-    if (selectedFile) {
-      fd.append('file', selectedFile);
-    }
+    fd.append('file', selectedFile);
     createMutation.mutate(fd);
   };
 
@@ -222,17 +230,25 @@ export default function GuruMateriPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {filteredMaterials.map((mat) => {
-            const dateStr = new Date(mat.created_at).toLocaleDateString('id-ID', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            });
+            const rawDate = mat.created_at || (mat as any).createdAt;
+            const parsedDate = rawDate ? new Date(rawDate) : null;
+            const dateStr =
+              parsedDate && !Number.isNaN(parsedDate.getTime())
+                ? parsedDate.toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                : '-';
 
             const borderAccent = mat.category === 'atp' 
               ? 'border-l-blue-900' 
               : mat.category === 'p5' 
               ? 'border-l-purple-900' 
               : 'border-l-teal-800';
+
+            const downloadUrl =
+              mat.file?.download_url || mat.file?.url || (mat as any).fileUrl || null;
 
             return (
               <div 
@@ -258,10 +274,12 @@ export default function GuruMateriPage() {
 
                   <div className="mt-3 flex items-center gap-2 text-[11px] font-bold text-slate-700">
                     <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
-                      {mat.subject?.name || 'Informatika'}
+                      {mat.subject?.name || (mat as any).subjectName || 'Mata Pelajaran'}
                     </span>
                     <span>•</span>
-                    <span className="text-slate-600">{mat.class?.name || 'Kelas IX-A'}</span>
+                    <span className="text-slate-600">
+                      {mat.class?.name || (mat as any).classNames?.[0] || dateStr}
+                    </span>
                   </div>
                 </div>
 
@@ -275,7 +293,14 @@ export default function GuruMateriPage() {
                   </div>
 
                   <button
-                    onClick={() => toast.success(`Membuka berkas: ${mat.file?.filename || mat.title}`)}
+                    type="button"
+                    onClick={() => {
+                      if (downloadUrl) {
+                        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+                      } else {
+                        toast.error('Berkas materi ini belum tersedia untuk diunduh.');
+                      }
+                    }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-slate-900 hover:bg-teal-900 text-white transition-colors shadow-xs cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />

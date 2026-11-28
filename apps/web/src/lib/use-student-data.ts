@@ -207,6 +207,7 @@ export interface SubmitTaskPayload {
   notes?: string;
   drive_link?: string;
   file_name?: string;
+  file?: File | null;
 }
 
 export function useStudentDashboard() {
@@ -269,7 +270,20 @@ export function useSubmitTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ taskId, ...payload }: SubmitTaskPayload) => {
+    mutationFn: async ({ taskId, file, ...payload }: SubmitTaskPayload) => {
+      if (file instanceof File) {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (payload.notes) formData.append('notes', payload.notes);
+        if (payload.drive_link) formData.append('drive_link', payload.drive_link);
+        if (payload.file_name) formData.append('file_name', payload.file_name);
+
+        const res = await apiClient.post(`/me/tasks/${taskId}/submit`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return res.data;
+      }
+
       const res = await apiClient.post(`/me/tasks/${taskId}/submit`, payload);
       return res.data;
     },

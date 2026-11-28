@@ -55,6 +55,11 @@ class SchoolClass extends Model
             ->withTimestamps();
     }
 
+    public function activeStudents(): BelongsToMany
+    {
+        return $this->students()->wherePivotNull('left_at');
+    }
+
     public function teachingAssignments(): HasMany
     {
         return $this->hasMany(TeachingAssignment::class, 'class_id');

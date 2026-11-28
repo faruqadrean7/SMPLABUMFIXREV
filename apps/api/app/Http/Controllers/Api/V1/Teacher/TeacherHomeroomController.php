@@ -3,18 +3,23 @@
 namespace App\Http\Controllers\Api\V1\Teacher;
 
 use App\Http\Controllers\Controller;
+use App\Models\Attendance;
 use App\Models\AuditLog;
 use App\Models\Booking;
 use App\Models\CounselingReferral;
 use App\Models\Facility;
+use App\Models\Grade;
 use App\Models\LeaveRequest;
 use App\Models\PointType;
+use App\Models\ReportCard;
 use App\Models\SchoolClass;
+use App\Models\Semester;
 use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\TeachingAssignment;
 use App\Models\Ticket;
 use App\Models\TicketEvent;
+use App\Services\Academic\AttendanceAggregator;
 use App\Services\AcademicAttendanceService;
 use App\Traits\ApiResponse;
 use Carbon\Carbon;
@@ -42,15 +47,82 @@ class TeacherHomeroomController extends Controller
         }
 
         $homeroomClass = $teacher->homeroomClasses()
-            ->with(['students', 'academicYear'])
+            ->with(['activeStudents', 'academicYear'])
             ->first();
 
         if (! $homeroomClass) {
             return $this->errorResponse('Akses ditolak: Anda bukan wali kelas pada periode ini.', 'FORBIDDEN', 403);
         }
 
-        $students = $homeroomClass->students->map(function (Student $s, $idx) use ($homeroomClass) {
+        $activeSemester = Semester::where('academic_year_id', $homeroomClass->academic_year_id)
+            ->where('is_active', true)
+            ->first()
+            ?? Semester::where('is_active', true)->first();
+
+        $activeStudents = $homeroomClass->activeStudents;
+        $studentIds = $activeStudents->pluck('id')->all();
+
+        $attendancesByStudent = collect();
+        $gradesByStudent = collect();
+        $isReportCardLocked = false;
+
+        if (! empty($studentIds)) {
+            $attQuery = Attendance::whereIn('student_id', $studentIds);
+            if ($activeSemester?->start_date && $activeSemester?->end_date) {
+                $attQuery->whereBetween('att_date', [$activeSemester->start_date, $activeSemester->end_date]);
+            }
+            $attendancesByStudent = $attQuery->get()->groupBy('student_id');
+
+            $gradeQuery = Grade::whereIn('student_id', $studentIds);
+            if ($activeSemester) {
+                $gradeQuery->where(function ($q) use ($activeSemester) {
+                    $q->whereHas('period', fn ($p) => $p->where('semester_id', $activeSemester->id))
+                        ->orWhere(function ($sub) use ($activeSemester) {
+                            $sub->whereNull('period_id')
+                                ->whereHas('component', fn ($c) => $c->where('semester_id', $activeSemester->id));
+                        });
+                });
+            }
+            $gradesByStudent = $gradeQuery->get()->groupBy('student_id');
+
+            if ($activeSemester) {
+                $isReportCardLocked = ReportCard::whereIn('student_id', $studentIds)
+                    ->where('semester_id', $activeSemester->id)
+                    ->whereIn('status', ['terkunci', 'disetujui', 'terbit'])
+                    ->exists();
+            }
+        }
+
+        $aggregator = app(AttendanceAggregator::class);
+        $totalSick = 0;
+        $totalLeave = 0;
+        $totalUnexcused = 0;
+        $rateSum = 0.0;
+
+        $studentsWithMetrics = $activeStudents->map(function (Student $s) use (
+            $homeroomClass,
+            $attendancesByStudent,
+            $gradesByStudent,
+            $aggregator,
+            &$totalSick,
+            &$totalLeave,
+            &$totalUnexcused,
+            &$rateSum
+        ) {
             $program = $this->resolveStudentProgram($s, $homeroomClass);
+            $attSummary = $aggregator->summarizeDaily($attendancesByStudent->get($s->id, collect()), 1);
+
+            $totalSick += $attSummary['sakit'];
+            $totalLeave += $attSummary['izin'];
+            $totalUnexcused += $attSummary['alpa'];
+
+            $studentAttRate = $attSummary['total_recorded'] > 0 ? (float) $attSummary['percentage'] : 100.0;
+            $rateSum += $studentAttRate;
+
+            $studentGrades = $gradesByStudent->get($s->id, collect());
+            $avgScore = $studentGrades->isNotEmpty()
+                ? round((float) $studentGrades->avg('value'), 2)
+                : 0.0;
 
             return [
                 'id' => $s->id,
@@ -59,28 +131,40 @@ class TeacherHomeroomController extends Controller
                 'nis' => $s->nis ?? '',
                 'programType' => $program['type'],
                 'programLabel' => $program['label'],
-                'attendanceRate' => 98.0,
-                'averageScore' => 86.5,
-                'rank' => $idx + 1,
+                'attendanceRate' => $studentAttRate,
+                'averageScore' => $avgScore,
             ];
         });
+
+        // Urutkan peringkat berdasarkan nilai rata-rata menurun (tetap deterministik)
+        $rankedStudents = $studentsWithMetrics
+            ->sortByDesc('averageScore')
+            ->values()
+            ->map(function (array $item, int $idx) {
+                $item['rank'] = $idx + 1;
+
+                return $item;
+            });
+
+        $studentCount = $rankedStudents->count();
+        $averageClassAttendance = $studentCount > 0 ? round($rateSum / $studentCount, 1) : 100.0;
 
         return $this->successResponse([
             'class_id' => $homeroomClass->id,
             'classId' => $homeroomClass->id,
             'className' => $homeroomClass->name,
-            'totalStudents' => $students->count(),
-            'academicYear' => $homeroomClass->academicYear?->name ?? '2024/2025',
-            'semester' => 'Ganjil',
+            'totalStudents' => $studentCount,
+            'academicYear' => $homeroomClass->academicYear?->name ?? '2026/2027',
+            'semester' => $activeSemester?->name ?? 'Semester Aktif',
             'attendanceRecap' => [
-                'averageRate' => 98.0,
-                'sickDays' => 2,
-                'leaveDays' => 1,
-                'unexcusedDays' => 0,
+                'averageRate' => $averageClassAttendance,
+                'sickDays' => $totalSick,
+                'leaveDays' => $totalLeave,
+                'unexcusedDays' => $totalUnexcused,
             ],
-            'characterRecapCount' => $students->count(),
-            'isReportCardLocked' => false,
-            'students' => $students,
+            'characterRecapCount' => $studentCount,
+            'isReportCardLocked' => $isReportCardLocked,
+            'students' => $rankedStudents,
         ]);
     }
 

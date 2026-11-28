@@ -34,6 +34,7 @@ export default function BukuNilaiPage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'remedial' | 'tuntas'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
   const [reportPeriodMonth, setReportPeriodMonth] = useState<string>('Oktober 2026');
   const [approvalStatus, setApprovalStatus] = useState<'draft' | 'menunggu_acc' | 'disetujui'>('menunggu_acc');
   const [previewStudent, setPreviewStudent] = useState<StudentGradeRow | null>(null);
@@ -154,17 +155,33 @@ export default function BukuNilaiPage() {
     }
   });
 
-  // Mutation to toggle period lock
+  // Mutation to lock teacher subject grades via /me/teacher/grades/lock (P0-16)
   const lockMutation = useMutation({
     mutationFn: async () => {
-      if (!period) return;
-      return lmsApi.lockGradePeriod(period.id, !period.is_locked);
+      if (!selectedClassId || !selectedSubjectId) {
+        throw new Error('Kelas dan mata pelajaran wajib dipilih sebelum mengunci nilai.');
+      }
+      return lmsApi.lockTeacherGrades({
+        class_id: selectedClassId,
+        subject_id: selectedSubjectId,
+        period_id: selectedPeriodId || period?.id || undefined,
+      });
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
+      setErrorToast(null);
       queryClient.invalidateQueries({ queryKey: ['gradebook-data'] });
-      setSuccessToast(period?.is_locked ? 'Buku nilai berhasil dibuka kembali.' : 'Buku nilai berhasil dikunci!');
+      setSuccessToast(res?.message || 'Buku nilai kelas & mata pelajaran berhasil dikunci!');
       setTimeout(() => setSuccessToast(null), 3000);
-    }
+    },
+    onError: (err: any) => {
+      const msg =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Gagal mengunci buku nilai.';
+      setErrorToast(msg);
+      setTimeout(() => setErrorToast(null), 5000);
+    },
   });
 
   // Compute live statistics
@@ -365,6 +382,14 @@ export default function BukuNilaiPage() {
           <div className="flex items-center gap-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-200 shrink-0" />
             <span className="text-xs font-bold">{successToast}</span>
+          </div>
+        </div>
+      )}
+      {errorToast && (
+        <div className="bg-rose-800 text-white p-4 rounded-xl flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-200 shrink-0" />
+            <span className="text-xs font-bold">{errorToast}</span>
           </div>
         </div>
       )}

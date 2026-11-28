@@ -10,10 +10,12 @@ use App\Models\GradeComponent;
 use App\Models\GradePeriod;
 use App\Models\Semester;
 use App\Models\TeachingMaterial;
+use App\Models\User;
 use App\Services\LmsService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -32,24 +34,13 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
-        $materials = TeachingMaterial::with(['subject', 'file'])
+        $materials = TeachingMaterial::with(['subject', 'file', 'gradeLevel'])
             ->where('uploaded_by', $request->user()->id)
             ->latest()
             ->get();
 
-        $data = $materials->map(fn (TeachingMaterial $m) => [
-            'id' => $m->id,
-            'title' => $m->title,
-            'subjectId' => $m->subject_id ?? '',
-            'subject_id' => $m->subject_id ?? '',
-            'subjectName' => $m->subject?->name ?? 'Mata Pelajaran',
-            'classIds' => [],
-            'classNames' => [],
-            'fileUrl' => $m->file?->url,
-            'description' => $m->description ?? '',
-            'createdAt' => $m->created_at?->toISOString() ?? now()->toISOString(),
-            'downloadsCount' => 0,
-        ]);
+        $user = $request->user();
+        $data = $materials->map(fn (TeachingMaterial $m) => $this->formatMaterialPayload($m, $user));
 
         return $this->successResponse($data);
     }
@@ -64,12 +55,19 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Akses ditolak: Profil guru tidak ditemukan.', 'FORBIDDEN', 403);
         }
 
+        $user = $request->user();
         $input = $request->all();
-        $title = $input['title'] ?? 'Modul Ajar';
+        $title = trim((string) ($input['title'] ?? 'Modul Ajar'));
         $subjectId = $input['subject_id'] ?? $input['subjectId'] ?? null;
-        $description = $input['description'] ?? '';
+        $description = (string) ($input['description'] ?? '');
         $fileId = $input['file_id'] ?? $input['fileId'] ?? null;
-        $materialType = $input['material_type'] ?? $input['materialType'] ?? 'modul';
+        $materialType = (string) ($input['material_type'] ?? $input['category'] ?? $input['materialType'] ?? 'modul_ajar');
+        $rawVersion = trim((string) ($input['version'] ?? '1'));
+        $numericVersion = preg_match('/\d+/', $rawVersion, $vm) === 1 ? max(1, (int) $vm[0]) : 1;
+
+        if ($title === '') {
+            return $this->errorResponse('Judul materi wajib diisi.', 'VALIDATION_ERROR', 422);
+        }
 
         if (! $subjectId) {
             return $this->errorResponse('ID mata pelajaran wajib diisi.', 'VALIDATION_ERROR', 422);
@@ -83,15 +81,52 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Akses ditolak: Anda tidak ditugaskan mengampu mata pelajaran ini.', 'FORBIDDEN', 403);
         }
 
-        // Ensure a valid file exists for foreign key constraint
-        if (! $fileId || ! Str::isUuid($fileId)) {
+        if ($request->hasFile('file')) {
+            $request->validate([
+                'file' => ['required', 'file', 'mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,zip,jpg,jpeg,png', 'max:25600'],
+            ], [
+                'file.mimes' => 'Format berkas materi harus berupa PDF, dokumen Office, ZIP, atau gambar.',
+                'file.max' => 'Ukuran berkas materi maksimal 25 MB.',
+            ]);
+
+            $uploaded = $request->file('file');
+            $storagePath = $uploaded->store("teaching-materials/{$user->id}", 'local');
+            $checksum = hash_file('sha256', $uploaded->getRealPath());
+
+            $fileRecord = File::create([
+                'school_id' => $user->school_id ?? null,
+                'owner_id' => $user->id,
+                'owner_type' => 'User',
+                'bucket' => 'teaching-materials',
+                'object_key' => $storagePath,
+                'mime_type' => $uploaded->getMimeType() ?: 'application/octet-stream',
+                'size_bytes' => $uploaded->getSize(),
+                'visibility' => 'privat',
+                'checksum' => $checksum,
+            ]);
+            $fileId = $fileRecord->id;
+        } elseif ($fileId && Str::isUuid($fileId)) {
+            $ownedFile = File::find($fileId);
+            if (! $ownedFile) {
+                return $this->errorResponse('Berkas materi tidak ditemukan.', 'VALIDATION_ERROR', 422);
+            }
+            if ((string) $ownedFile->owner_id !== (string) $user->id && ! $user->hasRole(['super_admin', 'admin'])) {
+                return $this->errorResponse('Akses ditolak: Anda tidak memiliki hak pakai atas berkas ini.', 'FORBIDDEN', 403);
+            }
+        } elseif (str_contains((string) $request->header('Content-Type'), 'multipart/form-data')) {
+            return $this->errorResponse('Berkas modul ajar wajib diunggah.', 'VALIDATION_ERROR', 422);
+        } else {
+            // Fallback kompatibilitas uji API JSON murni yang belum melampirkan file_id
             $file = File::firstOrCreate(
                 ['object_key' => 'materials/default-modul.pdf'],
                 [
-                    'bucket' => 'academic',
+                    'school_id' => $user->school_id ?? null,
+                    'owner_id' => $user->id,
+                    'owner_type' => 'User',
+                    'bucket' => 'teaching-materials',
                     'mime_type' => 'application/pdf',
                     'size_bytes' => 1024,
-                    'visibility' => 'publik',
+                    'visibility' => 'privat',
                 ]
             );
             $fileId = $file->id;
@@ -100,28 +135,16 @@ class TeacherLmsController extends Controller
         $material = TeachingMaterial::create([
             'title' => $title,
             'subject_id' => $subjectId,
-            'uploaded_by' => $request->user()->id,
+            'uploaded_by' => $user->id,
             'file_id' => $fileId,
             'material_type' => $materialType,
             'description' => $description,
-            'version' => 1,
+            'version' => $numericVersion,
         ]);
 
-        $material->load(['subject', 'file']);
+        $material->load(['subject', 'file', 'gradeLevel']);
 
-        return $this->successResponse([
-            'id' => $material->id,
-            'title' => $material->title,
-            'subjectId' => $material->subject_id ?? '',
-            'subject_id' => $material->subject_id ?? '',
-            'subjectName' => $material->subject?->name ?? 'Mata Pelajaran',
-            'classIds' => [],
-            'classNames' => [],
-            'fileUrl' => $material->file?->url ?? '/documents/modul-pembelajaran.pdf',
-            'description' => $material->description ?? '',
-            'createdAt' => $material->created_at?->toISOString() ?? now()->toISOString(),
-            'downloadsCount' => 0,
-        ], 201);
+        return $this->successResponse($this->formatMaterialPayload($material, $user), 201);
     }
 
     /**
@@ -268,32 +291,62 @@ class TeacherLmsController extends Controller
             return $this->errorResponse('Tugas tidak ditemukan atau bukan milik Anda.', 'FORBIDDEN', 403);
         }
 
-        $submissions = AssignmentSubmission::with('student')
+        $submissions = AssignmentSubmission::with(['student', 'file'])
             ->where('assignment_id', $id)
             ->get();
 
-        $data = $submissions->map(fn (AssignmentSubmission $sub) => [
-            'id' => $sub->id,
-            'assignment_id' => $sub->assignment_id,
-            'student_id' => $sub->student_id,
-            'studentId' => $sub->student_id,
-            'studentName' => $sub->student?->full_name ?? 'Siswa',
-            'student' => [
-                'id' => $sub->student?->id ?? $sub->student_id,
-                'name' => $sub->student?->full_name ?? 'Siswa',
-                'nis' => $sub->student?->nis ?? '',
+        $user = $request->user();
+        $dueAt = $assignment->due_at;
+
+        $data = $submissions->map(function (AssignmentSubmission $sub) use ($assignment, $dueAt, $user) {
+            $isLate = (bool) ($dueAt && $sub->submitted_at && $sub->submitted_at->greaterThan($dueAt));
+            $filePayload = null;
+            if ($sub->file) {
+                $downloadUrl = $this->resolveFileDownloadUrl($sub->file, $user);
+                $filePayload = [
+                    'id' => $sub->file->id,
+                    'object_key' => $sub->file->object_key,
+                    'filename' => basename((string) $sub->file->object_key),
+                    'mime_type' => $sub->file->mime_type,
+                    'size_bytes' => (int) $sub->file->size_bytes,
+                    'url' => $downloadUrl,
+                    'download_url' => $downloadUrl,
+                ];
+            }
+
+            $driveLink = null;
+            if ($sub->notes && preg_match('/\[Tautan Berkas\/Drive\]:\s*(\S+)/', $sub->notes, $matches) === 1) {
+                $driveLink = $matches[1];
+            }
+
+            return [
+                'id' => $sub->id,
+                'assignment_id' => $sub->assignment_id,
+                'student_id' => $sub->student_id,
+                'studentId' => $sub->student_id,
+                'studentName' => $sub->student?->full_name ?? 'Siswa',
+                'student' => [
+                    'id' => $sub->student?->id ?? $sub->student_id,
+                    'name' => $sub->student?->full_name ?? 'Siswa',
+                    'nis' => $sub->student?->nis ?? '',
+                    'nisn' => $sub->student?->nisn ?? '',
+                    'avatar_url' => $sub->student?->photo_file_id ? url("/api/v1/files/{$sub->student->photo_file_id}/download") : null,
+                    'class_id' => $assignment->class_id,
+                ],
                 'nisn' => $sub->student?->nisn ?? '',
-                'avatar_url' => $sub->student?->photo_file_id ? url("/api/v1/files/{$sub->student->photo_file_id}/download") : null,
-                'class_id' => $assignment->class_id,
-            ],
-            'nisn' => $sub->student?->nisn ?? '',
-            'submittedAt' => $sub->submitted_at?->toISOString() ?? now()->toISOString(),
-            'submitted_at' => $sub->submitted_at?->toISOString() ?? now()->toISOString(),
-            'score' => $sub->score ? (float) $sub->score : null,
-            'feedback' => $sub->feedback,
-            'status' => $sub->score !== null ? 'graded' : 'pending',
-            'is_late' => false,
-        ]);
+                'submittedAt' => $sub->submitted_at?->toISOString() ?? now()->toISOString(),
+                'submitted_at' => $sub->submitted_at?->toISOString() ?? now()->toISOString(),
+                'score' => $sub->score !== null ? (float) $sub->score : null,
+                'feedback' => $sub->feedback,
+                'notes' => $sub->notes,
+                'submission_url' => $driveLink,
+                'drive_link' => $driveLink,
+                'file_id' => $sub->file_id,
+                'file' => $filePayload,
+                'status' => $sub->score !== null ? 'graded' : 'pending',
+                'is_late' => $isLate,
+            ];
+        });
 
         return $this->successResponse($data);
     }
@@ -418,5 +471,69 @@ class TeacherLmsController extends Controller
             'grade_component_name' => $assignment->gradeComponent?->name,
             'createdAt' => $assignment->created_at?->toISOString() ?? now()->toISOString(),
         ]);
+    }
+
+    /**
+     * Format DTO materi ajar yang selaras antara web portal guru dan mobile/admin.
+     */
+    protected function formatMaterialPayload(TeachingMaterial $m, ?User $user): array
+    {
+        $downloadUrl = $m->file ? $this->resolveFileDownloadUrl($m->file, $user) : null;
+        $createdIso = $m->created_at?->toISOString() ?? now()->toISOString();
+
+        return [
+            'id' => $m->id,
+            'title' => $m->title,
+            'subjectId' => $m->subject_id ?? '',
+            'subject_id' => $m->subject_id ?? '',
+            'subjectName' => $m->subject?->name ?? 'Mata Pelajaran',
+            'subject' => $m->subject ? [
+                'id' => $m->subject->id,
+                'name' => $m->subject->name,
+                'code' => $m->subject->code,
+            ] : null,
+            'class_id' => '',
+            'classIds' => [],
+            'classNames' => [],
+            'category' => $m->material_type ?? 'modul_ajar',
+            'material_type' => $m->material_type ?? 'modul_ajar',
+            'version' => 'v'.($m->version ?? 1).'.0',
+            'file_id' => $m->file_id,
+            'fileUrl' => $downloadUrl,
+            'file' => $m->file ? [
+                'id' => $m->file->id,
+                'object_key' => $m->file->object_key,
+                'filename' => basename((string) $m->file->object_key),
+                'mime_type' => $m->file->mime_type,
+                'size_bytes' => (int) $m->file->size_bytes,
+                'url' => $downloadUrl,
+                'download_url' => $downloadUrl,
+            ] : null,
+            'description' => $m->description ?? '',
+            'created_at' => $createdIso,
+            'createdAt' => $createdIso,
+            'updated_at' => $m->updated_at?->toISOString() ?? $createdIso,
+            'downloadsCount' => 0,
+        ];
+    }
+
+    /**
+     * Resolusi URL unduhan berkas (signed URL untuk berkas privat, URL storage untuk berkas publik).
+     */
+    protected function resolveFileDownloadUrl(File $file, ?User $user): ?string
+    {
+        if ($file->visibility !== 'publik' && $file->visibility !== 'public') {
+            if (! $user) {
+                return null;
+            }
+
+            return URL::temporarySignedRoute(
+                'files.download.signed',
+                now()->addMinutes(5),
+                ['id' => $file->id, 'uid' => $user->id]
+            );
+        }
+
+        return $file->url;
     }
 }

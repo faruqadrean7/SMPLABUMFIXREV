@@ -173,7 +173,7 @@ export default function SpeedGraderPage() {
       <div className="bg-white border-b border-slate-300 px-6 py-3 flex items-center justify-between shrink-0 shadow-xs">
         <div className="flex items-center gap-4">
           <Link
-            href="/guru/tugas"
+            href="/portal/guru/tugas"
             className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-blue-900 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -185,9 +185,9 @@ export default function SpeedGraderPage() {
               {assignment?.title || 'Memuat Tugas...'}
             </h1>
             <p className="text-[11px] text-slate-600 font-semibold flex items-center gap-2 mt-0.5">
-              <span>Kelas IX-A</span>
+              <span>{assignment?.className || assignment?.class?.name || 'Rombel'}</span>
               <span>•</span>
-              <span className="font-bold text-blue-900">{assignment?.grade_component_name || 'Formatif 2'}</span>
+              <span className="font-bold text-blue-900">{assignment?.grade_component_name || 'Komponen Tugas'}</span>
               <span>•</span>
               <span>KKTP: 75</span>
             </p>
@@ -251,11 +251,13 @@ export default function SpeedGraderPage() {
             <div className="flex items-center gap-2 text-slate-900 font-bold truncate max-w-md">
               <FileText className="w-4 h-4 text-blue-900 shrink-0" />
               <span className="truncate">
-                {currentSubmission?.file?.filename || 'Laporan_Praktikum_Siswa.pdf'}
+                {currentSubmission?.file?.filename || (currentSubmission?.submission_url ? 'Tautan Proyek Online' : 'Tidak ada berkas terlampir')}
               </span>
-              <span className="text-[11px] text-slate-600 font-normal">
-                ({currentSubmission?.file ? `${(currentSubmission.file.size_bytes / 1024 / 1024).toFixed(1)} MB` : '1.4 MB'})
-              </span>
+              {currentSubmission?.file?.size_bytes ? (
+                <span className="text-[11px] text-slate-600 font-normal">
+                  ({(currentSubmission.file.size_bytes / 1024 / 1024).toFixed(2)} MB)
+                </span>
+              ) : null}
             </div>
 
             {/* Viewer Controls */}
@@ -276,8 +278,19 @@ export default function SpeedGraderPage() {
                 <ZoomIn className="w-4 h-4" />
               </button>
               <button
-                onClick={() => toast.info('Mengunduh berkas laporan siswa...')}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold ml-2 shadow-xs"
+                type="button"
+                onClick={() => {
+                  const targetUrl =
+                    currentSubmission?.file?.download_url ||
+                    currentSubmission?.file?.url ||
+                    currentSubmission?.submission_url;
+                  if (targetUrl) {
+                    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                  } else {
+                    toast.error('Siswa tidak melampirkan berkas atau tautan untuk diunduh.');
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold ml-2 shadow-xs cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Unduh File</span>
@@ -285,56 +298,64 @@ export default function SpeedGraderPage() {
             </div>
           </div>
 
-          {/* Interactive Document Page Render Area */}
+          {/* Interactive Document Viewer Area */}
           <div className="flex-1 overflow-auto p-6 flex justify-center items-start">
-            <div 
-              className="bg-white shadow-lg rounded-lg border-2 border-slate-300 p-8 w-full max-w-2xl min-h-175 transition-transform duration-150 origin-top"
+            <div
+              className="bg-white shadow-lg rounded-lg border-2 border-slate-300 p-6 w-full max-w-3xl min-h-175 transition-transform duration-150 origin-top"
               style={{ transform: `scale(${zoomLevel / 100})` }}
             >
-              {/* Header Dokumen Siswa */}
-              <div className="border-b-2 border-slate-800 pb-4 mb-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-lg font-black text-slate-900 tracking-tight">LAPORAN PRAKTIKUM INFORMATIKA</h2>
-                    <p className="text-xs text-slate-600 font-semibold mt-1">SMP-SMA Laboratorium Universitas Negeri Malang</p>
-                  </div>
-                  <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-blue-900 text-white font-bold">
-                    Halaman 1 / 3
-                  </span>
+              <div className="border-b border-slate-200 pb-4 mb-5 grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-md border">
+                <div>
+                  <span className="text-slate-600">Penyusun:</span>{' '}
+                  <strong className="text-slate-900 font-bold">{currentSubmission?.student.name || '-'}</strong>
                 </div>
-                <div className="mt-4 grid grid-cols-2 text-xs bg-slate-100 p-3 rounded-md border border-slate-300 font-medium">
-                  <div><span className="text-slate-600">Penyusun:</span> <strong className="text-slate-900 font-bold">{currentSubmission?.student.name}</strong></div>
-                  <div><span className="text-slate-600">NIS:</span> <strong className="text-slate-900 font-bold">{currentSubmission?.student.nis}</strong></div>
+                <div>
+                  <span className="text-slate-600">NIS:</span>{' '}
+                  <strong className="text-slate-900 font-bold">{currentSubmission?.student.nis || '-'}</strong>
                 </div>
               </div>
 
-              {/* Konten Simulasi Dokumen */}
-              <div className="space-y-4 text-xs text-slate-800 leading-relaxed font-sans">
-                <h3 className="font-extrabold text-slate-900 text-sm">A. Ringkasan Desain Portofolio Web</h3>
-                <p>
-                  Dalam praktikum ini, saya telah merancang layout web responsif menggunakan CSS Grid 12-kolom untuk tampilan layar desktop (&gt; 1024px) dan Flexbox untuk adaptasi layar ponsel (&lt; 640px). Seluruh elemen struktural memanfaatkan semantic tags seperti &lt;header&gt;, &lt;main&gt;, &lt;section&gt;, dan &lt;footer&gt;.
-                </p>
-
-                <h3 className="font-extrabold text-slate-900 text-sm mt-4">B. Tangkapan Layar Responsif</h3>
-                <div className="border border-slate-300 rounded-lg p-4 bg-slate-50 text-center">
-                  <div className="w-full h-40 bg-slate-200 border border-slate-300 rounded flex items-center justify-center text-slate-700 font-mono text-xs font-bold">
-                    [Tangkapan Layar Desktop & Mobile Siswa - Resolusi 1440px vs 375px]
+              {(currentSubmission?.file?.download_url || currentSubmission?.file?.url) ? (
+                currentSubmission.file.mime_type?.startsWith('image/') ? (
+                  <div className="flex justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={currentSubmission.file.download_url || currentSubmission.file.url}
+                      alt={currentSubmission.file.filename}
+                      className="max-w-full rounded-md border border-slate-200"
+                    />
                   </div>
-                  <p className="text-[11px] text-slate-600 font-medium italic mt-2">Gambar 1: Uji coba responsivitas layout navigasi dan grid kartu proyek</p>
+                ) : (
+                  <iframe
+                    src={currentSubmission.file.download_url || currentSubmission.file.url}
+                    title={currentSubmission.file.filename || 'Pratinjau Jawaban Siswa'}
+                    className="w-full h-[540px] rounded-md border border-slate-200 bg-slate-50"
+                  />
+                )
+              ) : currentSubmission?.submission_url ? (
+                <div className="p-5 rounded-lg border border-blue-200 bg-blue-50 text-xs space-y-2">
+                  <p className="font-bold text-blue-900">Tautan Pengerjaan Siswa:</p>
+                  <a
+                    href={currentSubmission.submission_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-700 underline break-all font-mono"
+                  >
+                    {currentSubmission.submission_url}
+                  </a>
                 </div>
+              ) : (
+                <div className="p-8 text-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-600">
+                  Siswa tidak melampirkan berkas dokumen fisik untuk tugas ini.
+                </div>
+              )}
 
-                <h3 className="font-extrabold text-slate-900 text-sm mt-4">C. Kesimpulan & Kendala</h3>
-                <p>
-                  Semua kriteria penugasan telah terpenuhi. Navigasi menu berjalan mulus tanpa kendala layout shift.
-                </p>
-
-                {currentSubmission?.notes && (
-                  <div className="mt-6 p-3.5 rounded-lg bg-blue-900 text-white text-xs">
-                    <span className="font-bold block mb-1">Catatan Tambahan dari Siswa:</span>
-                    <p className="text-blue-100 font-medium italic">&ldquo;{currentSubmission.notes}&rdquo;</p>
-                  </div>
-                )}
-              </div>
+              {currentSubmission?.notes && (
+                <div className="mt-5 p-3.5 rounded-lg bg-slate-900 text-white text-xs">
+                  <span className="font-bold block mb-1">Catatan dari Siswa:</span>
+                  <p className="text-slate-100 whitespace-pre-wrap">{currentSubmission.notes}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -361,7 +382,7 @@ export default function SpeedGraderPage() {
                   {currentSubmission?.student.name}
                 </h3>
                 <p className="text-xs text-slate-600 font-mono font-semibold">
-                  NIS: {currentSubmission?.student.nis} • Kelas IX-A
+                  NIS: {currentSubmission?.student.nis} • {assignment?.className || assignment?.class?.name || 'Rombel'}
                 </p>
 
                 {/* Status Kumpul Badge - SOLID */}

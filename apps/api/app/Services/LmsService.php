@@ -584,9 +584,10 @@ class LmsService
 
         $assignment = Assignment::findOrFail($assignmentId);
 
-        // Verifikasi siswa benar-benar terdaftar di kelas tugas ini
+        // Verifikasi siswa benar-benar terdaftar aktif di kelas tugas ini
         $isEnrolled = ClassStudent::where('class_id', $assignment->class_id)
             ->where('student_id', $student->id)
+            ->whereNull('left_at')
             ->exists();
 
         if (! $isEnrolled) {
