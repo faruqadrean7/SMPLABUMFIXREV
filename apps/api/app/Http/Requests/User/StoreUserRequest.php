@@ -10,8 +10,8 @@ class StoreUserRequest extends BaseApiRequest
     public function rules(): array
     {
         return [
-            'username' => ['required', 'string', 'min:3', 'max:50', 'regex:/^[a-zA-Z0-9._-]+$/', 'unique:users,username'],
-            'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
+            'username' => ['required', 'string', 'min:3', 'max:50', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique('users', 'username')->whereNull('deleted_at')],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'phone' => ['nullable', 'string', 'max:30'],
             'password' => ['nullable', 'string', 'min:8', 'max:100'],
             'status' => ['nullable', 'string', Rule::in(['active', 'inactive', 'suspended'])],

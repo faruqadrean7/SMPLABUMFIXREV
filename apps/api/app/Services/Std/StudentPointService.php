@@ -35,8 +35,8 @@ class StudentPointService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
-            $query->whereRaw('LOWER(name) LIKE ?', [$kw]);
+            $kw = '%'.trim((string) $filters['search']).'%';
+            $query->whereIlike('name', $kw);
         }
 
         return $query->paginate((int) ($filters['per_page'] ?? 15));
@@ -190,10 +190,10 @@ class StudentPointService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->whereHas('student', function ($q) use ($kw) {
-                $q->whereRaw('LOWER(full_name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(nis) LIKE ?', [$kw]);
+                $q->whereIlike('full_name', $kw)
+                    ->orWhereIlike('nis', $kw);
             });
         }
 

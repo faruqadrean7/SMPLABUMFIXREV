@@ -42,12 +42,12 @@ class AssetService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(asset_code) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(brand) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(model) LIKE ?', [$kw]);
+                $q->whereIlike('name', $kw)
+                    ->orWhereIlike('asset_code', $kw)
+                    ->orWhereIlike('brand', $kw)
+                    ->orWhereIlike('model', $kw);
             });
         }
 

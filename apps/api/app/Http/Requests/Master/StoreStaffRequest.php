@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Master;
 
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class StoreStaffRequest extends BaseApiRequest
 {
@@ -12,7 +13,7 @@ class StoreStaffRequest extends BaseApiRequest
             'full_name' => ['required', 'string', 'max:200'],
             'position' => ['nullable', 'string', 'max:100'],
             'unit' => ['nullable', 'string', 'max:100'],
-            'user_id' => ['nullable', 'string', 'exists:users,id', 'unique:staff,user_id'],
+            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('staff', 'user_id')->whereNull('deleted_at')],
         ];
     }
 

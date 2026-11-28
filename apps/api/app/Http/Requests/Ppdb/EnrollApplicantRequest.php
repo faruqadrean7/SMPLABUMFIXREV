@@ -3,14 +3,15 @@
 namespace App\Http\Requests\Ppdb;
 
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class EnrollApplicantRequest extends BaseApiRequest
 {
     public function rules(): array
     {
         return [
-            'nis' => ['nullable', 'string', 'max:30', 'unique:students,nis'],
-            'nisn' => ['nullable', 'string', 'max:30', 'unique:students,nisn'],
+            'nis' => ['nullable', 'string', 'max:30', Rule::unique('students', 'nis')->whereNull('deleted_at')],
+            'nisn' => ['nullable', 'string', 'max:30', Rule::unique('students', 'nisn')->whereNull('deleted_at')],
             'class_id' => ['nullable', 'uuid', 'exists:classes,id'],
             'academic_year_id' => ['nullable', 'uuid', 'exists:academic_years,id'],
             'entry_date' => ['nullable', 'date'],

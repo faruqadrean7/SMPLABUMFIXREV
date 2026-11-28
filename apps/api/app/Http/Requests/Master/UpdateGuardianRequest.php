@@ -16,7 +16,7 @@ class UpdateGuardianRequest extends BaseApiRequest
             'phone' => ['nullable', 'string', 'max:30'],
             'occupation' => ['nullable', 'string', 'max:100'],
             'address' => ['nullable', 'string'],
-            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('guardians', 'user_id')->ignore($id)],
+            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('guardians', 'user_id')->whereNull('deleted_at')->ignore($id)],
         ];
     }
 

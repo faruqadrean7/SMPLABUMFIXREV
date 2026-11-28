@@ -210,6 +210,8 @@ class ExamSyncService
                         continue;
                     } else {
                         $session->status = 'selesai';
+                        $session->deadline_at = $session->deadline_at ?? $deadlineAt;
+                        $session->ends_at = $session->ends_at ?? $session->deadline_at;
                         $session->submitted_at = $submittedAt;
                         $session->save();
                     }

@@ -78,10 +78,10 @@ class EarlyWarningService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->whereHas('student', function ($sq) use ($kw) {
-                $sq->whereRaw('LOWER(full_name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(nis) LIKE ?', [$kw]);
+                $sq->whereIlike('full_name', $kw)
+                    ->orWhereIlike('nis', $kw);
             });
         }
 

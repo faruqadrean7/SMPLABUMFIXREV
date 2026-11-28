@@ -54,8 +54,8 @@ class ExamService
         }
 
         if (! empty($filters['search'])) {
-            $keyword = '%'.strtolower($filters['search']).'%';
-            $query->whereRaw('LOWER(title) LIKE ?', [$keyword]);
+            $keyword = '%'.trim((string) $filters['search']).'%';
+            $query->whereIlike('title', $keyword);
         }
 
         return $query->paginate((int) ($filters['per_page'] ?? 15));

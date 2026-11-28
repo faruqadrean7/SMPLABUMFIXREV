@@ -37,12 +37,12 @@ class LibraryService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(title) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(author) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(publisher) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(isbn) LIKE ?', [$kw]);
+                $q->whereIlike('title', $kw)
+                    ->orWhereIlike('author', $kw)
+                    ->orWhereIlike('publisher', $kw)
+                    ->orWhereIlike('isbn', $kw);
             });
         }
 

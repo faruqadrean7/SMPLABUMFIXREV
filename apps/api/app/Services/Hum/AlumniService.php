@@ -39,15 +39,15 @@ class AlumniService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(next_institution) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(study_program) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(occupation) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(company_name) LIKE ?', [$kw])
+                $q->whereIlike('next_institution', $kw)
+                    ->orWhereIlike('study_program', $kw)
+                    ->orWhereIlike('occupation', $kw)
+                    ->orWhereIlike('company_name', $kw)
                     ->orWhereHas('student', function ($sq) use ($kw) {
-                        $sq->whereRaw('LOWER(full_name) LIKE ?', [$kw])
-                            ->orWhereRaw('LOWER(nis) LIKE ?', [$kw]);
+                        $sq->whereIlike('full_name', $kw)
+                            ->orWhereIlike('nis', $kw);
                     });
             });
         }
@@ -176,10 +176,10 @@ class AlumniService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(title) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(description) LIKE ?', [$kw]);
+                $q->whereIlike('title', $kw)
+                    ->orWhereIlike('description', $kw);
             });
         }
 

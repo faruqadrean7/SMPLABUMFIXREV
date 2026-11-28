@@ -39,11 +39,11 @@ class MessagingService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(code) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(template_text) LIKE ?', [$kw]);
+                $q->whereIlike('code', $kw)
+                    ->orWhereIlike('name', $kw)
+                    ->orWhereIlike('template_text', $kw);
             });
         }
 

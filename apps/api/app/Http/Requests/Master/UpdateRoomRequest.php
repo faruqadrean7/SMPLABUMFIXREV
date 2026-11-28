@@ -13,7 +13,7 @@ class UpdateRoomRequest extends BaseApiRequest
         $id = $this->route('id');
 
         return [
-            'code' => ['nullable', 'string', 'max:50', Rule::unique('rooms', 'code')->ignore($id)],
+            'code' => ['nullable', 'string', 'max:50', Rule::unique('rooms', 'code')->whereNull('deleted_at')->ignore($id)],
             'name' => ['nullable', 'string', 'max:150'],
             'room_type' => ['nullable', 'string', Rule::in(Room::ROOM_TYPES)],
             'capacity' => ['nullable', 'integer', 'min:1', 'max:1000'],

@@ -57,10 +57,10 @@ class CompetitionAndAchievementService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(organizer) LIKE ?', [$kw]);
+                $q->whereIlike('name', $kw)
+                    ->orWhereIlike('organizer', $kw);
             });
         }
 
@@ -351,10 +351,10 @@ class CompetitionAndAchievementService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(title) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(rank_level) LIKE ?', [$kw]);
+                $q->whereIlike('title', $kw)
+                    ->orWhereIlike('rank_level', $kw);
             });
         }
 
@@ -774,23 +774,23 @@ class CompetitionAndAchievementService
         // Rekap Medali & Trofi
         $medals = [
             'emas' => (clone $achQuery)->where(function ($q) {
-                $q->whereRaw('LOWER(rank_level) LIKE ?', ['%emas%'])
-                    ->orWhereRaw('LOWER(rank_level) LIKE ?', ['%juara 1%'])
-                    ->orWhereRaw('LOWER(title) LIKE ?', ['%juara 1%']);
+                $q->whereIlike('rank_level', '%emas%')
+                    ->orWhereIlike('rank_level', '%juara 1%')
+                    ->orWhereIlike('title', '%juara 1%');
             })->count(),
             'perak' => (clone $achQuery)->where(function ($q) {
-                $q->whereRaw('LOWER(rank_level) LIKE ?', ['%perak%'])
-                    ->orWhereRaw('LOWER(rank_level) LIKE ?', ['%juara 2%'])
-                    ->orWhereRaw('LOWER(title) LIKE ?', ['%juara 2%']);
+                $q->whereIlike('rank_level', '%perak%')
+                    ->orWhereIlike('rank_level', '%juara 2%')
+                    ->orWhereIlike('title', '%juara 2%');
             })->count(),
             'perunggu' => (clone $achQuery)->where(function ($q) {
-                $q->whereRaw('LOWER(rank_level) LIKE ?', ['%perunggu%'])
-                    ->orWhereRaw('LOWER(rank_level) LIKE ?', ['%juara 3%'])
-                    ->orWhereRaw('LOWER(title) LIKE ?', ['%juara 3%']);
+                $q->whereIlike('rank_level', '%perunggu%')
+                    ->orWhereIlike('rank_level', '%juara 3%')
+                    ->orWhereIlike('title', '%juara 3%');
             })->count(),
             'finalis' => (clone $achQuery)->where(function ($q) {
-                $q->whereRaw('LOWER(rank_level) LIKE ?', ['%finalis%'])
-                    ->orWhereRaw('LOWER(rank_level) LIKE ?', ['%harapan%']);
+                $q->whereIlike('rank_level', '%finalis%')
+                    ->orWhereIlike('rank_level', '%harapan%');
             })->count(),
         ];
 

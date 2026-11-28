@@ -128,10 +128,10 @@ class BookingService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(purpose) LIKE ?', [$kw])
-                    ->orWhereHas('facility', fn ($fq) => $fq->whereRaw('LOWER(name) LIKE ?', [$kw]));
+                $q->whereIlike('purpose', $kw)
+                    ->orWhereHas('facility', fn ($fq) => $fq->whereIlike('name', $kw));
             });
         }
 

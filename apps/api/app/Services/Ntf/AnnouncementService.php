@@ -111,10 +111,10 @@ class AnnouncementService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(title) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(body) LIKE ?', [$kw]);
+                $q->whereIlike('title', $kw)
+                    ->orWhereIlike('body', $kw);
             });
         }
 
