@@ -12,7 +12,7 @@ class UpdateAcademicYearRequest extends BaseApiRequest
         $id = $this->route('id');
 
         return [
-            'name' => ['nullable', 'string', 'max:50', Rule::unique('academic_years', 'name')->ignore($id)],
+            'name' => ['nullable', 'string', 'max:50', Rule::unique('academic_years', 'name')->whereNull('deleted_at')->ignore($id)],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
         ];

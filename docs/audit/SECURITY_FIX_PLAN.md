@@ -40,10 +40,11 @@
 | **Batch 2B-1** | **P1-39** | **SELESAI** | `a516519` | `config/queue.php`, `apps/api/.env.example`, `QueueAfterCommitTest.php` | `git revert a516519` |
 | **Batch 2B-1** | **T2B-CONC-01** | **SELESAI** | `66ddf16` | `PostgreSqlConcurrencyTest.php`, `tests/Concurrency/Tier2PostgreSqlConcurrencyTest.php`, `tests/Concurrency/worker.php`, `phpunit.xml`, `.github/workflows/deploy.yml` | `git revert 66ddf16` |
 | **Batch 2B-2** | **P1-40** | **SELESAI** | `e226587` | `PaginationHelper.php`, `GenerateReportRequest.php`, `ReportService.php`, 11+ service berpaginasi & 11 service master, `PaginationHelperTest.php`, `PaginationClampSecurityTest.php` | `git revert e226587` |
+| **Batch 2B-3** | **P0-30, P1-41, P1-42, P1-43, P1-44** | **SELESAI** | `d4a3185` | `PreflightTier2b3Command.php`, migrasi `2026_11_28_000051..000055`, `AppServiceProvider.php`, `ExamSyncService.php`, 18 FormRequest `whereNull('deleted_at')`, 22 service/controller `whereIlike`, `Tier2b3SchemaIndexesAndIlikeTest.php` | `php artisan migrate:rollback --step=5 && git revert d4a3185` |
 
 > **Kebijakan E-Rapor (`P1-16` — PENDING SCHOOL APPROVAL):** Alur yang direkomendasikan adalah *Guru Mapel (input & finalisasi nilai) → Wali Kelas (verifikasi kelengkapan rapor) → Kepala Sekolah (pengesahan & penerbitan rapor)*. Permission produksi **belum diubah** dan perilaku eksisting tetap dipertahankan hingga ada konfirmasi resmi dari pihak sekolah.  
-> **Batch 2B-2 s/d 2B-7 & Tier 3:** Belum dieksekusi — menunggu review & persetujuan pemilik sistem.  
-> **Status Push:** Tier 0 s/d Tier 2A + Batch 2B-S telah di-push ke `origin/develop` (`4347113`). Seluruh commit **Batch 2B-1** masih berada di branch fitur lokal `feat/tier2b-1-concurrency-role-grade-queue` menunggu review & persetujuan integrasi/push.  
+> **Batch 2B-4 s/d 2B-7 & Tier 3:** Belum dieksekusi.  
+> **Status Push:** Tier 0 s/d Tier 2A + Batch 2B-S telah di-push ke `origin/develop` (`4347113`). Batch 2B-1 (`729737d`), Batch 2B-2 (`e226587`), dan Batch 2B-3 (`d4a3185`) telah terintegrasi ke `develop` lokal siap verifikasi & push.  
 > **Kontrak Dual-Mode Cookie (`P1-01`) & 2FA (`P1-06`):**
 > - Web mengirim header `X-Auth-Token-Transport: cookie` + `withCredentials: true` sehingga `refreshToken` dikirim eksklusif via cookie HttpOnly `sistlabum_refresh_token` (`SameSite=Lax`, `Path=/api/v1/auth`) tanpa pernah tersimpan di `localStorage` atau body JSON.
 > - Klien Android/iOS (`platform: 'android'|'ios'`) tanpa header `X-Auth-Token-Transport: cookie` **tetap menerima `data.tokens.refreshToken` di JSON** dan me-refresh via JSON body (terverifikasi hijau pada `MobileClientAuthCompatibilityTest` & `DualModeAuthCookieTest`).

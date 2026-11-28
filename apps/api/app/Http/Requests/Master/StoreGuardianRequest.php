@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Master;
 
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class StoreGuardianRequest extends BaseApiRequest
 {
@@ -13,10 +14,10 @@ class StoreGuardianRequest extends BaseApiRequest
             'phone' => ['required', 'string', 'max:30'],
             'occupation' => ['nullable', 'string', 'max:100'],
             'address' => ['nullable', 'string'],
-            'user_id' => ['nullable', 'string', 'exists:users,id', 'unique:guardians,user_id'],
+            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('guardians', 'user_id')->whereNull('deleted_at')],
             'create_user_account' => ['nullable', 'boolean'],
-            'username' => ['nullable', 'string', 'max:50', 'unique:users,username'],
-            'email' => ['nullable', 'email', 'max:100', 'unique:users,email'],
+            'username' => ['nullable', 'string', 'max:50', Rule::unique('users', 'username')->whereNull('deleted_at')],
+            'email' => ['nullable', 'email', 'max:100', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'password' => ['nullable', 'string', 'min:6'],
         ];
     }

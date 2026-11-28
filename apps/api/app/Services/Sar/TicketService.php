@@ -64,11 +64,11 @@ class TicketService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(title) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(ticket_number) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(description) LIKE ?', [$kw]);
+                $q->whereIlike('title', $kw)
+                    ->orWhereIlike('ticket_number', $kw)
+                    ->orWhereIlike('description', $kw);
             });
         }
 

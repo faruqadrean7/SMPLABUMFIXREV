@@ -3,14 +3,15 @@
 namespace App\Http\Requests\Master;
 
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class StoreStudentRequest extends BaseApiRequest
 {
     public function rules(): array
     {
         return [
-            'nis' => ['required', 'string', 'max:30', 'unique:students,nis'],
-            'nisn' => ['required', 'string', 'max:30', 'unique:students,nisn'],
+            'nis' => ['required', 'string', 'max:30', Rule::unique('students', 'nis')->whereNull('deleted_at')],
+            'nisn' => ['required', 'string', 'max:30', Rule::unique('students', 'nisn')->whereNull('deleted_at')],
             'nik' => ['required', 'string', 'regex:/^[0-9]{16}$/'],
             'full_name' => ['required', 'string', 'max:200'],
             'gender' => ['required', 'in:L,P'],

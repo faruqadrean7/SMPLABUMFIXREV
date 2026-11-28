@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Ppdb;
 
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class RegisterApplicantRequest extends BaseApiRequest
 {
@@ -10,7 +11,7 @@ class RegisterApplicantRequest extends BaseApiRequest
     {
         return [
             'full_name' => ['required', 'string', 'max:200'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'phone' => ['required', 'string', 'max:20'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'password_confirmation' => ['required', 'string', 'min:8'],

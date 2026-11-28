@@ -42,11 +42,11 @@ class FacilityService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(COALESCE(code, "")) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(COALESCE(location, "")) LIKE ?', [$kw]);
+                $q->whereIlike('name', $kw)
+                    ->orWhereIlike('code', $kw)
+                    ->orWhereIlike('location', $kw);
             });
         }
 

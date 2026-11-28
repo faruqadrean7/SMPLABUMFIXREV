@@ -15,7 +15,7 @@ class UpdateStaffRequest extends BaseApiRequest
             'full_name' => ['nullable', 'string', 'max:200'],
             'position' => ['nullable', 'string', 'max:100'],
             'unit' => ['nullable', 'string', 'max:100'],
-            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('staff', 'user_id')->ignore($id)],
+            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('staff', 'user_id')->whereNull('deleted_at')->ignore($id)],
         ];
     }
 

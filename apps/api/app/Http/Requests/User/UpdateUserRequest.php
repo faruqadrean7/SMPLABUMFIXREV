@@ -12,8 +12,8 @@ class UpdateUserRequest extends BaseApiRequest
         $userId = $this->route('id');
 
         return [
-            'username' => ['sometimes', 'required', 'string', 'min:3', 'max:50', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique('users', 'username')->ignore($userId)],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
+            'username' => ['sometimes', 'required', 'string', 'min:3', 'max:50', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique('users', 'username')->whereNull('deleted_at')->ignore($userId)],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->whereNull('deleted_at')->ignore($userId)],
             'phone' => ['nullable', 'string', 'max:30'],
             'status' => ['nullable', 'string', Rule::in(['active', 'inactive', 'suspended', 'locked'])],
             'must_change_password' => ['nullable', 'boolean'],

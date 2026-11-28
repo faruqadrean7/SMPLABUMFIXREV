@@ -40,10 +40,10 @@ class ExtracurricularService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(category) LIKE ?', [$kw]);
+                $q->whereIlike('name', $kw)
+                    ->orWhereIlike('category', $kw);
             });
         }
 
@@ -137,10 +137,10 @@ class ExtracurricularService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->whereHas('student', function ($q) use ($kw) {
-                $q->whereRaw('LOWER(full_name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(nis) LIKE ?', [$kw]);
+                $q->whereIlike('full_name', $kw)
+                    ->orWhereIlike('nis', $kw);
             });
         }
 
@@ -348,10 +348,10 @@ class ExtracurricularService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(title) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(description) LIKE ?', [$kw]);
+                $q->whereIlike('title', $kw)
+                    ->orWhereIlike('description', $kw);
             });
         }
 

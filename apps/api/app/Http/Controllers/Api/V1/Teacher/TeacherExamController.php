@@ -648,10 +648,12 @@ class TeacherExamController extends Controller
         }
 
         if ($request->filled('q') || $request->filled('search')) {
-            $search = strtolower(trim($request->query('q') ?? $request->query('search')));
-            $isPgsql = DB::getDriverName() === 'pgsql';
-            $textExpr = $isPgsql ? 'LOWER(CAST(body AS TEXT))' : 'LOWER(body)';
-            $query->whereRaw("{$textExpr} LIKE ?", ["%{$search}%"]);
+            $search = trim((string) ($request->query('q') ?? $request->query('search')));
+            if (DB::getDriverName() === 'pgsql') {
+                $query->whereRaw('CAST(body AS TEXT) ILIKE ?', ["%{$search}%"]);
+            } else {
+                $query->whereRaw('LOWER(body) LIKE LOWER(?)', ["%{$search}%"]);
+            }
         }
 
         $perPage = max(1, min(100, (int) $request->input('per_page', 15)));

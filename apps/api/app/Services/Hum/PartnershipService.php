@@ -52,12 +52,12 @@ class PartnershipService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(partner_name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(mou_number) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(contact_person) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(scope) LIKE ?', [$kw]);
+                $q->whereIlike('partner_name', $kw)
+                    ->orWhereIlike('mou_number', $kw)
+                    ->orWhereIlike('contact_person', $kw)
+                    ->orWhereIlike('scope', $kw);
             });
         }
 
@@ -195,11 +195,11 @@ class PartnershipService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(destination_institution) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(destination_country) LIKE ?', [$kw]);
+                $q->whereIlike('name', $kw)
+                    ->orWhereIlike('destination_institution', $kw)
+                    ->orWhereIlike('destination_country', $kw);
             });
         }
 

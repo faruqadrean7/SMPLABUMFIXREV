@@ -11,7 +11,7 @@ class StoreRoomRequest extends BaseApiRequest
     public function rules(): array
     {
         return [
-            'code' => ['required', 'string', 'max:50', 'unique:rooms,code'],
+            'code' => ['required', 'string', 'max:50', Rule::unique('rooms', 'code')->whereNull('deleted_at')],
             'name' => ['required', 'string', 'max:150'],
             'room_type' => ['required', 'string', Rule::in(Room::ROOM_TYPES)],
             'capacity' => ['required', 'integer', 'min:1', 'max:1000'],

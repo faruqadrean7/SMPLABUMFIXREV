@@ -79,7 +79,7 @@ Tidak ada satu pun dari 76 ID temuan besar yang 100% `ALREADY_FIXED` secara utuh
 
 ---
 
-## Item yang Telah Diperbaiki pada Batch 2B-S (`4347113`), Batch 2B-1 (`729737d`), & Batch 2B-2 (`e226587`)
+## Item yang Telah Diperbaiki pada Batch 2B-S (`4347113`), Batch 2B-1 (`729737d`), Batch 2B-2 (`e226587`), & Batch 2B-3 (`d4a3185`)
 
 | ID | Commit | Ringkasan Perbaikan | Status |
 |---|---|---|---|
@@ -89,3 +89,8 @@ Tidak ada satu pun dari 76 ID temuan besar yang 100% `ALREADY_FIXED` secara utuh
 | **P1-39** | `a516519` | Aktifkan `'after_commit' => filter_var(env('QUEUE_AFTER_COMMIT', true), FILTER_VALIDATE_BOOL)` pada driver antrean asinkron (`database`, `beanstalkd`, `sqs`, `redis`) di `config/queue.php` + dokumentasi `QUEUE_AFTER_COMMIT=true` di `apps/api/.env.example` dan uji commit/rollback/nested savepoint nyata (`QueueAfterCommitTest`). | `FIXED` |
 | **T2B-CONC-01** | `66ddf16` | Hilangkan konfigurasi hardcoded macOS di `PostgreSqlConcurrencyTest.php` agar memakai env/config PG aktif dengan 2 `pg_backend_pid` terpisah; bangun suite permanen multi-proses `<testsuite name="Concurrency">` (`tests/Concurrency/Tier2PostgreSqlConcurrencyTest.php` + `worker.php`) mencakup skenario Finance, PPDB, `Role::ensureSystemRole()`, dan `GradeRecorder`; integrasikan sebagai gerbang wajib PostgreSQL di `.github/workflows/deploy.yml`. | `FIXED` |
 | **P1-40** | `e226587` | Tambah `App\Support\PaginationHelper::clamp()` untuk membatasi `per_page`/`limit` secara aman pada rentang `1..100` (`1..50` untuk `PostService::listPublicPosts`, `1..200` untuk `ExamTokenRoomService::getParticipantCards`), menerapkannya di 11 endpoint unbounded, 6 jalur `ReportService`, 11 service master, dan seluruh service berpaginasi lainnya, serta menurunkan `max:500` → `max:100` pada `GenerateReportRequest`. | `FIXED` |
+| **P1-41** | `d4a3185` | Migrasi non-destruktif `000051` melebarkan `students.nik_enc`, `applicants.nik_enc`, dan `devices.fcm_token` ke `text`. | `FIXED` |
+| **P0-30** | `d4a3185` | Migrasi `000052` menambah partial unique `school_id IS NULL` pada `academic_years` & `ppdb_waves` serta indeks komposit query panas (`grades`, `exam_answers`, `exam_sessions`, `audit_logs`, `attendances`, `invoices`, `payments`, `applicants`). | `FIXED` |
+| **P1-42** | `d4a3185` | Migrasi `000053` mengonversi 18 constraint `UNIQUE` pada 13 tabel `softDeletes()` menjadi partial unique `WHERE deleted_at IS NULL` + menyelaraskan `Rule::unique(...)->whereNull('deleted_at')` pada 18 FormRequest Master/User/PPDB (FK `schools(id)` tetap ditunda ke fase multi-tenant). | `FIXED` |
+| **P1-43** | `d4a3185` | Macro driver-aware `whereIlike`/`orWhereIlike`/`whereNotIlike` di `AppServiceProvider`, perbaikan `LOWER(COALESCE(code, ""))` di `FacilityService`, migrasi `000054` menambah 6 indeks `gin_trgm_ops`, dan migrasi seluruh query `LOWER(...) LIKE` di 22 file service/controller. | `FIXED` |
+| **P1-44** | `d4a3185` | Sinkronkan `ends_at = deadline_at` pada jalur update `ExamSyncService::pushResults`, tambah CLI pre-flight read-only `db:preflight-tier2b3`, dan migrasi `000055` menambah 16 FK `ON DELETE SET NULL` (`NOT VALID` + validasi kondisional) pada `program_*`, `grade_histories`, & `schools.logo_file_id`. | `FIXED` |

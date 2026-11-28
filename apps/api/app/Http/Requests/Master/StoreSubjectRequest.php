@@ -3,13 +3,14 @@
 namespace App\Http\Requests\Master;
 
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class StoreSubjectRequest extends BaseApiRequest
 {
     public function rules(): array
     {
         return [
-            'code' => ['required', 'string', 'max:30', 'unique:subjects,code'],
+            'code' => ['required', 'string', 'max:30', Rule::unique('subjects', 'code')->whereNull('deleted_at')],
             'name' => ['required', 'string', 'max:150'],
             'subject_group' => ['required', 'string', 'max:50'],
         ];

@@ -12,8 +12,8 @@ class UpdateStudentRequest extends BaseApiRequest
         $id = $this->route('id');
 
         return [
-            'nis' => ['nullable', 'string', 'max:30', Rule::unique('students', 'nis')->ignore($id)],
-            'nisn' => ['nullable', 'string', 'max:30', Rule::unique('students', 'nisn')->ignore($id)],
+            'nis' => ['nullable', 'string', 'max:30', Rule::unique('students', 'nis')->whereNull('deleted_at')->ignore($id)],
+            'nisn' => ['nullable', 'string', 'max:30', Rule::unique('students', 'nisn')->whereNull('deleted_at')->ignore($id)],
             'nik' => ['nullable', 'string', 'regex:/^[0-9]{16}$/'],
             'full_name' => ['nullable', 'string', 'max:200'],
             'gender' => ['nullable', 'in:L,P'],

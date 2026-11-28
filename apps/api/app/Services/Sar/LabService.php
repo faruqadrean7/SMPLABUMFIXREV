@@ -42,11 +42,11 @@ class LabService
         }
 
         if (! empty($filters['search'])) {
-            $kw = '%'.strtolower($filters['search']).'%';
+            $kw = '%'.trim((string) $filters['search']).'%';
             $query->where(function ($q) use ($kw) {
-                $q->whereRaw('LOWER(name) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(code) LIKE ?', [$kw])
-                    ->orWhereRaw('LOWER(category) LIKE ?', [$kw]);
+                $q->whereIlike('name', $kw)
+                    ->orWhereIlike('code', $kw)
+                    ->orWhereIlike('category', $kw);
             });
         }
 

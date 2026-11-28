@@ -35,8 +35,8 @@ class QuestionBankService
         }
 
         if (! empty($filters['search'])) {
-            $keyword = '%'.strtolower($filters['search']).'%';
-            $query->whereRaw('LOWER(name) LIKE ?', [$keyword]);
+            $keyword = '%'.trim((string) $filters['search']).'%';
+            $query->whereIlike('name', $keyword);
         }
 
         return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
@@ -183,13 +183,16 @@ class QuestionBankService
         }
 
         if (! empty($filters['search'])) {
-            $keyword = '%'.strtolower($filters['search']).'%';
+            $keyword = '%'.trim((string) $filters['search']).'%';
             $isPgsql = DB::getDriverName() === 'pgsql';
-            $jsonContentExpr = $isPgsql ? "LOWER(body->>'content')" : "LOWER(json_extract(body, '$.content'))";
 
-            $query->where(function ($q) use ($keyword, $jsonContentExpr) {
-                $q->whereRaw('LOWER(cp_code) LIKE ?', [$keyword])
-                    ->orWhereRaw("{$jsonContentExpr} LIKE ?", [$keyword]);
+            $query->where(function ($q) use ($keyword, $isPgsql) {
+                $q->whereIlike('cp_code', $keyword);
+                if ($isPgsql) {
+                    $q->orWhereRaw("body->>'content' ILIKE ?", [$keyword]);
+                } else {
+                    $q->orWhereRaw("LOWER(json_extract(body, '$.content')) LIKE LOWER(?)", [$keyword]);
+                }
             });
         }
 

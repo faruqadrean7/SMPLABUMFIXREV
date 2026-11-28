@@ -12,16 +12,16 @@ class UpdateTeacherRequest extends BaseApiRequest
         $id = $this->route('id');
 
         return [
-            'nip' => ['nullable', 'string', 'max:50', Rule::unique('teachers', 'nip')->ignore($id)],
-            'nuptk' => ['nullable', 'string', 'max:50', Rule::unique('teachers', 'nuptk')->ignore($id)],
+            'nip' => ['nullable', 'string', 'max:50', Rule::unique('teachers', 'nip')->whereNull('deleted_at')->ignore($id)],
+            'nuptk' => ['nullable', 'string', 'max:50', Rule::unique('teachers', 'nuptk')->whereNull('deleted_at')->ignore($id)],
             'full_name' => ['nullable', 'string', 'max:200'],
             'position' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', 'in:tetap,honorer,kontrak'],
             'photo_file_id' => ['nullable', 'string', 'exists:files,id'],
-            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('teachers', 'user_id')->ignore($id)],
+            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('teachers', 'user_id')->whereNull('deleted_at')->ignore($id)],
             'create_user_account' => ['nullable', 'boolean'],
-            'username' => ['nullable', 'string', 'max:50', 'unique:users,username'],
-            'email' => ['nullable', 'email', 'max:100', 'unique:users,email'],
+            'username' => ['nullable', 'string', 'max:50', Rule::unique('users', 'username')->whereNull('deleted_at')],
+            'email' => ['nullable', 'email', 'max:100', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'password' => ['nullable', 'string', 'min:6'],
         ];
     }

@@ -3,22 +3,23 @@
 namespace App\Http\Requests\Master;
 
 use App\Http\Requests\BaseApiRequest;
+use Illuminate\Validation\Rule;
 
 class StoreTeacherRequest extends BaseApiRequest
 {
     public function rules(): array
     {
         return [
-            'nip' => ['nullable', 'string', 'max:50', 'unique:teachers,nip'],
-            'nuptk' => ['nullable', 'string', 'max:50', 'unique:teachers,nuptk'],
+            'nip' => ['nullable', 'string', 'max:50', Rule::unique('teachers', 'nip')->whereNull('deleted_at')],
+            'nuptk' => ['nullable', 'string', 'max:50', Rule::unique('teachers', 'nuptk')->whereNull('deleted_at')],
             'full_name' => ['required', 'string', 'max:200'],
             'position' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', 'in:tetap,honorer,kontrak'],
             'photo_file_id' => ['nullable', 'string', 'exists:files,id'],
-            'user_id' => ['nullable', 'string', 'exists:users,id', 'unique:teachers,user_id'],
+            'user_id' => ['nullable', 'string', 'exists:users,id', Rule::unique('teachers', 'user_id')->whereNull('deleted_at')],
             'create_user_account' => ['nullable', 'boolean'],
-            'username' => ['nullable', 'string', 'max:50', 'unique:users,username'],
-            'email' => ['nullable', 'email', 'max:100', 'unique:users,email'],
+            'username' => ['nullable', 'string', 'max:50', Rule::unique('users', 'username')->whereNull('deleted_at')],
+            'email' => ['nullable', 'email', 'max:100', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'password' => ['nullable', 'string', 'min:6'],
         ];
     }

@@ -110,19 +110,19 @@ class FinanceReportController extends Controller
             $needle = strtolower(trim($channelFilter));
             if (in_array($needle, ['tunai', 'cash'], true)) {
                 $query->where(function ($q) {
-                    $q->whereRaw('LOWER(channel) LIKE ?', ['%tunai%'])
-                        ->orWhereRaw('LOWER(channel) LIKE ?', ['%cash%']);
+                    $q->whereIlike('channel', '%tunai%')
+                        ->orWhereIlike('channel', '%cash%');
                 });
             } elseif ($needle === 'transfer') {
                 $query->where(function ($q) {
                     $q->whereNull('channel')
                         ->orWhere(function ($sub) {
-                            $sub->whereRaw('LOWER(channel) NOT LIKE ?', ['%tunai%'])
-                                ->whereRaw('LOWER(channel) NOT LIKE ?', ['%cash%']);
+                            $sub->whereNotIlike('channel', '%tunai%')
+                                ->whereNotIlike('channel', '%cash%');
                         });
                 });
             } else {
-                $query->whereRaw('LOWER(channel) LIKE ?', ['%'.$needle.'%']);
+                $query->whereIlike('channel', '%'.$needle.'%');
             }
         }
 
