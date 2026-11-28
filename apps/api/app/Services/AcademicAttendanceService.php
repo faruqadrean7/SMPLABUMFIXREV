@@ -350,6 +350,10 @@ class AcademicAttendanceService
                 };
 
                 for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+                    if ($date->isWeekend()) {
+                        continue;
+                    }
+
                     Attendance::updateOrCreate(
                         [
                             'student_id' => $leave->student_id,

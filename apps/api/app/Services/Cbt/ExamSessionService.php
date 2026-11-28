@@ -193,9 +193,7 @@ class ExamSessionService
 
         // Auto-lock jika waktu server telah melewati deadline
         if ($effectiveEndsAt && $now->greaterThan($effectiveEndsAt->copy()->addSeconds($graceSeconds))) {
-            $session->status = 'selesai';
-            $session->submitted_at = $effectiveEndsAt;
-            $session->save();
+            $this->finalizeSession($session, $effectiveEndsAt);
             throw new HttpException(422, 'Waktu ujian telah habis. Sesi ujian otomatis diselesaikan.', null, [
                 'X-Error-Code' => 'EXAM_TIME_OVER',
             ]);
@@ -434,13 +432,6 @@ class ExamSessionService
         $user = $request->user();
         $student = $this->resolveStudentForUser($user);
 
-        $session = ExamSession::where('exam_id', $examId)
-            ->where('student_id', $student->id)
-            ->firstOrFail();
-
-        $this->ensureSessionActive($session);
-        $this->verifySessionDeviceLock($session, $request);
-
         $questionId = $data['question_id'];
 
         $participant = ExamParticipant::where('exam_id', $examId)
@@ -470,78 +461,116 @@ class ExamSessionService
         }
         $isFlagged = (bool) ($data['is_flagged'] ?? false);
 
-        $now = Carbon::now();
-        $incomingAnsweredAt = ! empty($data['answered_at'])
-            ? Carbon::parse($data['answered_at'])
-            : $now;
+        $outcome = DB::transaction(function () use ($examId, $student, $questionId, $answerData, $isFlagged, $data, $request) {
+            $session = ExamSession::where('exam_id', $examId)
+                ->where('student_id', $student->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        // Batasi answered_at agar tidak melebihi jam server
-        if ($incomingAnsweredAt->greaterThan($now)) {
-            $incomingAnsweredAt = $now;
-        }
+            if ($session->status === 'selesai') {
+                throw new HttpException(422, 'Sesi ujian telah selesai dan tidak dapat diubah.');
+            }
 
-        // Batasi answered_at agar tidak mendahului waktu mulai sesi ujian
-        if ($session->started_at && $incomingAnsweredAt->lessThan($session->started_at)) {
-            $incomingAnsweredAt = $session->started_at->copy();
-        }
+            if ($session->status === 'terkunci') {
+                throw new HttpException(403, 'Sesi ujian Anda terkunci: '.($session->locked_reason ?? 'Pelanggaran anti-cheat').'. Hubungi pengawas.');
+            }
 
-        // Cek apakah jawaban sudah tersimpan sebelumnya
-        $existing = ExamAnswer::where('session_id', $session->id)
-            ->where('question_id', $questionId)
-            ->first();
+            $now = Carbon::now();
+            $effectiveEndsAt = $session->ends_at ?? $session->deadline_at;
+            $graceSeconds = (int) config('cbt.grace_period_seconds', 5);
 
-        if ($existing) {
-            // Rule 1: Idempotent match (nilai jawaban dan flag ragu-ragu persis sama)
-            $existingAnswer = is_string($existing->answer) ? json_decode($existing->answer, true) : $existing->answer;
-            if ($existingAnswer == $answerData && (bool) $existing->is_flagged === $isFlagged) {
+            if ($effectiveEndsAt && $now->greaterThan($effectiveEndsAt->copy()->addSeconds($graceSeconds))) {
+                $this->finalizeSession($session, $effectiveEndsAt);
+
                 return [
-                    'question_id' => $questionId,
-                    'is_saved' => true,
-                    'is_flagged' => (bool) $existing->is_flagged,
-                    'is_stale' => false,
-                    'answered_at' => $existing->answered_at?->toIso8601String() ?? $now->toIso8601String(),
-                    'server_time' => $now->toIso8601String(),
+                    '__timed_out' => true,
+                    'error_code' => $session->ends_at ? 'EXAM_TIME_OVER' : 'BUSINESS_RULE_VIOLATION',
                 ];
             }
 
-            // Rule 2: Out-of-order retry protection (timestamp incoming lebih lama dari yang telah tersimpan)
-            if ($existing->answered_at && $incomingAnsweredAt->lessThan($existing->answered_at)) {
-                return [
-                    'question_id' => $questionId,
-                    'is_saved' => true,
-                    'is_stale' => true,
-                    'answered_at' => $existing->answered_at->toIso8601String(),
-                    'server_time' => $now->toIso8601String(),
-                ];
-            }
-        }
+            $this->verifySessionDeviceLock($session, $request);
 
-        // SEC-CBT-CONC: Atomic UPSERT berbasis DB (ON CONFLICT DO UPDATE)
-        // Mencegah abort transaksi PostgreSQL dan race condition pada autosave konkuren
-        ExamAnswer::upsert(
-            [
+            $incomingAnsweredAt = ! empty($data['answered_at'])
+                ? Carbon::parse($data['answered_at'])
+                : $now;
+
+            // Batasi answered_at agar tidak melebihi jam server
+            if ($incomingAnsweredAt->greaterThan($now)) {
+                $incomingAnsweredAt = $now;
+            }
+
+            // Batasi answered_at agar tidak mendahului waktu mulai sesi ujian
+            if ($session->started_at && $incomingAnsweredAt->lessThan($session->started_at)) {
+                $incomingAnsweredAt = $session->started_at->copy();
+            }
+
+            // Cek apakah jawaban sudah tersimpan sebelumnya (terkunci dalam transaksi)
+            $existing = ExamAnswer::where('session_id', $session->id)
+                ->where('question_id', $questionId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                // Rule 1: Idempotent match (nilai jawaban dan flag ragu-ragu persis sama)
+                $existingAnswer = is_string($existing->answer) ? json_decode($existing->answer, true) : $existing->answer;
+                if ($existingAnswer == $answerData && (bool) $existing->is_flagged === $isFlagged) {
+                    return [
+                        'question_id' => $questionId,
+                        'is_saved' => true,
+                        'is_flagged' => (bool) $existing->is_flagged,
+                        'is_stale' => false,
+                        'answered_at' => $existing->answered_at?->toIso8601String() ?? $now->toIso8601String(),
+                        'server_time' => $now->toIso8601String(),
+                    ];
+                }
+
+                // Rule 2: Out-of-order retry protection (timestamp incoming lebih lama dari yang telah tersimpan)
+                if ($existing->answered_at && $incomingAnsweredAt->lessThan($existing->answered_at)) {
+                    return [
+                        'question_id' => $questionId,
+                        'is_saved' => true,
+                        'is_stale' => true,
+                        'answered_at' => $existing->answered_at->toIso8601String(),
+                        'server_time' => $now->toIso8601String(),
+                    ];
+                }
+            }
+
+            // SEC-CBT-CONC: Atomic UPSERT berbasis DB (ON CONFLICT DO UPDATE)
+            // Mencegah abort transaksi PostgreSQL dan race condition pada autosave konkuren
+            ExamAnswer::upsert(
                 [
-                    'id' => $existing ? $existing->id : (string) Str::uuid(),
-                    'session_id' => $session->id,
-                    'question_id' => $questionId,
-                    'answer' => $answerData !== null ? json_encode($answerData) : null,
-                    'is_flagged' => $isFlagged,
-                    'answered_at' => $incomingAnsweredAt,
-                    'created_at' => $existing ? $existing->created_at : $now,
-                    'updated_at' => $now,
+                    [
+                        'id' => $existing ? $existing->id : (string) Str::uuid(),
+                        'session_id' => $session->id,
+                        'question_id' => $questionId,
+                        'answer' => $answerData !== null ? json_encode($answerData) : null,
+                        'is_flagged' => $isFlagged,
+                        'answered_at' => $incomingAnsweredAt,
+                        'created_at' => $existing ? $existing->created_at : $now,
+                        'updated_at' => $now,
+                    ],
                 ],
-            ],
-            ['session_id', 'question_id'],
-            ['answer', 'is_flagged', 'answered_at', 'updated_at']
-        );
+                ['session_id', 'question_id'],
+                ['answer', 'is_flagged', 'answered_at', 'updated_at']
+            );
 
-        return [
-            'question_id' => $questionId,
-            'is_saved' => true,
-            'is_flagged' => $isFlagged,
-            'answered_at' => $incomingAnsweredAt->toIso8601String(),
-            'server_time' => $now->toIso8601String(),
-        ];
+            return [
+                'question_id' => $questionId,
+                'is_saved' => true,
+                'is_flagged' => $isFlagged,
+                'answered_at' => $incomingAnsweredAt->toIso8601String(),
+                'server_time' => $now->toIso8601String(),
+            ];
+        });
+
+        if (! empty($outcome['__timed_out'])) {
+            throw new HttpException(422, 'Waktu pengerjaan ujian telah berakhir (timeout lock).', null, [
+                'X-Error-Code' => $outcome['error_code'],
+            ]);
+        }
+
+        return $outcome;
     }
 
     /**
@@ -572,6 +601,9 @@ class ExamSessionService
 
             $now = Carbon::now();
             $session->increment('violation_count');
+            if (in_array($data['violation_type'], ['blur', 'window_blur'], true)) {
+                $session->increment('blur_count');
+            }
             $session->refresh();
 
             $violation = ExamViolation::create([
@@ -589,10 +621,11 @@ class ExamSessionService
             $disqualifyThreshold = (int) config('cbt.disqualify_threshold', 5);
 
             if ($totalViolations >= $disqualifyThreshold && in_array($session->status, ['mengerjakan', 'terkunci'])) {
-                $session->status = 'selesai';
-                $session->submitted_at = $now;
-                $session->locked_reason = "Diskualifikasi otomatis: Pelanggaran integritas ujian berulang ({$totalViolations} kali)";
-                $session->save();
+                $this->finalizeSession(
+                    $session,
+                    $now,
+                    "Diskualifikasi otomatis: Pelanggaran integritas ujian berulang ({$totalViolations} kali)"
+                );
                 $consequence = 'disqualified';
             } elseif ($totalViolations >= $lockThreshold && $session->status === 'mengerjakan') {
                 $session->status = 'terkunci';
@@ -606,6 +639,7 @@ class ExamSessionService
                 'violation_id' => $violation->id,
                 'total_violations' => $totalViolations,
                 'violation_count' => $totalViolations,
+                'blur_count' => $session->blur_count ?? 0,
                 'is_locked' => $isLocked,
                 'consequence' => $consequence,
                 'session_status' => $session->status,
@@ -645,15 +679,7 @@ class ExamSessionService
             $this->verifySessionDeviceLock($session, $request);
 
             $now = Carbon::now();
-            $session->status = 'selesai';
-            $session->submitted_at = $now;
-            $session->save();
-
-            try {
-                app(ExamGradingService::class)->gradeSessionObjectiveAnswers($session);
-            } catch (\Throwable $gradeEx) {
-                // Non-blocking
-            }
+            $this->finalizeSession($session, $now);
 
             $this->logAudit(
                 $user->id,
@@ -763,15 +789,14 @@ class ExamSessionService
                 $session->submitted_at = null;
                 $session->locked_reason = null;
                 $session->violation_count = 0;
+                $session->blur_count = 0;
                 $session->session_lock_token = null;
                 $session->device_fingerprint = null;
                 $session->user_agent = null;
                 $session->save();
             } elseif ($action === 'force_submit') {
                 if ($session->status !== 'selesai') {
-                    $session->status = 'selesai';
-                    $session->submitted_at = Carbon::now();
-                    $session->save();
+                    $this->finalizeSession($session, Carbon::now());
                 }
             }
 
@@ -853,21 +878,32 @@ class ExamSessionService
         $graceSeconds = (int) config('cbt.grace_period_seconds', 5);
 
         if ($effectiveEndsAt && $now->greaterThan($effectiveEndsAt->copy()->addSeconds($graceSeconds))) {
-            $session->status = 'selesai';
-            $session->submitted_at = $effectiveEndsAt;
-            $session->save();
-
-            try {
-                app(ExamGradingService::class)->gradeSessionObjectiveAnswers($session);
-            } catch (\Throwable $gradeEx) {
-                // Non-blocking
-            }
+            $this->finalizeSession($session, $effectiveEndsAt);
 
             $errorCode = $session->ends_at ? 'EXAM_TIME_OVER' : 'BUSINESS_RULE_VIOLATION';
 
             throw new HttpException(422, 'Waktu pengerjaan ujian telah berakhir (timeout lock).', null, [
                 'X-Error-Code' => $errorCode,
             ]);
+        }
+    }
+
+    /**
+     * P1-12: Helper terminal tunggal penutup sesi ujian beserta grading otomatis objektif.
+     */
+    protected function finalizeSession(ExamSession $session, Carbon $submittedAt, ?string $lockedReason = null): void
+    {
+        $session->status = 'selesai';
+        $session->submitted_at = $submittedAt;
+        if ($lockedReason !== null) {
+            $session->locked_reason = $lockedReason;
+        }
+        $session->save();
+
+        try {
+            app(ExamGradingService::class)->gradeSessionObjectiveAnswers($session);
+        } catch (\Throwable $gradeEx) {
+            report($gradeEx);
         }
     }
 
@@ -1155,6 +1191,7 @@ class ExamSessionService
         // 4. Deteksi blur atau perpindahan tab
         if ($screenState === 'blur' || $activeTab === false) {
             $session->blur_count = ($session->blur_count ?? 0) + 1;
+            $session->violation_count = ($session->violation_count ?? 0) + 1;
             ExamViolation::create([
                 'session_id' => $session->id,
                 'violation_type' => 'blur',

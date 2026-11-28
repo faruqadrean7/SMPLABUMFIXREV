@@ -317,8 +317,9 @@ class LeaveRequestTest extends TestCase
 
     public function test_be_acd_04_homeroom_teacher_can_decide_approval_and_auto_fills_attendances(): void
     {
-        $day1 = Carbon::now()->addDay()->format('Y-m-d');
-        $day2 = Carbon::now()->addDays(2)->format('Y-m-d');
+        $monday = Carbon::now()->next(Carbon::MONDAY);
+        $day1 = $monday->format('Y-m-d');
+        $day2 = $monday->copy()->addDay()->format('Y-m-d');
 
         $leave = LeaveRequest::create([
             'student_id' => $this->student1->id,
@@ -525,7 +526,7 @@ class LeaveRequestTest extends TestCase
 
     public function test_be_acd_04_admin_can_redecide_and_revokes_attendance_on_rejection(): void
     {
-        $today = Carbon::now()->format('Y-m-d');
+        $today = Carbon::now()->next(Carbon::MONDAY)->format('Y-m-d');
 
         $leave = LeaveRequest::create([
             'student_id' => $this->student1->id,

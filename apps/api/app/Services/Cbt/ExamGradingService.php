@@ -122,6 +122,7 @@ class ExamGradingService
         $query = ExamAnswer::with([
             'session.student',
             'question',
+            'grader',
         ])
             ->whereHas('session', function ($sq) use ($exam) {
                 $sq->where('exam_id', $exam->id);
@@ -706,7 +707,9 @@ class ExamGradingService
             $examQuestions = $this->filterQuestionsForPackage($allExamQuestions, $participant?->package_code)->keyBy('question_id');
         }
 
-        $answers = ExamAnswer::where('session_id', $session->id)->get()->keyBy('question_id');
+        $answers = $session->relationLoaded('answers')
+            ? $session->answers->keyBy('question_id')
+            : ExamAnswer::where('session_id', $session->id)->get()->keyBy('question_id');
 
         $totalEarned = 0.0;
         $totalMax = 0.0;

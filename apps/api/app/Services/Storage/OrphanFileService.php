@@ -412,12 +412,26 @@ class OrphanFileService
                         continue;
                     }
 
-                    foreach ($unmatchedPublic as $f) {
-                        $embedded = DB::table($cmsTable)
-                            ->where('content', 'like', '%'.$f->object_key.'%')
-                            ->exists();
-                        if ($embedded) {
-                            $map[(string) $f->id][] = "{$cmsTable}.content(embedded_url)";
+                    foreach ($unmatchedPublic->chunk(50) as $publicChunk) {
+                        $matchedRows = DB::table($cmsTable)
+                            ->select('content')
+                            ->whereNotNull('content')
+                            ->where(function ($query) use ($publicChunk) {
+                                foreach ($publicChunk as $f) {
+                                    $query->orWhere('content', 'like', '%'.$f->object_key.'%');
+                                }
+                            })
+                            ->get();
+
+                        if ($matchedRows->isEmpty()) {
+                            continue;
+                        }
+
+                        $combinedContent = $matchedRows->pluck('content')->implode("\n");
+                        foreach ($publicChunk as $f) {
+                            if (str_contains($combinedContent, (string) $f->object_key)) {
+                                $map[(string) $f->id][] = "{$cmsTable}.content(embedded_url)";
+                            }
                         }
                     }
                 } catch (Throwable $e) {
@@ -434,11 +448,16 @@ class OrphanFileService
 
     /**
      * Eksekusi pembersihan berkas yatim secara aman.
-     * Menggunakan verifikasi ganda sebelum penghapusan fisik.
+     * Menggunakan verifikasi ganda secara batch sebelum penghapusan fisik.
      */
     public function purgeOrphans(array $orphanFileIds, ?User $actor = null): array
     {
         $referenceMap = $this->discoverAllFileReferences();
+        $filesById = empty($orphanFileIds)
+            ? collect()
+            : File::whereIn('id', $orphanFileIds)->get()->keyBy('id');
+        $batchRefMap = $this->buildBatchReferenceMap($filesById->values(), $referenceMap);
+
         $purgedCount = 0;
         $freedBytes = 0;
         $failedCount = 0;
@@ -446,16 +465,16 @@ class OrphanFileService
         $purgedIds = [];
 
         foreach ($orphanFileIds as $fileId) {
-            $file = File::find($fileId);
+            $file = $filesById->get($fileId);
             if (! $file) {
                 continue;
             }
 
-            // Keamanan Ganda: Cek ulang apakah ada entitas yang baru saja mengaitkan berkas
-            $recheck = $this->checkFileReferences($file->id, $referenceMap);
-            if ($recheck['is_referenced']) {
+            // Keamanan Ganda: Cek ulang hasil batch reference map
+            $refs = $batchRefMap[(string) $file->id] ?? [];
+            if (! empty($refs)) {
                 $skippedSafelyCount++;
-                Log::warning("Pembersihan berkas {$fileId} dibatalkan: berkas terdeteksi baru direferensikan oleh ".implode(', ', $recheck['references']));
+                Log::warning("Pembersihan berkas {$fileId} dibatalkan: berkas terdeteksi baru direferensikan oleh ".implode(', ', $refs));
 
                 continue;
             }

@@ -742,8 +742,8 @@ class ExecutiveApprovalTest extends TestCase
             'status' => 'active',
         ]);
 
-        $startDate = Carbon::today()->addDays(1);
-        $endDate = Carbon::today()->addDays(2);
+        $startDate = Carbon::today()->next(Carbon::MONDAY);
+        $endDate = $startDate->copy()->addDay();
 
         $leave = LeaveRequest::create([
             'student_id' => $student->id,
