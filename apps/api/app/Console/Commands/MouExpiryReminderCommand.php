@@ -49,7 +49,7 @@ class MouExpiryReminderCommand extends Command
                     'data' => [
                         'partnership_id' => $partnership->id,
                         'days_remaining' => $daysLeft,
-                        'deep_link' => '/partnerships',
+                        'target_url' => '/admin/public-relations',
                     ],
                 ]);
             }

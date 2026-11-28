@@ -4,11 +4,13 @@ namespace App\Console\Commands;
 
 use App\Models\AuditLog;
 use App\Models\Notification;
+use App\Models\ReminderDispatch;
 use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class TicketSlaReminderCommand extends Command
 {
@@ -29,12 +31,15 @@ class TicketSlaReminderCommand extends Command
     public function handle(): int
     {
         $now = Carbon::now();
-        $unresolvedTickets = Ticket::whereIn('status', ['pending', 'diajukan', 'in_progress'])
+        $todayKey = $now->toDateString();
+        $unresolvedTickets = Ticket::whereIn('status', ['pending', 'diajukan', 'in_progress', 'diproses'])
             ->with(['reporter', 'assignee'])
             ->get();
 
-        $facilityRole = Role::whereIn('code', ['facility_staff', 'super_admin'])->pluck('id');
-        $facilityStaffUsers = User::whereHas('roles', fn ($q) => $q->whereIn('roles.id', $facilityRole))->get();
+        $facilityRoleIds = Role::whereIn('code', ['facility_staff', 'sarpras', 'super_admin'])->pluck('id');
+        $facilityStaffUsers = User::where('status', 'active')
+            ->whereHas('roles', fn ($q) => $q->whereIn('roles.id', $facilityRoleIds))
+            ->get();
 
         $breachedCount = 0;
 
@@ -46,22 +51,54 @@ class TicketSlaReminderCommand extends Command
                 $hoursOverdue = (int) $deadline->diffInHours($now);
                 $breachedCount++;
 
-                // Penerima: assignee jika ada, atau seluruh staf sarpras jika belum ditugaskan
-                $recipients = $ticket->assignee ? collect([$ticket->assignee]) : $facilityStaffUsers;
+                // Penerima: assignee jika ada, atau staf sarpras di sekolah terkait jika belum ditugaskan
+                if ($ticket->assignee) {
+                    $recipients = collect([$ticket->assignee]);
+                } else {
+                    $recipients = ! empty($ticket->school_id)
+                        ? $facilityStaffUsers->filter(fn ($u) => empty($u->school_id) || $u->school_id === $ticket->school_id)
+                        : $facilityStaffUsers;
+                }
 
+                $milestone = "sla_{$todayKey}";
                 foreach ($recipients as $recipient) {
-                    Notification::create([
-                        'user_id' => $recipient->id,
-                        'notif_type' => 'ticket_sla_breach',
-                        'title' => "Peringatan SLA Tiket Sarpras: {$ticket->ticket_number}",
-                        'body' => "Tiket [{$ticket->ticket_number}] priority: {$ticket->priority} ('{$ticket->title}') telah melewati batas SLA selama {$hoursOverdue} jam.",
-                        'data' => [
-                            'ticket_id' => $ticket->id,
-                            'priority' => $ticket->priority,
-                            'hours_overdue' => $hoursOverdue,
-                            'deep_link' => '/facility/tickets',
-                        ],
-                    ]);
+                    $alreadyNotified = ReminderDispatch::where('event_type', 'ticket_sla_breach')
+                        ->where('event_id', $ticket->id)
+                        ->where('recipient_id', $recipient->id)
+                        ->where('milestone', $milestone)
+                        ->exists();
+
+                    if ($alreadyNotified) {
+                        continue;
+                    }
+
+                    try {
+                        ReminderDispatch::create([
+                            'school_id' => $ticket->school_id,
+                            'event_type' => 'ticket_sla_breach',
+                            'event_id' => $ticket->id,
+                            'recipient_id' => $recipient->id,
+                            'milestone' => $milestone,
+                            'channel' => 'in_app',
+                            'status' => 'dispatched',
+                            'dispatched_at' => $now,
+                        ]);
+
+                        Notification::create([
+                            'user_id' => $recipient->id,
+                            'notif_type' => 'ticket_sla_breach',
+                            'title' => "Peringatan SLA Tiket Sarpras: {$ticket->ticket_number}",
+                            'body' => "Tiket [{$ticket->ticket_number}] prioritas {$ticket->priority} ('{$ticket->title}') telah melewati batas SLA selama {$hoursOverdue} jam.",
+                            'data' => [
+                                'ticket_id' => $ticket->id,
+                                'priority' => $ticket->priority,
+                                'hours_overdue' => $hoursOverdue,
+                                'target_url' => '/admin/tickets',
+                            ],
+                        ]);
+                    } catch (\Throwable $e) {
+                        Log::warning("Skip duplicate SLA ticket dispatch {$ticket->id}/{$recipient->id}: {$e->getMessage()}");
+                    }
                 }
             }
         }

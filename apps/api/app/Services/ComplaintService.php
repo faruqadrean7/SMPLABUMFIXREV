@@ -570,6 +570,7 @@ class ComplaintService
                     'data' => [
                         'ticket_code' => $complaint->ticket_code,
                         'category' => $complaint->category,
+                        'target_url' => '/admin/public-relations?tab=complaints&category=bullying',
                         'action_url' => '/admin/public-relations?tab=complaints&category=bullying',
                     ],
                 ]);
@@ -604,6 +605,7 @@ class ComplaintService
                 'data' => [
                     'ticket_code' => $complaint->ticket_code,
                     'status' => $newStatus,
+                    'target_url' => '/lapor/lacak?kode='.$complaint->ticket_code,
                     'action_url' => '/lapor/lacak?kode='.$complaint->ticket_code,
                 ],
             ]);
@@ -628,12 +630,6 @@ class ComplaintService
             return 0;
         }
 
-        $staff = User::where('status', 'active')
-            ->whereHas('roles', function ($q) {
-                $q->whereIn('code', ['counselor', 'guru_bk', 'principal', 'kepala_sekolah', 'super_admin']);
-            })
-            ->get();
-
         foreach ($overdue as $complaint) {
             $complaint->escalated_at = Carbon::now();
             $complaint->save();
@@ -646,6 +642,19 @@ class ComplaintService
                 'created_at' => Carbon::now(),
             ]);
 
+            $staffQuery = User::where('status', 'active')
+                ->whereHas('roles', function ($q) {
+                    $q->whereIn('code', ['counselor', 'guru_bk', 'principal', 'kepala_sekolah', 'super_admin']);
+                });
+
+            if (! empty($complaint->school_id)) {
+                $staffQuery->where(function ($q) use ($complaint) {
+                    $q->where('school_id', $complaint->school_id)->orWhereNull('school_id');
+                });
+            }
+
+            $staff = $staffQuery->get();
+
             foreach ($staff as $user) {
                 try {
                     Notification::create([
@@ -657,6 +666,7 @@ class ComplaintService
                             'ticket_code' => $complaint->ticket_code,
                             'category' => $complaint->category,
                             'severity' => $complaint->severity,
+                            'target_url' => '/admin/public-relations?tab=complaints',
                             'action_url' => '/admin/public-relations?tab=complaints',
                         ],
                     ]);

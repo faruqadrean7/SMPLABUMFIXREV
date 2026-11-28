@@ -11,7 +11,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // BE-NTF-01: Notifikasi In-App & Push
     // =====================================================================
     // Registrasi Perangkat (Devices & Push Tokens)
-    Route::delete('/devices/{token}', [NotificationController::class, 'destroyDevice']);
+    Route::delete('/devices', [NotificationController::class, 'destroyDeviceByBody'])
+        ->middleware('throttle:30,1');
+    Route::delete('/devices/{token}', [NotificationController::class, 'destroyDevice'])
+        ->where('token', '.*')
+        ->middleware('throttle:30,1');
 
     // Inbox Notifikasi Pengguna & Deep Link
     Route::get('/notifications', [NotificationController::class, 'index']);
@@ -28,7 +32,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Broadcast Notifikasi Tersegmentasi
     Route::post('/notifications/broadcast', [NotificationController::class, 'broadcast'])
-        ->middleware('permission:notification.broadcast,ntf.broadcast');
+        ->middleware(['permission:notification.broadcast,ntf.broadcast', 'throttle:15,1']);
 
     // =====================================================================
     // BE-NTF-02: WhatsApp & Email (Template Berparameter & Log Pengiriman)
@@ -37,15 +41,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notification-templates', [MessagingController::class, 'indexTemplates'])
         ->middleware('permission:notification.broadcast,ntf.broadcast');
     Route::post('/notification-templates', [MessagingController::class, 'storeTemplate'])
-        ->middleware('permission:notification.broadcast,ntf.broadcast');
+        ->middleware(['permission:notification.broadcast,ntf.broadcast', 'throttle:30,1']);
     Route::get('/notification-templates/{id}', [MessagingController::class, 'showTemplate'])
         ->middleware('permission:notification.broadcast,ntf.broadcast');
     Route::put('/notification-templates/{id}', [MessagingController::class, 'updateTemplate'])
-        ->middleware('permission:notification.broadcast,ntf.broadcast');
+        ->middleware(['permission:notification.broadcast,ntf.broadcast', 'throttle:30,1']);
     Route::delete('/notification-templates/{id}', [MessagingController::class, 'destroyTemplate'])
-        ->middleware('permission:notification.broadcast,ntf.broadcast');
+        ->middleware(['permission:notification.broadcast,ntf.broadcast', 'throttle:30,1']);
     Route::post('/notification-templates/send', [MessagingController::class, 'send'])
-        ->middleware('permission:notification.broadcast,ntf.broadcast');
+        ->middleware(['permission:notification.broadcast,ntf.broadcast', 'throttle:15,1']);
 
     // Riwayat & Log Pengiriman
     Route::get('/notification-logs', [MessagingController::class, 'indexLogs'])
@@ -53,19 +57,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notification-logs/{id}', [MessagingController::class, 'showLog'])
         ->middleware('permission:notification.broadcast,ntf.broadcast');
     Route::post('/notification-logs/{id}/retry', [MessagingController::class, 'retry'])
-        ->middleware('permission:notification.broadcast,ntf.broadcast');
+        ->middleware(['permission:notification.broadcast,ntf.broadcast', 'throttle:15,1']);
 
     // =====================================================================
     // BE-NTF-03: Pengumuman Terarah (Terjadwal & Pelacakan Pembaca)
     // =====================================================================
     Route::get('/announcements', [AnnouncementController::class, 'index']);
     Route::post('/announcements', [AnnouncementController::class, 'store'])
-        ->middleware('permission:notification.broadcast,super_admin,admin,teacher,admin_tu,principal,humas,kesiswaan');
+        ->middleware(['permission:notification.broadcast,super_admin,admin,teacher,admin_tu,principal,humas,kesiswaan', 'throttle:30,1']);
     Route::get('/announcements/{id}', [AnnouncementController::class, 'show']);
     Route::put('/announcements/{id}', [AnnouncementController::class, 'update'])
-        ->middleware('permission:notification.broadcast,super_admin,admin,teacher,admin_tu,principal,humas,kesiswaan');
+        ->middleware(['permission:notification.broadcast,super_admin,admin,teacher,admin_tu,principal,humas,kesiswaan', 'throttle:30,1']);
     Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy'])
-        ->middleware('permission:notification.broadcast,super_admin,admin,teacher,admin_tu,principal,humas,kesiswaan');
+        ->middleware(['permission:notification.broadcast,super_admin,admin,teacher,admin_tu,principal,humas,kesiswaan', 'throttle:30,1']);
     Route::post('/announcements/{id}/read', [AnnouncementController::class, 'markAsRead']);
     Route::get('/announcements/{id}/readers', [AnnouncementController::class, 'readers']);
 

@@ -3,6 +3,7 @@
 namespace App\Services\Sar;
 
 use App\Models\AuditLog;
+use App\Models\Notification;
 use App\Models\Ticket;
 use App\Models\TicketEvent;
 use App\Models\User;
@@ -190,6 +191,23 @@ class TicketService
             $request
         );
 
+        try {
+            if (! empty($ticket->assignee_id) && $ticket->assignee_id !== $user->id) {
+                Notification::create([
+                    'user_id' => $ticket->assignee_id,
+                    'notif_type' => 'ticket.disposed',
+                    'title' => "Penugasan Tiket Sarpras: {$ticket->ticket_number}",
+                    'body' => "Anda ditugaskan menangani tiket '{$ticket->title}' (prioritas {$ticket->priority}).",
+                    'data' => [
+                        'ticket_id' => $ticket->id,
+                        'target_url' => '/portal/staf/tiket',
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return $ticket->fresh(['reporter:id,username', 'assignee:id,username', 'room', 'asset', 'events.actor:id,username']);
     }
 
@@ -243,6 +261,24 @@ class TicketService
             $request
         );
 
+        try {
+            if (! empty($ticket->reporter_id) && $ticket->reporter_id !== $user->id) {
+                Notification::create([
+                    'user_id' => $ticket->reporter_id,
+                    'notif_type' => 'ticket.status_changed',
+                    'title' => "Pembaruan Tiket Sarpras: {$ticket->ticket_number}",
+                    'body' => "Status tiket '{$ticket->title}' kini menjadi {$ticket->status}.",
+                    'data' => [
+                        'ticket_id' => $ticket->id,
+                        'status' => $ticket->status,
+                        'target_url' => '/admin/tickets',
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return $ticket->fresh(['reporter:id,username', 'assignee:id,username', 'room', 'asset', 'events.actor:id,username', 'events.file']);
     }
 
@@ -271,6 +307,27 @@ class TicketService
             'file_id' => $data['file_id'] ?? null,
             'created_at' => Carbon::now(),
         ]);
+
+        try {
+            $recipients = collect([$ticket->reporter_id, $ticket->assignee_id])
+                ->filter(fn ($id) => ! empty($id) && $id !== $user->id)
+                ->unique();
+
+            foreach ($recipients as $recipientId) {
+                Notification::create([
+                    'user_id' => $recipientId,
+                    'notif_type' => 'ticket.commented',
+                    'title' => "Komentar Baru Tiket: {$ticket->ticket_number}",
+                    'body' => "Terdapat catatan progres baru pada tiket '{$ticket->title}'.",
+                    'data' => [
+                        'ticket_id' => $ticket->id,
+                        'target_url' => '/admin/tickets',
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return $event->fresh(['actor:id,username', 'file']);
     }

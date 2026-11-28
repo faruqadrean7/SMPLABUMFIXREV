@@ -42,8 +42,18 @@ interface LeaveRequestItem {
   submittedAt: string;
   status: 'menunggu' | 'disetujui' | 'ditolak';
   parentName: string;
+  parentPhone?: string;
   decisionNote?: string;
   avatar_url?: string;
+}
+
+function normalizeWhatsAppPhone(phone?: string): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/[^0-9]/g, '');
+  if (digits.length < 8) return null;
+  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
+  if (digits.startsWith('8')) return `62${digits}`;
+  return digits;
 }
 
 export default function PerizinanSiswaPage() {
@@ -53,6 +63,7 @@ export default function PerizinanSiswaPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedId, setSelectedId] = useState<string>('');
   const [openingFileId, setOpeningFileId] = useState<string | null>(null);
+  const [decisionNotes, setDecisionNotes] = useState<string>('');
 
   const { data: apiRequests = [], isLoading, isError } = useQuery({
     queryKey: ['homeroom-leave-requests'],
@@ -64,9 +75,21 @@ export default function PerizinanSiswaPage() {
   });
 
   const decideMutation = useMutation({
-    mutationFn: ({ id, decision }: { id: string; decision: 'approved' | 'rejected' }) =>
-      lmsApi.decideHomeroomLeaveRequest(id, { decision }),
+    mutationFn: ({
+      id,
+      decision,
+      decision_notes,
+    }: {
+      id: string;
+      decision: 'approved' | 'rejected';
+      decision_notes?: string;
+    }) =>
+      lmsApi.decideHomeroomLeaveRequest(
+        id,
+        decision_notes ? { decision, decision_notes } : { decision }
+      ),
     onSuccess: () => {
+      setDecisionNotes('');
       queryClient.invalidateQueries({ queryKey: ['homeroom-leave-requests'] });
     },
   });
@@ -83,7 +106,13 @@ export default function PerizinanSiswaPage() {
         const requester = r.requester ?? r.requested_by_user ?? {};
         const attachment = r.attachment_file ?? r.attachmentFile ?? null;
         const rawType = (r.leave_type ?? r.type ?? 'izin') as string;
-        const type = (['sakit', 'izin', 'dispensasi'].includes(rawType) ? rawType : 'izin') as LeaveRequestItem['type'];
+        const type = (
+          rawType === 'dispen' || rawType === 'dispensasi'
+            ? 'dispensasi'
+            : rawType === 'sakit'
+            ? 'sakit'
+            : 'izin'
+        ) as LeaveRequestItem['type'];
         const classLabel = `${className}`.startsWith('Kelas') ? `${className}` : `Kelas ${className}`;
         return {
           id: r.id,
@@ -101,6 +130,7 @@ export default function PerizinanSiswaPage() {
           submittedAt: `${r.created_at ?? ''}`.replace('T', ' ').slice(0, 16),
           status: (r.status ?? 'menunggu') as LeaveRequestItem['status'],
           parentName: requester.full_name ?? requester.name ?? 'Orang tua/wali',
+          parentPhone: requester.phone ?? student.guardian_phone ?? undefined,
           decisionNote: r.decision_notes ?? undefined,
           avatar_url: student.avatar_url ?? undefined,
         } as LeaveRequestItem;
@@ -122,9 +152,11 @@ export default function PerizinanSiswaPage() {
 
   const handleDecision = async (id: string, newStatus: 'disetujui' | 'ditolak') => {
     try {
+      const trimmedNote = decisionNotes.trim();
       await decideMutation.mutateAsync({
         id,
         decision: newStatus === 'disetujui' ? 'approved' : 'rejected',
+        ...(trimmedNote ? { decision_notes: trimmedNote } : {}),
       });
       toast.success(
         newStatus === 'disetujui'
@@ -211,7 +243,7 @@ export default function PerizinanSiswaPage() {
           <div className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5">
             {requests.length} <span className="text-xs font-bold text-slate-500">Surat</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5 font-medium">Semester Ganjil 2026/2027</p>
+          <p className="text-[11px] text-slate-500 mt-0.5 font-medium">Periode berjalan kelas binaan</p>
         </div>
 
         <div className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-xs border-l-4 border-l-amber-600">
@@ -554,15 +586,53 @@ export default function PerizinanSiswaPage() {
               </div>
 
               {/* Action Bar / Decision Footer */}
-              <div className="p-3.5 border-t border-slate-200/90 bg-slate-50/70 flex flex-wrap items-center justify-between gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => toast.info(`Menghubungi orang tua siswa: ${activeItem.parentName} via WhatsApp`)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Phone className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Hubungi Wali Siswa</span>
-                </button>
+              <div className="p-3.5 border-t border-slate-200/90 bg-slate-50/70 space-y-2.5 shrink-0">
+                {activeItem.status === 'menunggu' && (
+                  <div>
+                    <label
+                      htmlFor="leave-decision-notes"
+                      className="block text-[11px] font-bold text-slate-600 mb-1"
+                    >
+                      Catatan Keputusan Wali Kelas (opsional)
+                    </label>
+                    <input
+                      id="leave-decision-notes"
+                      type="text"
+                      value={decisionNotes}
+                      onChange={(e) => setDecisionNotes(e.target.value)}
+                      placeholder="Tambahkan catatan persetujuan atau alasan penolakan..."
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900"
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {(() => {
+                    const waPhone = normalizeWhatsAppPhone(activeItem.parentPhone);
+                    if (waPhone) {
+                      return (
+                        <a
+                          href={`https://wa.me/${waPhone}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5 transition-colors"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Hubungi Wali Siswa</span>
+                        </a>
+                      );
+                    }
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => toast.info(`Kontak WhatsApp ${activeItem.parentName} belum tercatat di profil wali.`)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-300 text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Hubungi Wali Siswa</span>
+                      </button>
+                    );
+                  })()}
 
                 {activeItem.status === 'menunggu' ? (
                   <div className="flex items-center gap-2">
@@ -590,6 +660,7 @@ export default function PerizinanSiswaPage() {
                     <span>Status telah diperbarui</span>
                   </div>
                 )}
+                </div>
               </div>
             </>
           ) : (

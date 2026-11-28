@@ -301,10 +301,33 @@ function PublicRelationsAdminContent() {
   // =========================================================================
   // COMPLAINT ACTIONS
   // =========================================================================
+  const COMPLAINT_TRANSITIONS: Record<
+    string,
+    Array<{ value: 'ditinjau' | 'ditindaklanjuti' | 'selesai' | 'ditolak'; label: string }>
+  > = {
+    baru: [
+      { value: 'ditinjau', label: 'Ditinjau (Sedang diverifikasi tim sekolah)' },
+      { value: 'ditindaklanjuti', label: 'Ditindaklanjuti (Dalam proses investigasi/tindakan)' },
+      { value: 'ditolak', label: 'Ditolak (Tidak memenuhi syarat / fiktif)' },
+    ],
+    ditinjau: [
+      { value: 'ditindaklanjuti', label: 'Ditindaklanjuti (Dalam proses investigasi/tindakan)' },
+      { value: 'selesai', label: 'Selesai (Penanganan tuntas)' },
+      { value: 'ditolak', label: 'Ditolak (Tidak memenuhi syarat / fiktif)' },
+    ],
+    ditindaklanjuti: [
+      { value: 'selesai', label: 'Selesai (Penanganan tuntas)' },
+      { value: 'ditolak', label: 'Ditolak (Tidak memenuhi syarat / fiktif)' },
+    ],
+    selesai: [],
+    ditolak: [],
+  };
+
   const handleOpenComplaintDetail = async (item: ComplaintItem) => {
     setSelectedComplaint(item);
+    const nextOptions = COMPLAINT_TRANSITIONS[item.status] ?? [];
     setStatusUpdateForm({
-      status: item.status === 'baru' ? 'ditinjau' : (item.status as any),
+      status: nextOptions[0]?.value ?? item.status,
       response_text: '',
       assigned_to: item.assigned_to || undefined,
     });
@@ -1512,6 +1535,54 @@ function PublicRelationsAdminContent() {
                     {selectedComplaint.content}
                   </p>
                 </div>
+
+                {/* P1-23: Galeri Lampiran Bukti Foto / Dokumen Pengaduan */}
+                {selectedComplaint.attachments && selectedComplaint.attachments.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 mb-2">
+                      Bukti Lampiran ({selectedComplaint.attachments.length} berkas):
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {selectedComplaint.attachments.map((att, idx) => {
+                        const isImage = Boolean(att.mime_type?.startsWith('image/'));
+                        const linkUrl = att.signed_url;
+                        return (
+                          <div
+                            key={att.id || idx}
+                            className="bg-white border border-slate-200 rounded-lg p-2.5 space-y-2"
+                          >
+                            {isImage && linkUrl ? (
+                              <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="block">
+                                <img
+                                  src={linkUrl}
+                                  alt={`Lampiran bukti ${idx + 1}`}
+                                  className="w-full h-32 object-cover rounded border border-slate-100"
+                                />
+                              </a>
+                            ) : null}
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <span className="truncate text-slate-700 font-medium">
+                                {att.object_key?.split('/').pop() || `Lampiran-${idx + 1}`}
+                              </span>
+                              {linkUrl ? (
+                                <a
+                                  href={linkUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-indigo-600 hover:underline font-semibold shrink-0"
+                                >
+                                  Buka Lampiran
+                                </a>
+                              ) : (
+                                <span className="text-slate-400">URL kedaluwarsa</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* TIMELINE */}
@@ -1548,23 +1619,25 @@ function PublicRelationsAdminContent() {
               </div>
 
               {/* FORM UPDATE STATUS */}
-              <form onSubmit={handleUpdateComplaintStatusSubmit} className="pt-4 border-t border-slate-200 space-y-4">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Perbarui Status & Tindak Lanjut Sekolah
-                </h4>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Ubah Status</label>
-                  <select
-                    className="w-full h-10 px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={statusUpdateForm.status}
-                    onChange={(e) => setStatusUpdateForm({ ...statusUpdateForm, status: e.target.value as any })}
-                  >
-                    <option value="ditinjau">Ditinjau (Sedang diverifikasi tim sekolah)</option>
-                    <option value="ditindaklanjuti">Ditindaklanjuti (Dalam proses investigasi/tindakan)</option>
-                    <option value="selesai">Selesai (Penanganan tuntas)</option>
-                    <option value="ditolak">Ditolak (Tidak memenuhi syarat / fiktif)</option>
-                  </select>
-                </div>
+              {(COMPLAINT_TRANSITIONS[selectedComplaint.status] ?? []).length > 0 ? (
+                <form onSubmit={handleUpdateComplaintStatusSubmit} className="pt-4 border-t border-slate-200 space-y-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Perbarui Status & Tindak Lanjut Sekolah
+                  </h4>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Ubah Status</label>
+                    <select
+                      className="w-full h-10 px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={statusUpdateForm.status}
+                      onChange={(e) => setStatusUpdateForm({ ...statusUpdateForm, status: e.target.value as any })}
+                    >
+                      {(COMPLAINT_TRANSITIONS[selectedComplaint.status] ?? []).map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">
                     Tanggapan / Catatan Perkembangan *
@@ -1586,15 +1659,23 @@ function PublicRelationsAdminContent() {
                   >
                     Batal
                   </Button>
-                  <Button
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                    disabled={isSubmittingComplaintStatus}
-                  >
-                    {isSubmittingComplaintStatus ? 'Memproses...' : 'Simpan Tindak Lanjut'}
+                    <Button
+                      type="submit"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                      disabled={isSubmittingComplaintStatus}
+                    >
+                      {isSubmittingComplaintStatus ? 'Memproses...' : 'Simpan Tindak Lanjut'}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="pt-4 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+                  <span>Pengaduan berstatus akhir ({selectedComplaint.status}) dan sudah ditutup.</span>
+                  <Button type="button" variant="outline" onClick={() => setIsComplaintModalOpen(false)}>
+                    Tutup
                   </Button>
                 </div>
-              </form>
+              )}
             </div>
           </div>
         </div>

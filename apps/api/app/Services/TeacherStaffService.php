@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\File;
+use App\Models\Notification;
 use App\Models\Role;
 use App\Models\Staff;
 use App\Models\Teacher;
@@ -807,6 +808,22 @@ class TeacherStaffService
                 ],
                 $request
             );
+
+            if (! empty($teacher->user_id) && $salarySlip->status !== 'draft') {
+                // 09_SECURITY_PRIVACY §6.7: Jangan pernah sertakan nominal gaji dalam teks/payload notifikasi
+                Notification::create([
+                    'user_id' => $teacher->user_id,
+                    'notif_type' => 'salary_slip.published',
+                    'title' => "Slip Gaji Periode {$monthPad}/{$year} Tersedia",
+                    'body' => "Slip gaji Anda untuk periode {$monthPad}/{$year} telah diterbitkan. Silakan buka portal untuk melihat dan mengunduh rincian.",
+                    'data' => [
+                        'salary_slip_id' => $salarySlip->id,
+                        'period_month' => $month,
+                        'period_year' => $year,
+                        'target_url' => '/portal/guru/slip-gaji',
+                    ],
+                ]);
+            }
 
             return $salarySlip->load(['file', 'creator']);
         });

@@ -28,7 +28,7 @@ class ProgressReportReminderCommand extends Command
                 'body' => "Bapak/Ibu Guru {$teacher->full_name}, mohon untuk segera melengkapi penilaian akademik dan catatan karakter periode {$period}.",
                 'data' => [
                     'period' => $period,
-                    'deep_link' => '/grades',
+                    'target_url' => '/portal/guru/nilai',
                     'sent_at' => Carbon::now()->toIso8601String(),
                 ],
             ]);

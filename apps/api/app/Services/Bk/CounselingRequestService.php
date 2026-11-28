@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\CounselingCase;
 use App\Models\CounselingRequest;
 use App\Models\CounselingSession;
+use App\Models\Notification;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
@@ -176,6 +177,34 @@ class CounselingRequestService
             $request
         );
 
+        try {
+            $counselorQuery = User::where('status', 'active')
+                ->whereHas('roles', fn ($q) => $q->whereIn('code', ['counselor', 'guru_bk']));
+            if (! empty($student->school_id)) {
+                $counselorQuery->where(function ($q) use ($student) {
+                    $q->where('school_id', $student->school_id)->orWhereNull('school_id');
+                });
+            }
+            $recipientIds = $counselorQuery->pluck('id');
+            if (! empty($counselingRequest->preferred_counselor_id)) {
+                $recipientIds->push($counselingRequest->preferred_counselor_id);
+            }
+            foreach ($recipientIds->filter(fn ($id) => ! empty($id) && $id !== $user->id)->unique() as $recipientId) {
+                Notification::create([
+                    'user_id' => $recipientId,
+                    'notif_type' => 'counseling_update',
+                    'title' => 'Permohonan Konseling Baru',
+                    'body' => 'Permohonan layanan konseling baru telah diterima dan menunggu penjadwalan Guru BK.',
+                    'data' => [
+                        'counseling_request_id' => $counselingRequest->id,
+                        'target_url' => '/admin/counseling',
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return $counselingRequest->fresh(['student.classes', 'requester', 'preferredCounselor', 'counselor']);
     }
 
@@ -214,6 +243,29 @@ class CounselingRequestService
             $request
         );
 
+        try {
+            if (! empty($counselingRequest->requested_by) && $counselingRequest->requested_by !== $user->id) {
+                $targetUrl = match ($counselingRequest->requester_role) {
+                    'guardian' => '/portal/ortu/konseling',
+                    'student' => '/portal/siswa/konseling',
+                    default => '/portal/guru/dashboard',
+                };
+                Notification::create([
+                    'user_id' => $counselingRequest->requested_by,
+                    'notif_type' => 'counseling_update',
+                    'title' => 'Jadwal Konseling Telah Ditetapkan',
+                    'body' => 'Permohonan konseling Anda telah dijadwalkan. Silakan buka portal untuk melihat rincian waktu dan konselor.',
+                    'data' => [
+                        'counseling_request_id' => $counselingRequest->id,
+                        'status' => 'scheduled',
+                        'target_url' => $targetUrl,
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return $counselingRequest->fresh(['student.classes', 'requester', 'preferredCounselor', 'counselor']);
     }
 
@@ -246,6 +298,29 @@ class CounselingRequestService
             ['status' => 'rejected', 'has_rejection_reason' => ! empty($data['rejection_reason'])],
             $request
         );
+
+        try {
+            if (! empty($counselingRequest->requested_by) && $counselingRequest->requested_by !== $user->id) {
+                $targetUrl = match ($counselingRequest->requester_role) {
+                    'guardian' => '/portal/ortu/konseling',
+                    'student' => '/portal/siswa/konseling',
+                    default => '/portal/guru/dashboard',
+                };
+                Notification::create([
+                    'user_id' => $counselingRequest->requested_by,
+                    'notif_type' => 'counseling_update',
+                    'title' => 'Pembaruan Permohonan Konseling',
+                    'body' => 'Permohonan konseling Anda tidak dapat dijadwalkan pada waktu yang diajukan. Silakan buka portal untuk detail dan pengajuan ulang.',
+                    'data' => [
+                        'counseling_request_id' => $counselingRequest->id,
+                        'status' => 'rejected',
+                        'target_url' => $targetUrl,
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return $counselingRequest->fresh(['student.classes', 'requester', 'preferredCounselor', 'counselor']);
     }

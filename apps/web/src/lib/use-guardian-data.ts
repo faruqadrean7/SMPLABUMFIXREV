@@ -251,6 +251,7 @@ export interface CreateCounselingPayload {
   category?: string;
   is_urgent?: boolean;
   counselor_name?: string;
+  target_role?: string;
   preferred_schedule?: string;
   notes?: string;
 }

@@ -313,13 +313,36 @@ describe('Web Push Notification Helper (BE-NTF-01 / ADM-NTF-01)', () => {
       expect(success).toBe(true);
       expect(spyPut).toHaveBeenCalledWith({
         preferences: expect.arrayContaining([
-          expect.objectContaining({ topic: 'attendance', is_enabled: true }),
-          expect.objectContaining({ topic: 'announcement', is_enabled: false }),
+          expect.objectContaining({
+            topic: 'attendance_alert',
+            notif_type: 'attendance_alert',
+            is_enabled: true,
+          }),
+          expect.objectContaining({
+            topic: 'academic_announcement',
+            notif_type: 'academic_announcement',
+            is_enabled: false,
+          }),
         ]),
       });
 
       const cached = getStoredNotificationPreferences('ortu');
       expect(cached.enabledTopics).toEqual(['attendance', 'report_card']);
+    });
+
+    it('mengembalikan false saat sinkronisasi preferensi ke server gagal (tidak silent-swallow)', async () => {
+      const { syncSaveNotificationPreferences } = await import('@/features/notifications/web-push');
+
+      vi.spyOn(notificationsApi, 'updatePreferences').mockRejectedValueOnce(new Error('422 Validation Error'));
+
+      const success = await syncSaveNotificationPreferences({
+        role: 'ortu',
+        enabledTopics: ['attendance'],
+        soundEnabled: true,
+        quietHoursEnabled: false,
+      });
+
+      expect(success).toBe(false);
     });
   });
 });
