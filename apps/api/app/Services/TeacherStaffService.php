@@ -10,6 +10,7 @@ use App\Models\Teacher;
 use App\Models\TeacherSalarySlip;
 use App\Models\User;
 use App\Services\Concerns\ProvisionsLoginAccount;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -30,7 +31,7 @@ class TeacherStaffService
      */
     public function listTeachers(Request $request): LengthAwarePaginator
     {
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $status = $request->query('status');
         $q = trim((string) $request->query('q', ''));
 
@@ -442,7 +443,7 @@ class TeacherStaffService
      */
     public function listStaff(Request $request): LengthAwarePaginator
     {
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $unit = $request->query('unit');
         $q = trim((string) $request->query('q', ''));
 

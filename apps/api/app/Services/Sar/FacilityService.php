@@ -4,6 +4,7 @@ namespace App\Services\Sar;
 
 use App\Models\AuditLog;
 use App\Models\Facility;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -49,7 +50,7 @@ class FacilityService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     /**

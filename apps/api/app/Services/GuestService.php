@@ -7,6 +7,7 @@ use App\Models\File;
 use App\Models\Guest;
 use App\Models\Notification;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -131,7 +132,7 @@ class GuestService
             $query->where('target_user_id', $filters['target_user_id']);
         }
 
-        $perPage = min((int) ($filters['per_page'] ?? 15), 100);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 15);
 
         return $query->orderBy('check_in', 'desc')->paginate($perPage);
     }

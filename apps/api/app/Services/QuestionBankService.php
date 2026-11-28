@@ -9,6 +9,7 @@ use App\Models\QuestionBank;
 use App\Models\QuestionOption;
 use App\Models\TeachingAssignment;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,7 +39,7 @@ class QuestionBankService
             $query->whereRaw('LOWER(name) LIKE ?', [$keyword]);
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     /**
@@ -192,7 +193,7 @@ class QuestionBankService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     /**

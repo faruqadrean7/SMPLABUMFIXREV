@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\BookingItem;
 use App\Models\Facility;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -135,7 +136,7 @@ class BookingService
             });
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 15));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
 
         // Privacy masking untuk tampilan kalender oleh pengguna umum (non-manager & bukan pemohon)
         if (! $isManager && $isCalendarView) {

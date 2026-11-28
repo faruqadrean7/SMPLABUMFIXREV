@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\TeachingAssignment;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +19,7 @@ class SubjectAssignmentService
      */
     public function listSubjects(Request $request): LengthAwarePaginator
     {
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $group = $request->query('subject_group');
         $q = trim((string) $request->query('q', $request->query('search', '')));
 
@@ -148,7 +149,7 @@ class SubjectAssignmentService
      */
     public function listTeachingAssignments(Request $request): LengthAwarePaginator
     {
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $semesterId = $request->query('semester_id');
         $classId = $request->query('class_id');
         $teacherId = $request->query('teacher_id');

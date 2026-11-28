@@ -11,6 +11,7 @@ use App\Models\ExamRoom;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\Concerns\GuardsExamOwnership;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -58,7 +59,7 @@ class ExamService
             $query->whereRaw('LOWER(title) LIKE ?', [$keyword]);
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Staff;
 use App\Models\Teacher;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -50,7 +51,7 @@ class PublicDirectoryService
             return $query->get()->map(fn (Teacher $teacher) => $this->transformTeacher($teacher));
         }
 
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPage = PaginationHelper::clamp($request->query('per_page'), 15);
 
         return $query->paginate($perPage)->through(fn (Teacher $teacher) => $this->transformTeacher($teacher));
     }
@@ -100,7 +101,7 @@ class PublicDirectoryService
             return $query->get()->map(fn (Staff $staff) => $this->transformStaff($staff));
         }
 
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPage = PaginationHelper::clamp($request->query('per_page'), 15);
 
         return $query->paginate($perPage)->through(fn (Staff $staff) => $this->transformStaff($staff));
     }

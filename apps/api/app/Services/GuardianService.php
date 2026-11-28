@@ -7,6 +7,7 @@ use App\Models\Guardian;
 use App\Models\Role;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -38,7 +39,7 @@ class GuardianService
             throw new HttpException(403, 'Anda tidak memiliki izin untuk melihat daftar wali murid.');
         }
 
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $q = trim((string) $request->query('q', ''));
 
         $query = Guardian::withCount('students')->with(['user', 'students']);

@@ -8,6 +8,7 @@ use App\Models\ExchangeProgram;
 use App\Models\Partnership;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -60,7 +61,7 @@ class PartnershipService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getPartnership(string $id, ?Request $request = null): Partnership
@@ -202,7 +203,7 @@ class PartnershipService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getExchangeProgram(string $id, ?Request $request = null): ExchangeProgram

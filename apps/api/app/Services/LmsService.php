@@ -14,6 +14,7 @@ use App\Models\Notification;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -74,7 +75,7 @@ class LmsService
             });
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 15);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 15);
 
         return $query->paginate($perPage);
     }
@@ -310,7 +311,7 @@ class LmsService
             });
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 15);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 15);
         $paginator = $query->paginate($perPage);
 
         // Jika request dari siswa, lampirkan submission miliknya ke tiap item

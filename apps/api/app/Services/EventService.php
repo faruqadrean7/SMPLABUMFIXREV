@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\SchoolEvent;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -84,7 +85,7 @@ class EventService
             return $query->get();
         }
 
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPage = PaginationHelper::clamp($request->query('per_page'), 15);
 
         return $query->paginate($perPage);
     }

@@ -16,6 +16,7 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Services\Academic\AttendanceAggregator;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -277,7 +278,7 @@ class ProgressReportService
             $query->whereHas('student.classes', fn ($q) => $q->where('classes.id', $classId));
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 15);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 15);
 
         return $query->paginate($perPage);
     }

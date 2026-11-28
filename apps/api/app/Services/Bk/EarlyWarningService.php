@@ -12,6 +12,7 @@ use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\User;
 use App\Services\Academic\AttendanceAggregator;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -85,7 +86,7 @@ class EarlyWarningService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     /**

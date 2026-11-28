@@ -8,6 +8,7 @@ use App\Models\Notification;
 use App\Models\NotificationPreference;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -64,7 +65,7 @@ class NotificationService
             $query->where('notif_type', $filters['notif_type']);
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 15);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 15);
         $paginator = $query->paginate($perPage);
 
         $unreadCount = Notification::where('user_id', $user->id)

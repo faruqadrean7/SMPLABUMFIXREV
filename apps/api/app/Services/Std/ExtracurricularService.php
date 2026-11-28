@@ -10,6 +10,7 @@ use App\Models\ExtracurricularMember;
 use App\Models\ReportCard;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -46,7 +47,7 @@ class ExtracurricularService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getExtracurricular(string $id): Extracurricular
@@ -143,7 +144,7 @@ class ExtracurricularService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 20));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 20));
     }
 
     public function registerMember(array $data, Request $request): ExtracurricularMember
@@ -354,7 +355,7 @@ class ExtracurricularService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getDocument(string $id): ActivityDocument

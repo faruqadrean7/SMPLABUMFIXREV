@@ -7,6 +7,7 @@ use App\Models\AssetAudit;
 use App\Models\AssetAuditItem;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -47,7 +48,7 @@ class AssetAuditService
             $query->whereDate('audit_date', '<=', $filters['to_date']);
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     /**
