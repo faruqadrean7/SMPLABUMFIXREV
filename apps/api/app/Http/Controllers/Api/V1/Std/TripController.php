@@ -45,10 +45,10 @@ class TripController extends Controller
      * BE-STD-04: Detail study trip beserta panduan & rute.
      * GET /api/v1/trips/{id}
      */
-    public function show(string $id): JsonResponse
+    public function show(string $id, Request $request): JsonResponse
     {
         try {
-            $trip = $this->service->getTrip($id);
+            $trip = $this->service->getTrip($id, $request);
 
             return $this->successResponse($trip);
         } catch (ModelNotFoundException) {
@@ -125,10 +125,10 @@ class TripController extends Controller
      * BE-STD-04: Daftar peserta study trip.
      * GET /api/v1/trips/{id}/participants
      */
-    public function indexParticipants(string $id): JsonResponse
+    public function indexParticipants(string $id, Request $request): JsonResponse
     {
         try {
-            $paginator = $this->service->listParticipants($id);
+            $paginator = $this->service->listParticipants($id, $request);
 
             return $this->paginatedResponse($paginator);
         } catch (Throwable $e) {

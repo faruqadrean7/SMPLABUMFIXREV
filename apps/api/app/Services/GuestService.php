@@ -11,12 +11,18 @@ use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class GuestService
 {
+    private const SIGNATURE_MAX_BYTES = 512000;
+
+    private const ALLOWED_SIGNATURE_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
+
     /**
      * BE-GUEST-01: Public register guest entry.
      * Tamu mengisi formulir kedatangan di resepsionis/kios digital.
@@ -26,6 +32,15 @@ class GuestService
         return DB::transaction(function () use ($data, $request) {
             $currentUser = $request->user();
 
+            // P1-31: Cegah IDOR photo_file_id milik domain privat/pengguna lain dari endpoint publik
+            $photoFileId = $data['photo_file_id'] ?? null;
+            if (! empty($photoFileId)) {
+                $photoFile = File::find($photoFileId);
+                if (! $photoFile || ($photoFile->visibility !== 'publik' && $photoFile->bucket !== 'guest-photos')) {
+                    throw new HttpException(403, 'Akses ditolak: Berkas foto tamu tidak valid atau bersifat privat.');
+                }
+            }
+
             $guest = Guest::create([
                 'school_id' => $data['school_id'] ?? null,
                 'target_user_id' => $data['target_user_id'] ?? null,
@@ -33,9 +48,16 @@ class GuestService
                 'institution' => isset($data['institution']) ? trim($data['institution']) : null,
                 'phone' => trim($data['phone']),
                 'purpose' => trim($data['purpose']),
-                'photo_file_id' => $data['photo_file_id'] ?? null,
+                'photo_file_id' => $photoFileId,
                 'check_in' => Carbon::now(),
             ]);
+
+            $signatureToken = Str::random(40);
+            Cache::put(
+                "guest_signature_token:{$guest->id}",
+                hash('sha256', $signatureToken),
+                Carbon::now()->addHours(12)
+            );
 
             // Memicu notifikasi instan ke pihak tujuan jika target_user_id ditentukan
             if (! empty($guest->target_user_id)) {
@@ -70,7 +92,10 @@ class GuestService
                 $request
             );
 
-            return $guest->fresh(['targetUser', 'photoFile']);
+            $freshGuest = $guest->fresh(['targetUser', 'photoFile']);
+            $freshGuest->setAttribute('signature_token', $signatureToken);
+
+            return $freshGuest;
         });
     }
 
@@ -211,6 +236,19 @@ class GuestService
             throw new HttpException(403, 'Akses ditolak: Data kunjungan tamu berada di luar sekolah penugasan Anda.');
         }
 
+        // P1-31: Verifikasi one-time signature_token bila sesi kunjungan diterbitkan via registrasi publik
+        $tokenCacheKey = "guest_signature_token:{$guest->id}";
+        $expectedTokenHash = Cache::get($tokenCacheKey);
+        $providedToken = (string) ($data['signature_token'] ?? $request->header('X-Guest-Signature-Token', ''));
+
+        if ($expectedTokenHash !== null) {
+            if ($providedToken === '' || ! hash_equals((string) $expectedTokenHash, hash('sha256', $providedToken))) {
+                throw new HttpException(403, 'Akses ditolak: Token sesi tanda tangan tamu tidak valid atau telah digunakan.');
+            }
+        } elseif ($providedToken !== '') {
+            throw new HttpException(403, 'Akses ditolak: Token sesi tanda tangan tamu tidak dikenali.');
+        }
+
         if ($guest->check_out !== null) {
             throw new HttpException(422, 'Tamu sudah melakukan checkout, tidak dapat menambahkan tanda tangan.');
         }
@@ -219,17 +257,17 @@ class GuestService
             throw new HttpException(422, 'Kunjungan tamu ini sudah memiliki tanda tangan digital yang tercatat.');
         }
 
-        $mimeType = 'image/png';
         $binary = null;
 
         if ($request->hasFile('signature_file')) {
             $uploaded = $request->file('signature_file');
             $binary = file_get_contents($uploaded->getRealPath());
-            $mimeType = $uploaded->getMimeType() ?: 'image/png';
         } elseif (! empty($data['signature_data'])) {
             $raw = trim($data['signature_data']);
-            if (preg_match('/^data:image\/(\w+);base64,/', $raw, $matches)) {
-                $mimeType = 'image/'.$matches[1];
+            if (preg_match('/^data:image\/([a-zA-Z0-9+.-]+);base64,/', $raw, $matches)) {
+                if (strtolower($matches[1]) === 'svg+xml') {
+                    throw new HttpException(422, 'Format gambar SVG dilarang untuk tanda tangan digital.');
+                }
                 $raw = substr($raw, strpos($raw, ',') + 1);
             }
             $binary = base64_decode($raw, true);
@@ -239,10 +277,27 @@ class GuestService
             throw new HttpException(422, 'Format berkas atau data canvas tanda tangan tidak valid.');
         }
 
+        if (strlen($binary) > self::SIGNATURE_MAX_BYTES) {
+            throw new HttpException(422, 'Ukuran data tanda tangan melebihi batas maksimal 500 KB.');
+        }
+
+        // P1-31: Verifikasi magic bytes asli via finfo (tolak HTML/SVG/payload non-gambar)
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $detectedMime = (string) $finfo->buffer($binary);
+        if (! in_array($detectedMime, self::ALLOWED_SIGNATURE_MIMES, true)) {
+            throw new HttpException(422, 'Berkas tanda tangan wajib berupa citra raster sah (PNG, JPEG, atau WEBP).');
+        }
+        $mimeType = $detectedMime;
+
         $hash = hash('sha256', $binary);
 
-        return DB::transaction(function () use ($guest, $binary, $mimeType, $hash, $request) {
-            $storagePath = "guests/signatures/{$guest->id}-".time().'.png';
+        return DB::transaction(function () use ($guest, $binary, $mimeType, $hash, $request, $tokenCacheKey, $expectedTokenHash) {
+            $ext = match ($mimeType) {
+                'image/jpeg' => 'jpg',
+                'image/webp' => 'webp',
+                default => 'png',
+            };
+            $storagePath = "guests/signatures/{$guest->id}-".time().".{$ext}";
             Storage::disk('local')->put($storagePath, $binary);
 
             $fileRecord = File::create([
@@ -261,6 +316,10 @@ class GuestService
                 'signature_file_id' => $fileRecord->id,
                 'signature_hash' => $hash,
             ]);
+
+            if ($expectedTokenHash !== null) {
+                Cache::forget($tokenCacheKey);
+            }
 
             $this->logAudit(
                 $request->user()?->id,

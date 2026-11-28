@@ -235,13 +235,13 @@ class PostService
             }
 
             $post = Post::create([
-                'school_id' => $data['school_id'] ?? $request->user()?->school_id,
+                'school_id' => $request->user()?->school_id ?? ($data['school_id'] ?? null),
                 'category_id' => $data['category_id'] ?? null,
                 'author_id' => $request->user()->id,
                 'cover_file_id' => $data['cover_file_id'] ?? null,
                 'slug' => $slug,
                 'title' => $data['title'],
-                'content' => $data['content'],
+                'content' => $this->sanitizeHtmlContent((string) $data['content']),
                 'status' => $status,
                 'visibility' => $data['visibility'] ?? Post::VISIBILITY_PUBLIC,
                 'published_at' => $publishedAt,
@@ -285,17 +285,23 @@ class PostService
                 $data['published_at'] = now();
             }
 
-            $post->update(array_filter([
-                'title' => $data['title'] ?? null,
-                'slug' => $data['slug'] ?? null,
-                'content' => $data['content'] ?? null,
-                'category_id' => array_key_exists('category_id', $data) ? $data['category_id'] : $post->category_id,
-                'cover_file_id' => array_key_exists('cover_file_id', $data) ? $data['cover_file_id'] : $post->cover_file_id,
-                'status' => $data['status'] ?? null,
-                'visibility' => $data['visibility'] ?? null,
-                'published_at' => array_key_exists('published_at', $data) ? $data['published_at'] : $post->published_at,
-                'school_id' => $data['school_id'] ?? null,
-            ], fn ($val) => $val !== null));
+            $updatePayload = [];
+            foreach (['title', 'slug', 'status', 'visibility'] as $field) {
+                if (array_key_exists($field, $data) && $data[$field] !== null) {
+                    $updatePayload[$field] = $data[$field];
+                }
+            }
+            if (array_key_exists('content', $data) && $data['content'] !== null) {
+                $updatePayload['content'] = $this->sanitizeHtmlContent((string) $data['content']);
+            }
+            // P1-31: Izinkan menghapus relasi opsional ke null secara eksplisit
+            foreach (['category_id', 'cover_file_id', 'published_at'] as $nullableField) {
+                if (array_key_exists($nullableField, $data)) {
+                    $updatePayload[$nullableField] = $data[$nullableField];
+                }
+            }
+
+            $post->update($updatePayload);
 
             $this->logAudit(
                 $request->user()?->id,
@@ -437,5 +443,33 @@ class PostService
         } catch (\Throwable $e) {
             report($e);
         }
+    }
+
+    /**
+     * Sanitize HTML content for CMS posts against stored XSS payloads.
+     */
+    protected function sanitizeHtmlContent(string $html): string
+    {
+        if (trim($html) === '') {
+            return $html;
+        }
+
+        $clean = preg_replace(
+            [
+                '#<\s*(script|iframe|object|embed|svg|style|applet|form)\b[^>]*>.*?<\s*/\s*\1\s*>#is',
+                '#<\s*/?\s*(script|iframe|object|embed|svg|style|applet|meta|base|link)\b[^>]*>#is',
+                '/\s+on[a-z0-9_-]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu',
+                '/\b(href|src|action|formaction|poster|data)\s*=\s*(["\']?)\s*(?:javascript|vbscript|data\s*:\s*text\/html)[^"\'>\s]*\2/iu',
+            ],
+            [
+                '',
+                '',
+                '',
+                '$1="#"',
+            ],
+            $html
+        );
+
+        return is_string($clean) ? $clean : strip_tags($html);
     }
 }

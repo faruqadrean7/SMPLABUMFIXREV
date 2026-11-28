@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\Alumni;
 use App\Models\AuditLog;
 use App\Models\ClassStudent;
 use App\Models\GradeLevel;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentStatusHistory;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -256,6 +258,16 @@ class PromotionService
                         'effective_date' => $effectiveDate,
                     ]);
 
+                    // P1-30: Otomatis daftarkan ke direktori Alumni bila belum tercatat
+                    Alumni::firstOrCreate(
+                        ['student_id' => $studentId],
+                        [
+                            'graduation_year' => Carbon::parse($effectiveDate)->year,
+                            'current_status' => 'kuliah',
+                            'is_public' => false,
+                        ]
+                    );
+
                     $graduated++;
                 } elseif ($action === 'drop_out') {
                     // Update status to 'keluar'
@@ -333,7 +345,15 @@ class PromotionService
 
                 // 3. Reset student status back to 'aktif' if graduated or dropped out
                 if (in_array($student->status, ['lulus', 'keluar'])) {
+                    $wasGraduated = $student->status === 'lulus';
                     $student->update(['status' => 'aktif']);
+
+                    if ($wasGraduated) {
+                        Alumni::where('student_id', $studentId)
+                            ->whereDoesntHave('tracerResponses')
+                            ->where('is_public', false)
+                            ->delete();
+                    }
 
                     StudentStatusHistory::create([
                         'student_id' => $studentId,

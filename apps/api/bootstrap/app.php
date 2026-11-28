@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\BypassThrottle;
 use App\Http\Middleware\RequirePermission;
+use App\Http\Middleware\SecurityHeadersMiddleware;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -34,6 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 ? array_values(array_filter(array_map('trim', explode(',', $trustedProxiesRaw))))
                 : $trustedProxiesRaw);
         $middleware->trustProxies(at: $trustedProxies);
+        $middleware->append(SecurityHeadersMiddleware::class);
         $middleware->redirectGuestsTo(fn () => null);
         $aliases = [
             'permission' => RequirePermission::class,

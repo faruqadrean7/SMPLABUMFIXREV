@@ -49,3 +49,6 @@ Schedule::command('finance:send-due-reminders --days=3')->timezone('Asia/Jakarta
 
 // 11. finance-reconcile: Harian dini hari (Rekonsiliasi status & paid_amount tagihan)
 Schedule::command('finance:reconcile')->timezone('Asia/Jakarta')->dailyAt('01:30')->withoutOverlapping()->onOneServer();
+
+// 12. auth-prune-tokens: Harian dini hari (P1-45: Bersihkan refresh_tokens & password_resets kedaluwarsa)
+Schedule::command('auth:prune-tokens')->timezone('Asia/Jakarta')->dailyAt('02:30')->withoutOverlapping()->onOneServer();

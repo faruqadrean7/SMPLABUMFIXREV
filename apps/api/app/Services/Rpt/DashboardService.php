@@ -279,141 +279,145 @@ class DashboardService
         }
 
         $teacherId = $teacher?->id;
-        $dayNames = [
-            1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis',
-            5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu',
-        ];
-        $todayDayIso = Carbon::now()->dayOfWeekIso;
-        $todayDay = $dayNames[$todayDayIso] ?? 'Senin';
+        $cacheKey = "rpt:teacher-dashboard:{$user->id}:".($teacherId ?? 'admin').':'.Carbon::today()->toDateString();
 
-        $assignments = $teacherId
-            ? TeachingAssignment::where('teacher_id', $teacherId)
-                ->with(['schoolClass' => fn ($q) => $q->withCount('students'), 'schoolClass.students', 'subject'])
-                ->get()
-            : collect([]);
+        return Cache::remember($cacheKey, 45, function () use ($user, $teacher, $teacherId) {
+            $dayNames = [
+                1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis',
+                5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu',
+            ];
+            $todayDayIso = Carbon::now()->dayOfWeekIso;
+            $todayDay = $dayNames[$todayDayIso] ?? 'Senin';
 
-        $todaySchedules = $teacherId
-            ? Schedule::where('teacher_id', $teacherId)
-                ->where('day_of_week', $todayDayIso)
-                ->with(['schoolClass', 'subject', 'timeSlot'])
-                ->get()
-            : collect([]);
+            $assignments = $teacherId
+                ? TeachingAssignment::where('teacher_id', $teacherId)
+                    ->with(['schoolClass' => fn ($q) => $q->withCount('students'), 'schoolClass.students', 'subject'])
+                    ->get()
+                : collect([]);
 
-        $pendingJournals = $teacherId
-            ? Schedule::where('teacher_id', $teacherId)
-                ->whereDoesntHave('journals', fn ($q) => $q->whereDate('session_date', Carbon::today()))
-                ->count()
-            : 0;
+            $todaySchedules = $teacherId
+                ? Schedule::where('teacher_id', $teacherId)
+                    ->where('day_of_week', $todayDayIso)
+                    ->with(['schoolClass', 'subject', 'timeSlot'])
+                    ->get()
+                : collect([]);
 
-        // GAP-E: Esai CBT menunggu koreksi (uraian) untuk ujian yang dibuat oleh guru atau mapel yang diampunya
-        $teacherSubjectIds = $assignments->pluck('subject_id')->unique()->filter()->values()->all();
-        $teacherExamIds = Exam::where(function ($q) use ($user, $teacherSubjectIds) {
-            $q->where('created_by', $user->id);
-            if (! empty($teacherSubjectIds)) {
-                $q->orWhereIn('subject_id', $teacherSubjectIds);
-            }
-        })->pluck('id')->all();
+            $pendingJournals = $teacherId
+                ? Schedule::where('teacher_id', $teacherId)
+                    ->whereDoesntHave('journals', fn ($q) => $q->whereDate('session_date', Carbon::today()))
+                    ->count()
+                : 0;
 
-        $pendingEssayGradingCount = ! empty($teacherExamIds)
-            ? ExamAnswer::whereHas('session', function ($sq) use ($teacherExamIds) {
-                $sq->whereIn('exam_id', $teacherExamIds)->where('status', 'selesai');
-            })
-                ->whereHas('question', function ($qq) {
-                    $qq->where('question_type', 'uraian');
-                })
-                ->whereNull('score')
-                ->count()
-            : 0;
-
-        // GAP-E: Ringkasan progres penilaian per kelas & mata pelajaran (Preload tanpa N+1)
-        $classIds = $assignments->pluck('class_id')->unique()->filter()->values()->all();
-        $allComponents = (! empty($classIds) && ! empty($teacherSubjectIds))
-            ? GradeComponent::whereIn('class_id', $classIds)
-                ->whereIn('subject_id', $teacherSubjectIds)
-                ->withCount('grades')
-                ->get()
-                ->groupBy(fn ($c) => $c->class_id.'_'.$c->subject_id)
-            : collect([]);
-
-        $gradingProgress = $assignments->map(function ($ta) use ($allComponents) {
-            $classId = $ta->class_id;
-            $subjectId = $ta->subject_id;
-            $studentCount = $ta->schoolClass?->students_count ?? $ta->schoolClass?->students?->count() ?? 0;
-
-            $components = $allComponents->get($classId.'_'.$subjectId) ?? collect([]);
-
-            $totalComponents = $components->count();
-            $completedComponents = 0;
-            $componentList = [];
-
-            foreach ($components as $comp) {
-                $actualCount = $comp->grades_count;
-                $isComplete = $studentCount > 0 ? ($actualCount >= $studentCount) : ($actualCount > 0);
-                if ($isComplete) {
-                    $completedComponents++;
+            // GAP-E: Esai CBT menunggu koreksi (uraian) untuk ujian yang dibuat oleh guru atau mapel yang diampunya
+            $teacherSubjectIds = $assignments->pluck('subject_id')->unique()->filter()->values()->all();
+            $teacherExamIds = Exam::where(function ($q) use ($user, $teacherSubjectIds) {
+                $q->where('created_by', $user->id);
+                if (! empty($teacherSubjectIds)) {
+                    $q->orWhereIn('subject_id', $teacherSubjectIds);
                 }
-                $componentList[] = [
-                    'id' => $comp->id,
-                    'name' => $comp->name,
-                    'code' => $comp->code,
-                    'grades_count' => $actualCount,
-                    'expected_count' => $studentCount,
-                    'is_completed' => $isComplete,
+            })->pluck('id')->all();
+
+            $pendingEssayGradingCount = ! empty($teacherExamIds)
+                ? ExamAnswer::whereHas('session', function ($sq) use ($teacherExamIds) {
+                    $sq->whereIn('exam_id', $teacherExamIds)->where('status', 'selesai');
+                })
+                    ->whereHas('question', function ($qq) {
+                        $qq->where('question_type', 'uraian');
+                    })
+                    ->whereNull('score')
+                    ->count()
+                : 0;
+
+            // GAP-E: Ringkasan progres penilaian per kelas & mata pelajaran (Preload tanpa N+1)
+            $classIds = $assignments->pluck('class_id')->unique()->filter()->values()->all();
+            $allComponents = (! empty($classIds) && ! empty($teacherSubjectIds))
+                ? GradeComponent::whereIn('class_id', $classIds)
+                    ->whereIn('subject_id', $teacherSubjectIds)
+                    ->withCount('grades')
+                    ->get()
+                    ->groupBy(fn ($c) => $c->class_id.'_'.$c->subject_id)
+                : collect([]);
+
+            $gradingProgress = $assignments->map(function ($ta) use ($allComponents) {
+                $classId = $ta->class_id;
+                $subjectId = $ta->subject_id;
+                $studentCount = $ta->schoolClass?->students_count ?? $ta->schoolClass?->students?->count() ?? 0;
+
+                $components = $allComponents->get($classId.'_'.$subjectId) ?? collect([]);
+
+                $totalComponents = $components->count();
+                $completedComponents = 0;
+                $componentList = [];
+
+                foreach ($components as $comp) {
+                    $actualCount = $comp->grades_count;
+                    $isComplete = $studentCount > 0 ? ($actualCount >= $studentCount) : ($actualCount > 0);
+                    if ($isComplete) {
+                        $completedComponents++;
+                    }
+                    $componentList[] = [
+                        'id' => $comp->id,
+                        'name' => $comp->name,
+                        'code' => $comp->code,
+                        'grades_count' => $actualCount,
+                        'expected_count' => $studentCount,
+                        'is_completed' => $isComplete,
+                    ];
+                }
+
+                return [
+                    'class_id' => $classId,
+                    'class_name' => $ta->schoolClass?->name,
+                    'subject_id' => $subjectId,
+                    'subject_name' => $ta->subject?->name,
+                    'student_count' => $studentCount,
+                    'total_components' => $totalComponents,
+                    'completed_components' => $completedComponents,
+                    'completion_rate' => $totalComponents > 0 ? round(($completedComponents / $totalComponents) * 100, 2) : 0,
+                    'components' => $componentList,
                 ];
-            }
+            })->values()->all();
+
+            $totalHours = (int) $assignments->sum('hours_per_week');
+            $targetHours = 24;
+
+            $latestSalarySlip = $teacherId ? TeacherSalarySlip::where('teacher_id', $teacherId)
+                ->where('status', '!=', 'draft')
+                ->orderBy('period_year', 'desc')
+                ->orderBy('period_month', 'desc')
+                ->with('file')
+                ->first() : null;
+
+            $salarySlipsCount = $teacherId ? TeacherSalarySlip::where('teacher_id', $teacherId)->count() : 0;
 
             return [
-                'class_id' => $classId,
-                'class_name' => $ta->schoolClass?->name,
-                'subject_id' => $subjectId,
-                'subject_name' => $ta->subject?->name,
-                'student_count' => $studentCount,
-                'total_components' => $totalComponents,
-                'completed_components' => $completedComponents,
-                'completion_rate' => $totalComponents > 0 ? round(($completedComponents / $totalComponents) * 100, 2) : 0,
-                'components' => $componentList,
+                'teacher' => [
+                    'id' => $teacher?->id,
+                    'name' => $teacher?->full_name ?? $user->username,
+                    'nip' => $teacher?->nip,
+                ],
+                'teaching_classes_count' => $assignments->count(),
+                'teaching_hours_recap' => [
+                    'total_hours' => $totalHours,
+                    'target_hours' => $targetHours,
+                    'is_target_met' => $totalHours >= $targetHours,
+                    'difference' => $totalHours - $targetHours,
+                ],
+                'latest_salary_slip' => $latestSalarySlip,
+                'salary_slips_count' => $salarySlipsCount,
+                'today_day' => $todayDay,
+                'today_schedules' => $todaySchedules,
+                'pending_journals_count' => $pendingJournals,
+                'pending_essay_grading_count' => $pendingEssayGradingCount,
+                'grading_progress' => $gradingProgress,
+                'quick_actions' => [
+                    'submit_journal' => '/api/v1/journals',
+                    'grade_essay' => '/api/v1/exams',
+                    'facility_booking' => '/api/v1/bookings',
+                    'ticket_helpdesk' => '/api/v1/tickets',
+                ],
             ];
-        })->values()->all();
-
-        $totalHours = (int) $assignments->sum('hours_per_week');
-        $targetHours = 24;
-
-        $latestSalarySlip = $teacherId ? TeacherSalarySlip::where('teacher_id', $teacherId)
-            ->where('status', '!=', 'draft')
-            ->orderBy('period_year', 'desc')
-            ->orderBy('period_month', 'desc')
-            ->with('file')
-            ->first() : null;
-
-        $salarySlipsCount = $teacherId ? TeacherSalarySlip::where('teacher_id', $teacherId)->count() : 0;
-
-        return [
-            'teacher' => [
-                'id' => $teacher?->id,
-                'name' => $teacher?->full_name ?? $user->username,
-                'nip' => $teacher?->nip,
-            ],
-            'teaching_classes_count' => $assignments->count(),
-            'teaching_hours_recap' => [
-                'total_hours' => $totalHours,
-                'target_hours' => $targetHours,
-                'is_target_met' => $totalHours >= $targetHours,
-                'difference' => $totalHours - $targetHours,
-            ],
-            'latest_salary_slip' => $latestSalarySlip,
-            'salary_slips_count' => $salarySlipsCount,
-            'today_day' => $todayDay,
-            'today_schedules' => $todaySchedules,
-            'pending_journals_count' => $pendingJournals,
-            'pending_essay_grading_count' => $pendingEssayGradingCount,
-            'grading_progress' => $gradingProgress,
-            'quick_actions' => [
-                'submit_journal' => '/api/v1/journals',
-                'grade_essay' => '/api/v1/exams',
-                'facility_booking' => '/api/v1/bookings',
-                'ticket_helpdesk' => '/api/v1/tickets',
-            ],
-        ];
+        });
     }
 
     /**
@@ -432,185 +436,189 @@ class DashboardService
         }
 
         $studentId = $student?->id;
-        $activeClass = $student?->classes()
-            ->wherePivotNull('left_at')
-            ->whereHas('academicYear', fn ($q) => $q->where('is_active', true))
-            ->first() ?? $student?->classes()->wherePivotNull('left_at')->first() ?? $student?->classes()->first();
+        $cacheKey = "rpt:student-dashboard:{$user->id}:".($studentId ?? 'admin').':'.Carbon::today()->toDateString();
 
-        // 1. Presensi Hari Ini
-        $todayAttendance = $studentId
-            ? Attendance::where('student_id', $studentId)
-                ->whereDate('att_date', Carbon::today())
-                ->orderBy('created_at', 'desc')
-                ->first()
-            : null;
+        return Cache::remember($cacheKey, 45, function () use ($user, $student, $studentId) {
+            $activeClass = $student?->classes()
+                ->wherePivotNull('left_at')
+                ->whereHas('academicYear', fn ($q) => $q->where('is_active', true))
+                ->first() ?? $student?->classes()->wherePivotNull('left_at')->first() ?? $student?->classes()->first();
 
-        $allAtts = $studentId
-            ? Attendance::where('student_id', $studentId)
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->unique('att_date')
-            : collect([]);
-        $totalAtt = $allAtts->count();
-        $hadirAtt = $allAtts->where('status', 'hadir')->count();
-        $attendanceRate = $totalAtt > 0 ? round(($hadirAtt / $totalAtt) * 100, 2) : 100.0;
+            // 1. Presensi Hari Ini
+            $todayAttendance = $studentId
+                ? Attendance::where('student_id', $studentId)
+                    ->whereDate('att_date', Carbon::today())
+                    ->orderBy('created_at', 'desc')
+                    ->first()
+                : null;
 
-        // GAP-C: Rekap Kehadiran Bulan Berjalan (Deduplikasi per tanggal unik)
-        $startOfMonth = Carbon::now()->startOfMonth()->toDateString();
-        $endOfMonth = Carbon::now()->endOfMonth()->toDateString();
+            $allAtts = $studentId
+                ? Attendance::where('student_id', $studentId)
+                    ->orderBy('created_at', 'desc')
+                    ->get()
+                    ->unique('att_date')
+                : collect([]);
+            $totalAtt = $allAtts->count();
+            $hadirAtt = $allAtts->where('status', 'hadir')->count();
+            $attendanceRate = $totalAtt > 0 ? round(($hadirAtt / $totalAtt) * 100, 2) : 100.0;
 
-        $monthAttsRecords = $studentId
-            ? Attendance::where('student_id', $studentId)
-                ->whereBetween('att_date', [$startOfMonth, $endOfMonth])
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->unique('att_date')
-            : collect([]);
+            // GAP-C: Rekap Kehadiran Bulan Berjalan (Deduplikasi per tanggal unik)
+            $startOfMonth = Carbon::now()->startOfMonth()->toDateString();
+            $endOfMonth = Carbon::now()->endOfMonth()->toDateString();
 
-        $monthAtts = $monthAttsRecords->groupBy('status')->map->count()->toArray();
+            $monthAttsRecords = $studentId
+                ? Attendance::where('student_id', $studentId)
+                    ->whereBetween('att_date', [$startOfMonth, $endOfMonth])
+                    ->orderBy('created_at', 'desc')
+                    ->get()
+                    ->unique('att_date')
+                : collect([]);
 
-        $monthTotal = $monthAttsRecords->count();
-        $monthHadir = ($monthAtts['hadir'] ?? 0) + ($monthAtts['terlambat'] ?? 0);
-        $monthRate = $monthTotal > 0 ? round(($monthHadir / $monthTotal) * 100, 2) : 100.0;
+            $monthAtts = $monthAttsRecords->groupBy('status')->map->count()->toArray();
 
-        $currentMonthAttendance = [
-            'month' => Carbon::now()->translatedFormat('F Y'),
-            'start_date' => $startOfMonth,
-            'end_date' => $endOfMonth,
-            'total_recorded' => $monthTotal,
-            'hadir' => $monthAtts['hadir'] ?? 0,
-            'izin' => $monthAtts['izin'] ?? 0,
-            'sakit' => $monthAtts['sakit'] ?? 0,
-            'alpa' => $monthAtts['alpa'] ?? 0,
-            'terlambat' => $monthAtts['terlambat'] ?? 0,
-            'rate' => $monthRate,
-        ];
+            $monthTotal = $monthAttsRecords->count();
+            $monthHadir = ($monthAtts['hadir'] ?? 0) + ($monthAtts['terlambat'] ?? 0);
+            $monthRate = $monthTotal > 0 ? round(($monthHadir / $monthTotal) * 100, 2) : 100.0;
 
-        // GAP-C: Jadwal Pelajaran Besok
-        $dayNames = [
-            1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis',
-            5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu',
-        ];
-        $tomorrowDayIso = Carbon::now()->addDay()->dayOfWeekIso;
-        $tomorrowDay = $dayNames[$tomorrowDayIso] ?? 'Senin';
-
-        $tomorrowSchedules = ($activeClass)
-            ? Schedule::where('class_id', $activeClass->id)
-                ->where('day_of_week', $tomorrowDayIso)
-                ->with(['subject', 'teacher', 'room', 'timeSlot'])
-                ->get()
-            : collect([]);
-
-        // Poin Prestasi & Pelanggaran
-        $prestasiPoints = $studentId
-            ? (int) StudentPoint::where('student_id', $studentId)
-                ->whereHas('pointType', fn ($q) => $q->where('kind', 'prestasi'))
-                ->join('point_types', 'student_points.point_type_id', '=', 'point_types.id')
-                ->sum('point_types.points')
-            : 0;
-
-        $pelanggaranPoints = $studentId
-            ? (int) StudentPoint::where('student_id', $studentId)
-                ->whereHas('pointType', fn ($q) => $q->where('kind', 'pelanggaran'))
-                ->join('point_types', 'student_points.point_type_id', '=', 'point_types.id')
-                ->sum('point_types.points')
-            : 0;
-
-        $unreturnedLoans = Loan::where('borrower_id', $user->id)
-            ->whereNull('returned_at')
-            ->count();
-
-        // GAP-C: Ujian Hari Ini & Ujian Mendatang (dengan indikasi kebutuhan token)
-        $now = Carbon::now();
-        $studentExamIds = $studentId
-            ? ExamParticipant::where('student_id', $studentId)->pluck('exam_id')->toArray()
-            : [];
-
-        $examsQuery = Exam::whereIn('id', $studentExamIds)
-            ->whereIn('status', ['dijadwalkan', 'berlangsung', 'published'])
-            ->where('end_at', '>=', $now)
-            ->with(['subject', 'rooms'])
-            ->orderBy('start_at', 'asc')
-            ->get();
-
-        $todayExams = [];
-
-        $studentSessions = $studentId && ! empty($studentExamIds)
-            ? ExamSession::whereIn('exam_id', $studentExamIds)
-                ->where('student_id', $studentId)
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->keyBy('exam_id')
-            : collect([]);
-
-        foreach ($examsQuery as $ex) {
-            $start = $ex->start_at ? Carbon::parse($ex->start_at) : null;
-            $end = $ex->end_at ? Carbon::parse($ex->end_at) : null;
-            $isToday = $start ? $start->isToday() : false;
-            $isOngoing = ($start && $end && $now->between($start, $end)) || ($ex->status === 'berlangsung');
-
-            $requiresToken = $ex->rooms->contains(fn ($r) => ! empty($r->token));
-
-            $session = $studentSessions->get($ex->id);
-            $sessionStatus = $session?->status ?? 'belum_mulai';
-
-            $examData = [
-                'id' => $ex->id,
-                'title' => $ex->title,
-                'exam_type' => $ex->exam_type,
-                'subject_name' => $ex->subject?->name,
-                'start_at' => $ex->start_at?->toIso8601String(),
-                'end_at' => $ex->end_at?->toIso8601String(),
-                'duration_min' => $ex->duration_min,
-                'is_today' => $isToday,
-                'is_ongoing' => $isOngoing,
-                'requires_token' => $requiresToken,
-                'session_status' => $sessionStatus,
+            $currentMonthAttendance = [
+                'month' => Carbon::now()->translatedFormat('F Y'),
+                'start_date' => $startOfMonth,
+                'end_date' => $endOfMonth,
+                'total_recorded' => $monthTotal,
+                'hadir' => $monthAtts['hadir'] ?? 0,
+                'izin' => $monthAtts['izin'] ?? 0,
+                'sakit' => $monthAtts['sakit'] ?? 0,
+                'alpa' => $monthAtts['alpa'] ?? 0,
+                'terlambat' => $monthAtts['terlambat'] ?? 0,
+                'rate' => $monthRate,
             ];
 
-            if ($isToday || $isOngoing) {
-                $todayExams[] = $examData;
+            // GAP-C: Jadwal Pelajaran Besok
+            $dayNames = [
+                1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis',
+                5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu',
+            ];
+            $tomorrowDayIso = Carbon::now()->addDay()->dayOfWeekIso;
+            $tomorrowDay = $dayNames[$tomorrowDayIso] ?? 'Senin';
+
+            $tomorrowSchedules = ($activeClass)
+                ? Schedule::where('class_id', $activeClass->id)
+                    ->where('day_of_week', $tomorrowDayIso)
+                    ->with(['subject', 'teacher', 'room', 'timeSlot'])
+                    ->get()
+                : collect([]);
+
+            // Poin Prestasi & Pelanggaran
+            $prestasiPoints = $studentId
+                ? (int) StudentPoint::where('student_id', $studentId)
+                    ->whereHas('pointType', fn ($q) => $q->where('kind', 'prestasi'))
+                    ->join('point_types', 'student_points.point_type_id', '=', 'point_types.id')
+                    ->sum('point_types.points')
+                : 0;
+
+            $pelanggaranPoints = $studentId
+                ? (int) StudentPoint::where('student_id', $studentId)
+                    ->whereHas('pointType', fn ($q) => $q->where('kind', 'pelanggaran'))
+                    ->join('point_types', 'student_points.point_type_id', '=', 'point_types.id')
+                    ->sum('point_types.points')
+                : 0;
+
+            $unreturnedLoans = Loan::where('borrower_id', $user->id)
+                ->whereNull('returned_at')
+                ->count();
+
+            // GAP-C: Ujian Hari Ini & Ujian Mendatang (dengan indikasi kebutuhan token)
+            $now = Carbon::now();
+            $studentExamIds = $studentId
+                ? ExamParticipant::where('student_id', $studentId)->pluck('exam_id')->toArray()
+                : [];
+
+            $examsQuery = Exam::whereIn('id', $studentExamIds)
+                ->whereIn('status', ['dijadwalkan', 'berlangsung', 'published'])
+                ->where('end_at', '>=', $now)
+                ->with(['subject', 'rooms'])
+                ->orderBy('start_at', 'asc')
+                ->get();
+
+            $todayExams = [];
+
+            $studentSessions = $studentId && ! empty($studentExamIds)
+                ? ExamSession::whereIn('exam_id', $studentExamIds)
+                    ->where('student_id', $studentId)
+                    ->orderBy('created_at', 'desc')
+                    ->get()
+                    ->keyBy('exam_id')
+                : collect([]);
+
+            foreach ($examsQuery as $ex) {
+                $start = $ex->start_at ? Carbon::parse($ex->start_at) : null;
+                $end = $ex->end_at ? Carbon::parse($ex->end_at) : null;
+                $isToday = $start ? $start->isToday() : false;
+                $isOngoing = ($start && $end && $now->between($start, $end)) || ($ex->status === 'berlangsung');
+
+                $requiresToken = $ex->rooms->contains(fn ($r) => ! empty($r->token));
+
+                $session = $studentSessions->get($ex->id);
+                $sessionStatus = $session?->status ?? 'belum_mulai';
+
+                $examData = [
+                    'id' => $ex->id,
+                    'title' => $ex->title,
+                    'exam_type' => $ex->exam_type,
+                    'subject_name' => $ex->subject?->name,
+                    'start_at' => $ex->start_at?->toIso8601String(),
+                    'end_at' => $ex->end_at?->toIso8601String(),
+                    'duration_min' => $ex->duration_min,
+                    'is_today' => $isToday,
+                    'is_ongoing' => $isOngoing,
+                    'requires_token' => $requiresToken,
+                    'session_status' => $sessionStatus,
+                ];
+
+                if ($isToday || $isOngoing) {
+                    $todayExams[] = $examData;
+                }
             }
-        }
 
-        return [
-            'student' => [
-                'id' => $student?->id,
-                'name' => $student?->full_name ?? $user->username,
-                'nis' => $student?->nis,
-                'class' => $activeClass?->name,
-            ],
-            'attendance' => [
-                'today_status' => $todayAttendance?->status ?? 'belum_tercatat',
-                'today_note' => $todayAttendance?->note,
-                'rate' => $attendanceRate,
-                'total_recorded' => $totalAtt,
-            ],
-            'current_month_attendance' => $currentMonthAttendance,
-            'tomorrow_day' => $tomorrowDay,
-            'tomorrow_schedules' => $tomorrowSchedules,
-            'points' => [
-                'prestasi' => $prestasiPoints,
-                'pelanggaran' => $pelanggaranPoints,
-                'balance' => $prestasiPoints - $pelanggaranPoints,
-            ],
-            'library' => [
-                'unreturned_loans_count' => $unreturnedLoans,
-            ],
-            'today_exams' => $todayExams,
-            'upcoming_exams' => $examsQuery->take(5)->map(function ($ex) {
-                $item = clone $ex;
-                $item->unsetRelation('rooms');
-                $item->makeHidden(['sync_node_token']);
+            return [
+                'student' => [
+                    'id' => $student?->id,
+                    'name' => $student?->full_name ?? $user->username,
+                    'nis' => $student?->nis,
+                    'class' => $activeClass?->name,
+                ],
+                'attendance' => [
+                    'today_status' => $todayAttendance?->status ?? 'belum_tercatat',
+                    'today_note' => $todayAttendance?->note,
+                    'rate' => $attendanceRate,
+                    'total_recorded' => $totalAtt,
+                ],
+                'current_month_attendance' => $currentMonthAttendance,
+                'tomorrow_day' => $tomorrowDay,
+                'tomorrow_schedules' => $tomorrowSchedules,
+                'points' => [
+                    'prestasi' => $prestasiPoints,
+                    'pelanggaran' => $pelanggaranPoints,
+                    'balance' => $prestasiPoints - $pelanggaranPoints,
+                ],
+                'library' => [
+                    'unreturned_loans_count' => $unreturnedLoans,
+                ],
+                'today_exams' => $todayExams,
+                'upcoming_exams' => $examsQuery->take(5)->map(function ($ex) {
+                    $item = clone $ex;
+                    $item->unsetRelation('rooms');
+                    $item->makeHidden(['sync_node_token']);
 
-                return $item;
-            })->values(),
-            'quick_menus' => [
-                'download_progress_report' => '/api/v1/progress-reports',
-                'exam_cards' => '/api/v1/exams',
-                'points_history' => '/api/v1/student-points',
-            ],
-        ];
+                    return $item;
+                })->values(),
+                'quick_menus' => [
+                    'download_progress_report' => '/api/v1/progress-reports',
+                    'exam_cards' => '/api/v1/exams',
+                    'points_history' => '/api/v1/student-points',
+                ],
+            ];
+        });
     }
 
     /**
@@ -660,119 +668,123 @@ class DashboardService
             }
         }
 
-        $todayAttendance = Attendance::where('student_id', $studentId)->whereDate('att_date', Carbon::today())->first();
+        $cacheKey = "rpt:guardian-dashboard:{$user->id}:{$studentId}:".Carbon::today()->toDateString();
 
-        $attCounts = Attendance::where('student_id', $studentId)
-            ->select('status', DB::raw('count(*) as count'))
-            ->groupBy('status')
-            ->pluck('count', 'status')
-            ->toArray();
+        return Cache::remember($cacheKey, 45, function () use ($studentId, $student) {
+            $todayAttendance = Attendance::where('student_id', $studentId)->whereDate('att_date', Carbon::today())->first();
 
-        $latestGrades = Grade::where('student_id', $studentId)
-            ->with(['component'])
-            ->orderBy('created_at', 'desc')
-            ->limit(5)
-            ->get();
+            $attCounts = Attendance::where('student_id', $studentId)
+                ->select('status', DB::raw('count(*) as count'))
+                ->groupBy('status')
+                ->pluck('count', 'status')
+                ->toArray();
 
-        $prestasiPoints = (int) StudentPoint::where('student_id', $studentId)
-            ->whereHas('pointType', fn ($q) => $q->where('kind', 'prestasi'))
-            ->join('point_types', 'student_points.point_type_id', '=', 'point_types.id')
-            ->sum('point_types.points');
+            $latestGrades = Grade::where('student_id', $studentId)
+                ->with(['component'])
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
 
-        $pelanggaranPoints = (int) StudentPoint::where('student_id', $studentId)
-            ->whereHas('pointType', fn ($q) => $q->where('kind', 'pelanggaran'))
-            ->join('point_types', 'student_points.point_type_id', '=', 'point_types.id')
-            ->sum('point_types.points');
+            $prestasiPoints = (int) StudentPoint::where('student_id', $studentId)
+                ->whereHas('pointType', fn ($q) => $q->where('kind', 'prestasi'))
+                ->join('point_types', 'student_points.point_type_id', '=', 'point_types.id')
+                ->sum('point_types.points');
 
-        // GAP-D: Catatan Karakter Terbaru dari Wali Kelas (Bukan konseling privat!)
-        $latestCharacterNote = CharacterNote::with(['period', 'author'])
-            ->where('student_id', $studentId)
-            ->orderBy('created_at', 'desc')
-            ->orderBy('id', 'desc')
-            ->first();
+            $pelanggaranPoints = (int) StudentPoint::where('student_id', $studentId)
+                ->whereHas('pointType', fn ($q) => $q->where('kind', 'pelanggaran'))
+                ->join('point_types', 'student_points.point_type_id', '=', 'point_types.id')
+                ->sum('point_types.points');
 
-        $characterNoteData = $latestCharacterNote ? [
-            'id' => $latestCharacterNote->id,
-            'period_name' => $latestCharacterNote->period?->month ? 'Bulan ke-'.$latestCharacterNote->period?->month : 'Periode Penilaian',
-            'homeroom_note' => $latestCharacterNote->homeroom_note,
-            'scale_data' => $latestCharacterNote->scale_data,
-            'author_name' => $latestCharacterNote->author?->username,
-            'created_at' => $latestCharacterNote->created_at?->toIso8601String(),
-        ] : null;
+            // GAP-D: Catatan Karakter Terbaru dari Wali Kelas (Bukan konseling privat!)
+            $latestCharacterNote = CharacterNote::with(['period', 'author'])
+                ->where('student_id', $studentId)
+                ->orderBy('created_at', 'desc')
+                ->orderBy('id', 'desc')
+                ->first();
 
-        // GAP-D: Kontak Wali Kelas
-        $activeClass = $student->classes()
-            ->wherePivotNull('left_at')
-            ->whereHas('academicYear', fn ($q) => $q->where('is_active', true))
-            ->first() ?? $student->classes()->wherePivotNull('left_at')->first() ?? $student->classes()->first();
-        $homeroomTeacher = $activeClass?->homeroomTeacher;
-        $homeroomUser = $homeroomTeacher?->user;
-        $homeroomPhone = $homeroomTeacher?->phone ?? $homeroomUser?->phone;
+            $characterNoteData = $latestCharacterNote ? [
+                'id' => $latestCharacterNote->id,
+                'period_name' => $latestCharacterNote->period?->month ? 'Bulan ke-'.$latestCharacterNote->period?->month : 'Periode Penilaian',
+                'homeroom_note' => $latestCharacterNote->homeroom_note,
+                'scale_data' => $latestCharacterNote->scale_data,
+                'author_name' => $latestCharacterNote->author?->username,
+                'created_at' => $latestCharacterNote->created_at?->toIso8601String(),
+            ] : null;
 
-        $homeroomTeacherContact = $homeroomTeacher ? [
-            'teacher_id' => $homeroomTeacher->id,
-            'name' => $homeroomTeacher->full_name,
-            'nip' => $homeroomTeacher->nip,
-            'phone' => $homeroomPhone,
-            'email' => $homeroomUser?->email,
-        ] : null;
+            // GAP-D: Kontak Wali Kelas
+            $activeClass = $student->classes()
+                ->wherePivotNull('left_at')
+                ->whereHas('academicYear', fn ($q) => $q->where('is_active', true))
+                ->first() ?? $student->classes()->wherePivotNull('left_at')->first() ?? $student->classes()->first();
+            $homeroomTeacher = $activeClass?->homeroomTeacher;
+            $homeroomUser = $homeroomTeacher?->user;
+            $homeroomPhone = $homeroomTeacher?->phone ?? $homeroomUser?->phone;
 
-        // GAP-D: Kontak Guru BK (Ditugaskan pada kasus anak atau konselor sekolah)
-        $activeCase = CounselingCase::where('student_id', $studentId)
-            ->with('counselor.teacher')
-            ->whereNotNull('counselor_id')
-            ->first();
+            $homeroomTeacherContact = $homeroomTeacher ? [
+                'teacher_id' => $homeroomTeacher->id,
+                'name' => $homeroomTeacher->full_name,
+                'nip' => $homeroomTeacher->nip,
+                'phone' => $homeroomPhone,
+                'email' => $homeroomUser?->email,
+            ] : null;
 
-        $counselorUser = $activeCase?->counselor
-            ?? User::whereHas('roles', function ($q) {
-                $q->whereIn('code', ['counselor', 'guru_bk', 'bk']);
-            })->with('teacher')->first();
-        $counselorPhone = $counselorUser?->teacher?->phone ?? $counselorUser?->phone;
+            // GAP-D: Kontak Guru BK (Ditugaskan pada kasus anak atau konselor sekolah)
+            $activeCase = CounselingCase::where('student_id', $studentId)
+                ->with('counselor.teacher')
+                ->whereNotNull('counselor_id')
+                ->first();
 
-        $counselorContact = $counselorUser ? [
-            'user_id' => $counselorUser->id,
-            'name' => $counselorUser->teacher?->full_name ?? $counselorUser->username,
-            'phone' => $counselorPhone,
-            'email' => $counselorUser->email,
-        ] : null;
+            $counselorUser = $activeCase?->counselor
+                ?? User::whereHas('roles', function ($q) {
+                    $q->whereIn('code', ['counselor', 'guru_bk', 'bk']);
+                })->with('teacher')->first();
+            $counselorPhone = $counselorUser?->teacher?->phone ?? $counselorUser?->phone;
 
-        return [
-            'student' => [
-                'id' => $student->id,
-                'name' => $student->full_name,
-                'nis' => $student->nis,
-                'class' => $activeClass?->name,
-            ],
-            'attendance_today' => [
-                'status' => $todayAttendance?->status ?? 'belum_tercatat',
-                'note' => $todayAttendance?->note,
-            ],
-            'attendance_summary' => [
-                'hadir' => $attCounts['hadir'] ?? 0,
-                'izin' => $attCounts['izin'] ?? 0,
-                'sakit' => $attCounts['sakit'] ?? 0,
-                'alpa' => $attCounts['alpa'] ?? 0,
-                'terlambat' => $attCounts['terlambat'] ?? 0,
-            ],
-            'latest_grades' => $latestGrades,
-            'character_points' => [
-                'prestasi' => $prestasiPoints,
-                'pelanggaran' => $pelanggaranPoints,
-                'balance' => $prestasiPoints - $pelanggaranPoints,
-            ],
-            'latest_character_note' => $characterNoteData,
-            'homeroom_teacher_contact' => $homeroomTeacherContact,
-            'counselor_contact' => $counselorContact,
-            'payment_administration' => [
-                'status' => 'not_available',
-                'notes' => 'Modul pembayaran/administrasi keuangan saat ini berstatus out-of-scope (menunggu kebijakan sekolah).',
-            ],
-            'quick_actions' => [
-                'download_progress_report_pdf' => '/api/v1/progress-reports',
-                'contact_homeroom_url' => $this->formatWhatsAppUrl($homeroomPhone),
-                'contact_counselor_url' => $this->formatWhatsAppUrl($counselorPhone),
-            ],
-        ];
+            $counselorContact = $counselorUser ? [
+                'user_id' => $counselorUser->id,
+                'name' => $counselorUser->teacher?->full_name ?? $counselorUser->username,
+                'phone' => $counselorPhone,
+                'email' => $counselorUser->email,
+            ] : null;
+
+            return [
+                'student' => [
+                    'id' => $student->id,
+                    'name' => $student->full_name,
+                    'nis' => $student->nis,
+                    'class' => $activeClass?->name,
+                ],
+                'attendance_today' => [
+                    'status' => $todayAttendance?->status ?? 'belum_tercatat',
+                    'note' => $todayAttendance?->note,
+                ],
+                'attendance_summary' => [
+                    'hadir' => $attCounts['hadir'] ?? 0,
+                    'izin' => $attCounts['izin'] ?? 0,
+                    'sakit' => $attCounts['sakit'] ?? 0,
+                    'alpa' => $attCounts['alpa'] ?? 0,
+                    'terlambat' => $attCounts['terlambat'] ?? 0,
+                ],
+                'latest_grades' => $latestGrades,
+                'character_points' => [
+                    'prestasi' => $prestasiPoints,
+                    'pelanggaran' => $pelanggaranPoints,
+                    'balance' => $prestasiPoints - $pelanggaranPoints,
+                ],
+                'latest_character_note' => $characterNoteData,
+                'homeroom_teacher_contact' => $homeroomTeacherContact,
+                'counselor_contact' => $counselorContact,
+                'payment_administration' => [
+                    'status' => 'not_available',
+                    'notes' => 'Modul pembayaran/administrasi keuangan saat ini berstatus out-of-scope (menunggu kebijakan sekolah).',
+                ],
+                'quick_actions' => [
+                    'download_progress_report_pdf' => '/api/v1/progress-reports',
+                    'contact_homeroom_url' => $this->formatWhatsAppUrl($homeroomPhone),
+                    'contact_counselor_url' => $this->formatWhatsAppUrl($counselorPhone),
+                ],
+            ];
+        });
     }
 
     protected function authorizeExecutive(?User $user): void

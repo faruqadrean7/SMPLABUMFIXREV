@@ -41,13 +41,23 @@ class TripService
         return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
-    public function getTrip(string $id): Trip
+    public function getTrip(string $id, ?Request $request = null): Trip
     {
-        return Trip::with([
-            'guideFile',
+        $trip = Trip::with('guideFile')->findOrFail($id);
+        $user = $request?->user();
+
+        if (! $user || $this->isStaffOrAdmin($user) || $user->hasRole('teacher')) {
+            return $trip->load(['participants.student', 'participants.consent.guardian']);
+        }
+
+        // P1-29 Anti-IDOR: Siswa & wali murid hanya boleh melihat partisipasi diri sendiri / anaknya
+        $visibleStudentIds = $this->resolveVisibleStudentIds($user);
+
+        return $trip->load([
+            'participants' => fn ($q) => $q->whereIn('student_id', $visibleStudentIds),
             'participants.student',
             'participants.consent.guardian',
-        ])->findOrFail($id);
+        ]);
     }
 
     public function createTrip(array $data, Request $request): Trip
@@ -111,12 +121,20 @@ class TripService
     // 2. DAFTAR PESERTA PERJALANAN
     // =========================================================================
 
-    public function listParticipants(string $tripId): LengthAwarePaginator
+    public function listParticipants(string $tripId, ?Request $request = null): LengthAwarePaginator
     {
-        return TripParticipant::with(['student', 'consent.guardian'])
+        $user = $request?->user();
+        $query = TripParticipant::with(['student', 'consent.guardian'])
             ->where('trip_id', $tripId)
-            ->orderBy('created_at', 'asc')
-            ->paginate(30);
+            ->orderBy('created_at', 'asc');
+
+        // P1-29 Anti-IDOR: Siswa & wali murid hanya melihat kepesertaan miliknya / anak perwaliannya
+        if ($user && ! $this->isStaffOrAdmin($user) && ! $user->hasRole('teacher')) {
+            $visibleStudentIds = $this->resolveVisibleStudentIds($user);
+            $query->whereIn('student_id', $visibleStudentIds);
+        }
+
+        return $query->paginate(PaginationHelper::clamp($request?->query('per_page'), 30));
     }
 
     public function registerParticipant(array $data, Request $request): TripParticipant
@@ -209,8 +227,7 @@ class TripService
                     throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki akses izin untuk siswa ini.');
                 }
             } else {
-                $child = $guardian->students()->whereHas('studentPoints', function () {})->first()
-                    ?? $guardian->students()->first();
+                $child = $guardian->students()->first();
 
                 if (! $child) {
                     throw new HttpException(422, 'Tidak ada data siswa yang terhubung dengan akun wali ini.');
@@ -220,7 +237,8 @@ class TripService
         }
 
         // Cari participant
-        $participant = TripParticipant::where('trip_id', $trip->id)
+        $participant = TripParticipant::with('student.guardians')
+            ->where('trip_id', $trip->id)
             ->where('student_id', $studentId)
             ->first();
 
@@ -228,10 +246,18 @@ class TripService
             throw new HttpException(422, 'Siswa belum terdaftar dalam daftar peserta perjalanan ini.');
         }
 
+        // P1-29: Dilarang menciptakan record Guardian palsu untuk akun admin/staf
+        $resolvedGuardianId = $guardian?->id
+            ?? $participant->student?->guardians()->orderByPivot('is_primary', 'desc')->first()?->id;
+
+        if (! $resolvedGuardianId) {
+            throw new HttpException(422, 'Siswa belum memiliki data wali murid terdaftar untuk mencatat persetujuan izin.');
+        }
+
         $consent = TripConsent::updateOrCreate(
             ['trip_participant_id' => $participant->id],
             [
-                'guardian_id' => $guardian?->id ?? Guardian::firstOrCreate(['user_id' => $user->id], ['full_name' => $user->username])->id,
+                'guardian_id' => $resolvedGuardianId,
                 'decision' => $data['decision'],
                 'decided_at' => Carbon::now(),
                 'notes' => $data['notes'] ?? null,
@@ -246,6 +272,29 @@ class TripService
     // =========================================================================
     // OTORISASI & AUDIT
     // =========================================================================
+
+    protected function resolveVisibleStudentIds(User $user): array
+    {
+        $ids = [];
+
+        if ($this->isParent($user)) {
+            $guardian = Guardian::where('user_id', $user->id)->first();
+            if ($guardian) {
+                $ids = array_merge($ids, $guardian->students()->pluck('students.id')->all());
+            }
+        }
+
+        if ($this->isStudent($user)) {
+            $studentId = Student::where('user_id', $user->id)->value('id');
+            if ($studentId) {
+                $ids[] = $studentId;
+            }
+        }
+
+        $unique = array_values(array_unique(array_filter($ids)));
+
+        return empty($unique) ? ['00000000-0000-0000-0000-000000000000'] : $unique;
+    }
 
     public function isParent(?User $user): bool
     {
