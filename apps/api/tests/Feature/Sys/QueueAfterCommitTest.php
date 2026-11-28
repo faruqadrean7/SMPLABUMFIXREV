@@ -4,6 +4,7 @@ namespace Tests\Feature\Sys;
 
 use App\Jobs\RecordAuditLogJob;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -35,6 +36,77 @@ class QueueAfterCommitTest extends TestCase
         $this->assertTrue((bool) config('queue.connections.redis.after_commit'));
         $this->assertTrue((bool) config('queue.connections.sqs.after_commit'));
         $this->assertTrue((bool) config('queue.connections.beanstalkd.after_commit'));
+    }
+
+    public function test_p1_39_queue_after_commit_can_be_overridden_to_false_via_environment(): void
+    {
+        $prevGetenv = getenv('QUEUE_AFTER_COMMIT');
+        $hadEnv = array_key_exists('QUEUE_AFTER_COMMIT', $_ENV);
+        $prevEnv = $hadEnv ? $_ENV['QUEUE_AFTER_COMMIT'] : null;
+        $hadServer = array_key_exists('QUEUE_AFTER_COMMIT', $_SERVER);
+        $prevServer = $hadServer ? $_SERVER['QUEUE_AFTER_COMMIT'] : null;
+        $originalConnections = config('queue.connections');
+
+        try {
+            // 1. Verifikasi config/queue.php membaca QUEUE_AFTER_COMMIT=false menjadi boolean false
+            putenv('QUEUE_AFTER_COMMIT=false');
+            $_ENV['QUEUE_AFTER_COMMIT'] = 'false';
+            $_SERVER['QUEUE_AFTER_COMMIT'] = 'false';
+
+            $loaded = require config_path('queue.php');
+
+            $this->assertFalse($loaded['connections']['database']['after_commit']);
+            $this->assertFalse($loaded['connections']['beanstalkd']['after_commit']);
+            $this->assertFalse($loaded['connections']['sqs']['after_commit']);
+            $this->assertFalse($loaded['connections']['redis']['after_commit']);
+
+            // 2. Verifikasi perilaku dispatch mengikuti after_commit=false (langsung tertulis di dalam transaksi sebelum commit)
+            config(['queue.connections.database.after_commit' => false]);
+            $this->app->forgetInstance('queue');
+            $this->app->forgetInstance('queue.connection');
+            Queue::clearResolvedInstances();
+
+            $countDuringTransaction = null;
+            DB::transaction(function () use (&$countDuringTransaction) {
+                RecordAuditLogJob::dispatch([
+                    'action' => 'p1_39.override_false_check',
+                    'entity' => 'QueueProbe',
+                ])->onConnection('database')->onQueue($this->testQueue);
+
+                $countDuringTransaction = DB::table('queue_jobs')
+                    ->where('queue', $this->testQueue)
+                    ->count();
+            });
+
+            $this->assertSame(1, $countDuringTransaction);
+            $this->assertSame(1, DB::table('queue_jobs')->where('queue', $this->testQueue)->count());
+        } finally {
+            if ($prevGetenv === false) {
+                putenv('QUEUE_AFTER_COMMIT');
+            } else {
+                putenv('QUEUE_AFTER_COMMIT='.$prevGetenv);
+            }
+
+            if ($hadEnv) {
+                $_ENV['QUEUE_AFTER_COMMIT'] = $prevEnv;
+            } else {
+                unset($_ENV['QUEUE_AFTER_COMMIT']);
+            }
+
+            if ($hadServer) {
+                $_SERVER['QUEUE_AFTER_COMMIT'] = $prevServer;
+            } else {
+                unset($_SERVER['QUEUE_AFTER_COMMIT']);
+            }
+
+            config(['queue.connections' => $originalConnections]);
+            $this->app->forgetInstance('queue');
+            $this->app->forgetInstance('queue.connection');
+            Queue::clearResolvedInstances();
+        }
+
+        // Pastikan konfigurasi tidak bocor setelah test selesai
+        $this->assertTrue((bool) config('queue.connections.database.after_commit'));
     }
 
     public function test_p1_39_job_is_persisted_only_after_transaction_commits(): void

@@ -57,23 +57,54 @@ jobs:
 
       - name: Backend — PostgreSQL concurrency tests (gerbang wajib)
         working-directory: apps/api
+        shell: bash
         env:
           DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5433
-          DB_DATABASE: sistlabum_concurrency_test
-          DB_USERNAME: postgres
-          DB_PASSWORD: ""
-          PG_CONCURRENCY_HOST: 127.0.0.1
-          PG_CONCURRENCY_PORT: 5433
-          PG_CONCURRENCY_DATABASE: sistlabum_concurrency_test
-          PG_CONCURRENCY_USERNAME: postgres
-          PG_CONCURRENCY_PASSWORD: ""
+          PG_CONCURRENCY_HOST: ${{ vars.PG_CONCURRENCY_HOST || '127.0.0.1' }}
+          PG_CONCURRENCY_PORT: ${{ vars.PG_CONCURRENCY_PORT || '5433' }}
+          PG_CONCURRENCY_USERNAME: ${{ vars.PG_CONCURRENCY_USERNAME || 'postgres' }}
+          PG_CONCURRENCY_PASSWORD: ${{ secrets.PG_CONCURRENCY_PASSWORD }}
           PG_CONCURRENCY_REQUIRED: "true"
         run: |
-          psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS sistlabum_concurrency_test WITH (FORCE);"
-          psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE sistlabum_concurrency_test;"
-          trap 'psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -c "DROP DATABASE IF EXISTS sistlabum_concurrency_test WITH (FORCE);" || true' EXIT
+          set -euo pipefail
+
+          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ ]] || [[ ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]]; then
+            echo "GITHUB_RUN_ID dan GITHUB_RUN_ATTEMPT wajib numerik untuk isolasi database concurrency." >&2
+            exit 1
+          fi
+
+          DB_NAME="sistlabum_conc_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ ! "${DB_NAME}" =~ ^sistlabum_conc_[0-9]+_[0-9]+$ ]]; then
+            echo "Nama database concurrency tidak valid: ${DB_NAME}" >&2
+            exit 1
+          fi
+
+          export PG_CONCURRENCY_DATABASE="${DB_NAME}"
+          export DB_HOST="${PG_CONCURRENCY_HOST}"
+          export DB_PORT="${PG_CONCURRENCY_PORT}"
+          export DB_USERNAME="${PG_CONCURRENCY_USERNAME}"
+          export DB_PASSWORD="${PG_CONCURRENCY_PASSWORD:-}"
+          export DB_DATABASE="${PG_CONCURRENCY_DATABASE}"
+          export PGPASSWORD="${PG_CONCURRENCY_PASSWORD:-}"
+
+          CREATED_CONCURRENCY_DB="false"
+          cleanup() {
+            if [[ "${CREATED_CONCURRENCY_DB}" == "true" ]]; then
+              psql -h "${PG_CONCURRENCY_HOST}" -p "${PG_CONCURRENCY_PORT}" -U "${PG_CONCURRENCY_USERNAME}" -d postgres \
+                -v ON_ERROR_STOP=0 -v target_db="${PG_CONCURRENCY_DATABASE}" <<'SQL' >/dev/null 2>&1 || true
+          SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'target_db' AND pid <> pg_backend_pid();
+          DROP DATABASE :"target_db";
+          SQL
+            fi
+          }
+
+          psql -h "${PG_CONCURRENCY_HOST}" -p "${PG_CONCURRENCY_PORT}" -U "${PG_CONCURRENCY_USERNAME}" -d postgres \
+            -v ON_ERROR_STOP=1 -v target_db="${PG_CONCURRENCY_DATABASE}" <<'SQL'
+          CREATE DATABASE :"target_db";
+          SQL
+          CREATED_CONCURRENCY_DB="true"
+          trap cleanup EXIT
+
           php artisan migrate --force
           php artisan test tests/Feature/Ntf/PostgreSqlConcurrencyTest.php
           php artisan test --testsuite=Concurrency
