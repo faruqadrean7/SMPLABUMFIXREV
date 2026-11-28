@@ -274,4 +274,64 @@ class AuthController extends Controller
             return $this->errorResponse('Gagal mendaftarkan perangkat', 'INTERNAL_ERROR', 500);
         }
     }
+
+    /**
+     * P1-25: Periksa status token aktivasi akun wali/siswa pasca-enroll PPDB.
+     * GET /api/v1/auth/activate-guardian?token=...
+     */
+    public function inspectActivation(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'token' => ['required', 'string', 'max:255'],
+        ], [
+            'token.required' => 'Token aktivasi wajib disertakan.',
+        ]);
+
+        try {
+            $data = $this->authService->inspectActivationToken($validated['token']);
+
+            return $this->successResponse($data);
+        } catch (HttpException $e) {
+            return $this->errorResponse($e->getMessage(), 'NOT_FOUND', $e->getStatusCode());
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorResponse('Terjadi kesalahan saat memeriksa tautan aktivasi akun.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
+    /**
+     * P1-25: Aktivasi akun wali/siswa menggunakan token sekali pakai & setel kata sandi baru.
+     * POST /api/v1/auth/activate-guardian
+     */
+    public function activateGuardian(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'token' => ['required', 'string', 'max:255'],
+            'password' => ['required', 'string', 'min:8', 'max:128', 'confirmed'],
+        ], [
+            'token.required' => 'Token aktivasi wajib disertakan.',
+            'password.required' => 'Kata sandi baru wajib diisi.',
+            'password.min' => 'Kata sandi baru minimal 8 karakter.',
+            'password.confirmed' => 'Konfirmasi kata sandi tidak cocok.',
+        ]);
+
+        try {
+            $data = $this->authService->activateWithToken(
+                $validated['token'],
+                $validated['password'],
+                $request
+            );
+
+            return $this->successResponse($data);
+        } catch (HttpException $e) {
+            $code = $e->getStatusCode() === 404 ? 'NOT_FOUND' : 'BUSINESS_RULE_VIOLATION';
+
+            return $this->errorResponse($e->getMessage(), $code, $e->getStatusCode());
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorResponse('Gagal mengaktifkan akun.', 'INTERNAL_ERROR', 500);
+        }
+    }
 }

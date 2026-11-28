@@ -42,8 +42,8 @@ Route::get('/health', function () {
     ]);
 });
 
-// BE-GRD-03: Verifikasi Dokumen Publik via Token QR
-Route::get('/public/verify/{token}', [PublicVerificationController::class, 'verify']);
+// BE-GRD-03 & P1-25: Verifikasi Dokumen & Bukti PPDB Publik via Token QR
+Route::get('/public/verify/{token}', [PublicVerificationController::class, 'verify'])->middleware('throttle:30,1');
 
 // =========================================================================
 // BE-FILE-01: Signed Upload & Signed Download Routes
@@ -60,6 +60,8 @@ Route::prefix('auth')->group(function () {
     Route::post('/refresh', [AuthController::class, 'refresh'])->middleware('throttle:30,5');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,15');
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:60,1');
+    Route::get('/activate-guardian', [AuthController::class, 'inspectActivation'])->middleware('throttle:30,5');
+    Route::post('/activate-guardian', [AuthController::class, 'activateGuardian'])->middleware('throttle:10,5');
 
     // P1-06: Endpoint 2FA/TOTP dinonaktifkan secara konsisten (410 Gone) sesuai AGENTS.md §6.11
     Route::post('/2fa/setup', [TwoFactorAuthController::class, 'disabled']);

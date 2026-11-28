@@ -489,24 +489,47 @@ class ReportService
     {
         $output = fopen('php://temp', 'r+');
 
-        // Ringkasan Laporan
+        // UTF-8 BOM agar Excel membaca karakter UTF-8 dengan benar
+        fwrite($output, "\xEF\xBB\xBF");
+
+        // Ringkasan Laporan (sanitasi CSV formula injection)
         fputcsv($output, ['=== LAPORAN REKAPITULASI: '.strtoupper($type).' ===']);
         fputcsv($output, ['Dicetak Pada', Carbon::now()->toDateTimeString()]);
+
+        $totalInSummary = $summary['total_records']
+            ?? $summary['total_grades']
+            ?? $summary['total_applicants']
+            ?? $summary['total_events']
+            ?? $summary['total_tickets']
+            ?? $summary['total_loans']
+            ?? count($rows);
+
+        if ((int) $totalInSummary > count($rows)) {
+            fputcsv($output, [
+                'PERINGATAN PEMOTONGAN',
+                'Data ekspor dibatasi maksimal '.count($rows)." dari {$totalInSummary} total baris. Gunakan filter periode/kelas untuk data lengkap.",
+            ]);
+        }
+
         foreach ($summary as $key => $val) {
             if (is_array($val)) {
                 $val = json_encode($val);
             }
-            fputcsv($output, [ucwords(str_replace('_', ' ', $key)), $val]);
+            fputcsv($output, [
+                $this->sanitizeCsvCell(ucwords(str_replace('_', ' ', $key))),
+                $this->sanitizeCsvCell($val),
+            ]);
         }
         fputcsv($output, []); // Baris kosong
 
         // Rincian Data
         if (! empty($rows)) {
             $headers = array_keys($rows[0]);
-            fputcsv($output, array_map(fn ($h) => strtoupper(str_replace('_', ' ', $h)), $headers));
+            fputcsv($output, array_map(fn ($h) => $this->sanitizeCsvCell(strtoupper(str_replace('_', ' ', $h))), $headers));
 
             foreach ($rows as $row) {
-                fputcsv($output, array_values($row));
+                $sanitizedRow = array_map(fn ($cell) => $this->sanitizeCsvCell($cell), array_values($row));
+                fputcsv($output, $sanitizedRow);
             }
         } else {
             fputcsv($output, ['Tidak ada data rincian untuk periode ini.']);
@@ -517,6 +540,32 @@ class ReportService
         fclose($output);
 
         return $csv ?: '';
+    }
+
+    /**
+     * Cegah CSV Formula Injection dengan menambahkan awalan apostrof pada sel berbahaya.
+     */
+    protected function sanitizeCsvCell(mixed $value): mixed
+    {
+        if ($value === null || is_int($value) || is_float($value) || is_bool($value)) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            $value = json_encode($value);
+        }
+
+        $str = (string) $value;
+        if ($str === '') {
+            return '';
+        }
+
+        // Karakter formula Excel/Calc (=, +, -, @, tab, CR); kecualikan angka negatif murni
+        if (preg_match('/^[=+\-@\t\r]/', $str) === 1 && preg_match('/^-\d+(?:\.\d+)?$/', $str) !== 1) {
+            return "'".$str;
+        }
+
+        return $str;
     }
 
     public function isStaffOrAdmin(?User $user): bool

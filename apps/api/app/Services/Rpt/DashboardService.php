@@ -156,10 +156,13 @@ class DashboardService
                 'completion_rate' => $gradingCompletionRate,
             ];
 
-            // D. Rerata Nilai per Angkatan / Tingkat
+            // D. Rerata Nilai per Angkatan / Tingkat (hanya kelas aktif agar siswa naik kelas tidak dihitung ganda)
             $gradesByLevelQuery = DB::table('grades')
                 ->join('students', 'grades.student_id', '=', 'students.id')
-                ->join('class_students', 'students.id', '=', 'class_students.student_id')
+                ->join('class_students', function ($join) {
+                    $join->on('students.id', '=', 'class_students.student_id')
+                        ->whereNull('class_students.left_at');
+                })
                 ->join('classes', 'class_students.class_id', '=', 'classes.id')
                 ->join('grade_levels', 'classes.grade_level_id', '=', 'grade_levels.id')
                 ->select('grade_levels.id as grade_level_id', 'grade_levels.name', 'grade_levels.sort_order', DB::raw('avg(grades.value) as avg_value'), DB::raw('count(grades.id) as count'));
@@ -196,11 +199,12 @@ class DashboardService
                 'recent_violations_count' => $recentViolations,
             ];
 
-            // F. Status Sarpras Kritis
-            $ticketsQuery = Ticket::where(function ($q) {
-                $q->where('priority', 'darurat')
-                    ->orWhere(fn ($sub) => $sub->where('priority', 'tinggi')->where('status', 'pending'));
-            });
+            // F. Status Sarpras Kritis (abaikan tiket yang sudah selesai/ditolak)
+            $ticketsQuery = Ticket::whereNotIn('status', ['selesai', 'ditolak', 'closed', 'resolved'])
+                ->where(function ($q) {
+                    $q->where('priority', 'darurat')
+                        ->orWhere(fn ($sub) => $sub->where('priority', 'tinggi')->where('status', 'pending'));
+                });
             $assetsQuery = Asset::where('asset_condition', 'rusak_berat');
             if ($schoolId) {
                 $ticketsQuery->where('school_id', $schoolId);
@@ -215,7 +219,7 @@ class DashboardService
             ];
 
             // G. Master Data & Pending Verifications Summary (Untuk ADM-DASH-01 & ADM-DASH-02)
-            $studentsQuery = Student::query();
+            $studentsQuery = Student::query()->whereIn('status', ['aktif', 'active']);
             $teachersQuery = Teacher::query();
             $classesQuery = SchoolClass::query();
             if ($schoolId) {
@@ -225,7 +229,7 @@ class DashboardService
             }
 
             $pendingAchievements = Achievement::where('verification_status', 'pending');
-            $pendingBookings = Booking::where('status', 'menunggu');
+            $pendingBookings = Booking::where('status', 'diajukan');
             if ($schoolId) {
                 $pendingAchievements->whereHas('student', fn ($q) => $q->where('school_id', $schoolId));
                 $pendingBookings->whereHas('facility', fn ($q) => $q->where('school_id', $schoolId));

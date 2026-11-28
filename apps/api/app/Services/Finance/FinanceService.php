@@ -500,6 +500,45 @@ class FinanceService
                 actor: $verifier
             );
 
+            // P1-26: Kirim notifikasi pembatalan pembayaran yang telah terverifikasi ke pengaju, siswa, & wali
+            $lockedPayment->loadMissing(['submittedBy']);
+            $invoice->loadMissing(['student.user', 'student.guardians.user']);
+            $nominalFormatted = number_format($lockedPayment->amount, 0, ',', '.');
+            $notifTitle = "Pembayaran Dibatalkan (Void): Tagihan {$invoice->invoice_number}";
+            $notifBody = "Pembayaran sebesar Rp {$nominalFormatted} untuk tagihan {$invoice->invoice_number} telah dibatalkan (void) oleh bendahara. Alasan: {$reason}";
+            $notifData = [
+                'payment_id' => $lockedPayment->id,
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'status' => 'void',
+                'reason' => $reason,
+            ];
+
+            $recipientUserIds = collect();
+            if ($lockedPayment->submittedBy) {
+                $recipientUserIds->push($lockedPayment->submittedBy->id);
+            }
+            if ($invoice->student?->user) {
+                $recipientUserIds->push($invoice->student->user->id);
+            }
+            if ($invoice->student?->guardians) {
+                foreach ($invoice->student->guardians as $guardian) {
+                    if ($guardian->user) {
+                        $recipientUserIds->push($guardian->user->id);
+                    }
+                }
+            }
+
+            foreach ($recipientUserIds->filter()->unique() as $recipientUserId) {
+                Notification::create([
+                    'user_id' => $recipientUserId,
+                    'notif_type' => 'finance_payment',
+                    'title' => $notifTitle,
+                    'body' => $notifBody,
+                    'data' => $notifData,
+                ]);
+            }
+
             return $lockedPayment->fresh(['invoice']);
         });
     }
