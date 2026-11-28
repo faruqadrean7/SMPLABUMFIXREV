@@ -15,6 +15,7 @@ class UpdateSubjectRequest extends BaseApiRequest
             'code' => ['nullable', 'string', 'max:30', Rule::unique('subjects', 'code')->whereNull('deleted_at')->ignore($id)],
             'name' => ['nullable', 'string', 'max:150'],
             'subject_group' => ['nullable', 'string', 'max:50'],
+            'kktp' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
 

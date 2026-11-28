@@ -583,17 +583,18 @@ export function ProgressReportModal({
                 <span>Pengesahan Digital Dokumen:</span>
               </div>
               <p className="text-slate-600 text-[11px]">
-                Kepala Sekolah: <span className="font-semibold text-slate-800">{report?.approver?.name || report?.approver?.username || 'Drs. H. Mulyani, M.Pd.'}</span>
+                Kepala Sekolah: <span className="font-semibold text-slate-800">{report?.approver?.name || report?.approver?.username || 'Menunggu Pengesahan'}</span>
               </p>
               <p className="text-slate-500 text-[10px]">
                 Waktu Dokumen Dibuat: {snapshot.generated_at ? new Date(snapshot.generated_at).toLocaleString('id-ID') : '-'}
               </p>
               {report?.verify_token && (
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2 pt-1 print:hidden">
                   <span className="font-mono text-[10px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                     Token: {report.verify_token.substring(0, 16)}...
                   </span>
                   <button
+                    type="button"
                     onClick={handleCopyVerifyUrl}
                     className="inline-flex items-center gap-1 text-[10px] text-emerald-700 hover:text-emerald-800 font-semibold"
                   >
@@ -606,18 +607,31 @@ export function ProgressReportModal({
 
             <div className="flex justify-end items-center gap-3">
               <div className="text-right text-[11px] text-slate-500 leading-tight">
-                <span className="font-bold text-slate-900 block">SMP-SMA Laboratorium UM</span>
-                <span>Malang, Jawa Timur</span>
+                <span className="font-bold text-slate-900 block">{snapshot?.school_name || 'SMP Laboratorium UM'}</span>
+                <span>Dokumen Akademik Resmi</span>
                 <span className="block text-[10px] text-emerald-700 font-semibold mt-0.5">
-                  Tanda Tangan QR Sah &amp; Terverifikasi
+                  {status === 'disetujui' || status === 'terbit' ? 'Tanda Tangan QR Sah & Terverifikasi' : 'Menunggu Pengesahan QR'}
                 </span>
               </div>
-              <div className="h-16 w-16 rounded-lg border-2 border-slate-900 bg-slate-50 flex flex-col items-center justify-center p-1 text-center shrink-0">
-                <ShieldCheck className="h-6 w-6 text-emerald-600" />
-                <span className="text-[8px] font-extrabold text-slate-900 leading-none mt-1">
-                  QR VERIFIED
-                </span>
-              </div>
+              {report?.verify_token ? (
+                <a
+                  href={`/verifikasi/${report.verify_token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-16 w-16 rounded-lg border-2 border-slate-900 bg-slate-50 flex flex-col items-center justify-center p-1 text-center shrink-0 hover:bg-slate-100"
+                  title="Buka halaman verifikasi QR resmi"
+                >
+                  <ShieldCheck className="h-6 w-6 text-emerald-600" />
+                  <span className="text-[8px] font-extrabold text-slate-900 leading-none mt-1">
+                    QR VERIFIKASI
+                  </span>
+                </a>
+              ) : (
+                <div className="h-16 w-16 rounded-lg border-2 border-slate-300 bg-slate-50 flex flex-col items-center justify-center p-1 text-center shrink-0">
+                  <Clock className="h-5 w-5 text-slate-400" />
+                  <span className="text-[8px] font-bold text-slate-500 leading-none mt-1">PRATINJAU</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

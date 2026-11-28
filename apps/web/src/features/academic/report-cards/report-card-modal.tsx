@@ -173,10 +173,10 @@ export function ReportCardModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-4 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-gray-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-4 backdrop-blur-xs overflow-y-auto print:static print:bg-white print:p-0">
+      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-gray-200 print:max-w-none print:max-h-none print:shadow-none print:border-none">
         {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50/80 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50/80 px-6 py-4 print:hidden">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700 font-bold">
               <FileCheck2 className="h-5 w-5" />
@@ -317,7 +317,9 @@ export function ReportCardModal({
                 <BookOpen className="h-4 w-4 text-blue-600" />
                 A. Nilai Hasil Belajar &amp; Deskripsi Capaian Kompetensi
               </h3>
-              <span className="text-[11px] text-gray-500">Ambang KKTP: 75.0</span>
+              <span className="text-[11px] text-gray-500">
+                Ambang KKTP Default: 75.0 (sesuai mapel)
+              </span>
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -328,7 +330,7 @@ export function ReportCardModal({
                     <th className="px-3 py-2 w-24">Kode</th>
                     <th className="px-3 py-2 w-48">Mata Pelajaran</th>
                     <th className="px-3 py-2 w-20 text-center">Nilai Akhir</th>
-                    <th className="px-3 py-2 w-24 text-center">Status</th>
+                    <th className="px-3 py-2 w-28 text-center">Predikat &amp; KKTP</th>
                     <th className="px-3 py-2">Capaian Pembelajaran (Kurikulum Merdeka)</th>
                   </tr>
                 </thead>
@@ -356,12 +358,15 @@ export function ReportCardModal({
                         <td className="px-3 py-2 text-center">
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                              sub.level === 'tuntas'
+                              sub.predicate_level === 'sangat_baik' || sub.predicate_level === 'baik' || sub.level === 'tuntas'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                                 : 'bg-rose-50 text-rose-700 border-rose-300'
                             }`}
                           >
-                            {sub.level === 'tuntas' ? 'Tuntas' : 'Perlu Bimbingan'}
+                            {sub.predicate_label || (sub.level === 'tuntas' ? 'Tuntas' : 'Perlu Bimbingan')}
+                          </span>
+                          <span className="block text-[10px] text-gray-400 mt-0.5">
+                            KKTP {sub.kktp ?? 75}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-gray-700 text-xs leading-relaxed">
@@ -476,8 +481,9 @@ export function ReportCardModal({
                     {report.verify_token}
                   </div>
                   <button
+                    type="button"
                     onClick={handleCopyToken}
-                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800"
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 print:hidden"
                   >
                     {copiedToken ? (
                       <>
@@ -500,7 +506,15 @@ export function ReportCardModal({
             {/* Tanda Tangan Kepala Sekolah */}
             <div className="space-y-12">
               <p className="text-gray-500">
-                Kota Malang, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br />
+                Kota Malang,{' '}
+                {report?.updated_at || snapshot?.generated_at
+                  ? new Date((report?.updated_at ?? snapshot.generated_at) as string).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })
+                  : 'Tanggal Penerbitan Resmi'}
+                <br />
                 Kepala Sekolah
               </p>
               <div>
@@ -513,14 +527,14 @@ export function ReportCardModal({
                 )}
               </div>
               <p className="font-semibold text-gray-800 text-xs">
-                {report?.approver?.name || report?.approver?.username || 'Kepala Sekolah Labschool UM'}
+                {report?.approver?.name || report?.approver?.username || 'Menunggu Pengesahan Kepala Sekolah'}
               </p>
             </div>
           </div>
         </div>
 
         {/* Modal Footer Toolbar */}
-        <div className="flex flex-wrap items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-3 gap-3">
+        <div className="flex flex-wrap items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-3 gap-3 print:hidden">
           <div className="flex items-center gap-2">
             {!report && onGenerateFromPreview && (
               <Button

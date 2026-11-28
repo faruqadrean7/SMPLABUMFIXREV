@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\AuditLog;
 use App\Models\CharacterNote;
 use App\Models\ClassStudent;
+use App\Models\File;
 use App\Models\Grade;
 use App\Models\GradePeriod;
 use App\Models\Guardian;
@@ -16,11 +17,13 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Services\Academic\AttendanceAggregator;
+use App\Services\Academic\ReportPdfRenderer;
 use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -317,6 +320,7 @@ class ProgressReportService
         $oldStatus = $report->status;
 
         $report->status = $newStatus;
+        $report->file_id = null;
         if (in_array($newStatus, ['disetujui', 'terbit'])) {
             $report->approved_by = $currentUser->id;
         } else {
@@ -382,6 +386,7 @@ class ProgressReportService
             foreach ($reports as $report) {
                 $oldStatus = $report->status;
                 $report->status = $newStatus;
+                $report->file_id = null;
 
                 if (in_array($newStatus, ['disetujui', 'terbit'])) {
                     $report->approved_by = $currentUser->id;
@@ -598,10 +603,38 @@ class ProgressReportService
      */
     public function downloadPdf(string $id, Request $request): Response
     {
-        $report = ProgressReport::with(['student.classes', 'period.semester.academicYear', 'approver'])->findOrFail($id);
+        $report = ProgressReport::with(['student.classes', 'period.semester.academicYear', 'approver', 'file'])->findOrFail($id);
         $this->authorizeAccess($report, $request);
 
-        $pdfBinary = $this->buildPdfContent($report);
+        $isImmutable = in_array($report->status, ['disetujui', 'terbit'], true);
+        $pdfBinary = null;
+
+        if ($isImmutable && $report->file && Storage::disk('local')->exists($report->file->object_key)) {
+            $pdfBinary = Storage::disk('local')->get($report->file->object_key);
+        }
+
+        if (! is_string($pdfBinary) || $pdfBinary === '') {
+            $pdfBinary = $this->buildPdfContent($report);
+
+            if ($isImmutable) {
+                $objectKey = "reports/progress_reports/{$report->id}_{$report->status}.pdf";
+                Storage::disk('local')->put($objectKey, $pdfBinary);
+
+                $file = File::create([
+                    'school_id' => $report->student?->school_id,
+                    'owner_id' => $report->student_id,
+                    'owner_type' => Student::class,
+                    'bucket' => 'local',
+                    'object_key' => $objectKey,
+                    'mime_type' => 'application/pdf',
+                    'size_bytes' => strlen($pdfBinary),
+                    'visibility' => 'privat',
+                    'checksum' => hash('sha256', $pdfBinary),
+                ]);
+
+                $report->forceFill(['file_id' => $file->id])->saveQuietly();
+            }
+        }
 
         return response($pdfBinary, 200, [
             'Content-Type' => 'application/pdf',
@@ -692,123 +725,11 @@ class ProgressReportService
     }
 
     /**
-     * Buat konten file PDF standar %PDF-1.4 1 halaman.
+     * Buat konten file PDF resmi E-Progress Report menggunakan DomPDF & Blade A4.
      */
     protected function buildPdfContent(ProgressReport $report): string
     {
-        $snapshot = $report->data_snapshot ?? [];
-        $student = $snapshot['student'] ?? [];
-        $period = $snapshot['period'] ?? [];
-        $att = $snapshot['attendance'] ?? [];
-        $char = $snapshot['character'] ?? [];
-        $grades = $snapshot['grades'] ?? [];
-
-        $verifyUrl = url('/api/v1/public/verify/'.$report->verify_token);
-
-        // Siapkan baris teks untuk PDF
-        $lines = [
-            'PORTAL SEKOLAH SATU PINTU SISTLABUM',
-            '========================================================================',
-            'E-PROGRESS REPORT BULANAN',
-            '',
-            'Nama Siswa    : '.($student['full_name'] ?? '-'),
-            'NIS / NISN    : '.($student['nis'] ?? '-').' / '.($student['nisn'] ?? '-'),
-            'Kelas         : '.($student['class_name'] ?? '-'),
-            'Periode Bulan : '.($period['month'] ?? '-').' ('.($period['semester_name'] ?? '-').')',
-            '------------------------------------------------------------------------',
-            'RINGKASAN NILAI MATA PELAJARAN:',
-        ];
-
-        foreach ($grades as $g) {
-            $lines[] = sprintf(' - %-30s : Skor Akhir = %s', ($g['subject_name'] ?? 'Mapel'), ($g['final_score'] ?? 0));
-        }
-
-        $lines[] = '------------------------------------------------------------------------';
-        $lines[] = sprintf('PRESENSI BULANAN : Hadir %d | Sakit %d | Izin %d | Alpa %d (Kehadiran: %s%%)',
-            $att['hadir'] ?? 0,
-            $att['sakit'] ?? 0,
-            $att['izin'] ?? 0,
-            $att['alpa'] ?? 0,
-            $att['percentage'] ?? 0
-        );
-        $lines[] = '------------------------------------------------------------------------';
-        $lines[] = 'DIMENSI KARAKTER (PROFIL PELAJAR PANCASILA):';
-        if (! empty($char['scale_data']) && is_array($char['scale_data'])) {
-            $dimPairs = [];
-            foreach ($char['scale_data'] as $dim => $val) {
-                $dimLabel = ucwords(str_replace('_', ' ', $dim));
-                $valLabel = is_string($val) ? ucwords(str_replace('_', ' ', $val)) : (string) $val;
-                $dimPairs[] = "{$dimLabel}: {$valLabel}";
-            }
-            foreach (array_chunk($dimPairs, 2) as $pairChunk) {
-                $lines[] = ' - '.implode(' | ', $pairChunk);
-            }
-        } else {
-            $lines[] = ' - Belum ada catatan dimensi karakter';
-        }
-        $lines[] = '------------------------------------------------------------------------';
-        $note = $char['homeroom_note'] ?? '-';
-        $lines[] = 'CATATAN WALI KELAS:';
-        $wrapped = wordwrap($note, 70, "\n");
-        foreach (explode("\n", $wrapped) as $noteLine) {
-            $lines[] = '   '.$noteLine;
-        }
-        $lines[] = '========================================================================';
-        $lines[] = 'STATUS PENGESAHAN : '.strtoupper($report->status);
-        $lines[] = 'KEPALA SEKOLAH    : '.($report->approver?->name ?? 'Kepala Sekolah');
-        $lines[] = 'KODE VERIFIKASI QR: '.$report->verify_token;
-        $lines[] = 'URL VERIFIKASI    : '.$verifyUrl;
-        $lines[] = '========================================================================';
-
-        $pagesLines = array_chunk($lines, 48);
-        if (empty($pagesLines)) {
-            $pagesLines = [[]];
-        }
-        $numPages = count($pagesLines);
-
-        $objects = [];
-        $objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-        $kids = [];
-        for ($k = 0; $k < $numPages; $k++) {
-            $kids[] = (4 + 2 * $k).' 0 R';
-        }
-        $objects[2] = '<< /Type /Pages /Kids ['.implode(' ', $kids).'] /Count '.$numPages.' >>';
-        $objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>';
-
-        for ($k = 0; $k < $numPages; $k++) {
-            $pageObjId = 4 + 2 * $k;
-            $contentObjId = 5 + 2 * $k;
-
-            $textStream = "BT\n/F1 10 Tf\n50 780 Td\n15 TL\n";
-            foreach ($pagesLines[$k] as $line) {
-                $sanitized = str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $line);
-                $textStream .= "({$sanitized}) '\n";
-            }
-            $textStream .= "ET\n";
-            $streamLen = strlen($textStream);
-
-            $objects[$pageObjId] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents '.$contentObjId.' 0 R /Resources << /Font << /F1 3 0 R >> >> >>';
-            $objects[$contentObjId] = "<< /Length {$streamLen} >>\nstream\n{$textStream}endstream";
-        }
-
-        $pdf = "%PDF-1.4\n";
-        $offsets = [0 => 0];
-        $totalObjs = count($objects);
-        for ($i = 1; $i <= $totalObjs; $i++) {
-            $offsets[$i] = strlen($pdf);
-            $pdf .= "{$i} 0 obj\n{$objects[$i]}\nendobj\n";
-        }
-
-        $xrefOffset = strlen($pdf);
-        $pdf .= "xref\n0 ".($totalObjs + 1)."\n";
-        $pdf .= "0000000000 65535 f \n";
-        for ($i = 1; $i <= $totalObjs; $i++) {
-            $pdf .= sprintf("%010d 00000 n \n", $offsets[$i]);
-        }
-        $pdf .= "trailer\n<< /Size ".($totalObjs + 1)." /Root 1 0 R >>\n";
-        $pdf .= "startxref\n".$xrefOffset."\n%%EOF\n";
-
-        return $pdf;
+        return app(ReportPdfRenderer::class)->renderProgressReport($report);
     }
 
     /**

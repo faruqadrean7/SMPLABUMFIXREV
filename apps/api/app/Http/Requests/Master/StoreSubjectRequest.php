@@ -13,6 +13,7 @@ class StoreSubjectRequest extends BaseApiRequest
             'code' => ['required', 'string', 'max:30', Rule::unique('subjects', 'code')->whereNull('deleted_at')],
             'name' => ['required', 'string', 'max:150'],
             'subject_group' => ['required', 'string', 'max:50'],
+            'kktp' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
 

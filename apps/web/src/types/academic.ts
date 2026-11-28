@@ -1432,12 +1432,21 @@ export const REPORT_CARD_STATUS_COLORS: Record<ReportCardStatus, string> = {
   terbit: 'bg-emerald-100 text-emerald-800 border-emerald-300',
 };
 
-export type ReportDescriptionLevel = 'tuntas' | 'belum';
+export type ReportDescriptionLevel =
+  | 'sangat_baik'
+  | 'baik'
+  | 'cukup'
+  | 'perlu_bimbingan'
+  | 'tuntas'
+  | 'belum';
 
 export interface ReportDescriptionTemplateItem {
   id: string;
   subject_id: string;
   level: ReportDescriptionLevel;
+  kktp_threshold?: number | null;
+  min_score?: number | null;
+  max_score?: number | null;
   template_text: string;
   created_at?: string;
   updated_at?: string;
@@ -1446,6 +1455,7 @@ export interface ReportDescriptionTemplateItem {
     code: string;
     name: string;
     subject_group?: string;
+    kktp?: number | null;
   } | null;
 }
 
@@ -1459,6 +1469,9 @@ export interface ReportDescriptionTemplateFilters {
 export interface StoreReportDescriptionTemplatePayload {
   subject_id: string;
   level: ReportDescriptionLevel;
+  kktp_threshold?: number | null;
+  min_score?: number | null;
+  max_score?: number | null;
   template_text: string;
 }
 
@@ -1468,7 +1481,12 @@ export interface ReportCardSubjectSummary {
   subject_name: string;
   subject_group?: string;
   final_score: number;
+  kktp?: number;
   level: ReportDescriptionLevel;
+  predicate_level?: 'sangat_baik' | 'baik' | 'cukup' | 'perlu_bimbingan';
+  predicate_label?: string;
+  highest_topic?: string;
+  lowest_topic?: string;
   competency_description: string;
 }
 

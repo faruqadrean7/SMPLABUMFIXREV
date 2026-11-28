@@ -16,8 +16,20 @@ class ReportDescriptionTemplate extends Model
     protected $fillable = [
         'subject_id',
         'level',
+        'kktp_threshold',
+        'min_score',
+        'max_score',
         'template_text',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'kktp_threshold' => 'float',
+            'min_score' => 'float',
+            'max_score' => 'float',
+        ];
+    }
 
     public function subject(): BelongsTo
     {
