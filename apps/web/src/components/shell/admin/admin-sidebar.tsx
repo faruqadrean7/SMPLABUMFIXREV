@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
@@ -99,6 +99,14 @@ const ICON_MAP: Record<string, React.ElementType> = {
   AlertCircle,
 };
 
+function isNavItemActive(item: NavItem, pathname: string): boolean {
+  if (pathname === item.href) return true;
+  if (item.children?.some((child) => pathname === child.href || pathname.startsWith(child.href + '/'))) {
+    return true;
+  }
+  return Boolean(item.children?.length && pathname.startsWith(item.href + '/'));
+}
+
 export function AdminSidebar({
   isOpen,
   onClose,
@@ -108,9 +116,34 @@ export function AdminSidebar({
 }) {
   const pathname = usePathname();
   const { user } = useAuth();
-  const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({
-    'Master Data': true,
+
+  const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = { 'Master Data': true };
+    for (const section of ADMIN_NAV_SECTIONS) {
+      for (const item of section.items) {
+        if (item.children?.length && isNavItemActive(item, pathname)) {
+          initial[item.title] = true;
+        }
+      }
+    }
+    return initial;
   });
+
+  useEffect(() => {
+    setOpenSubmenus((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const section of ADMIN_NAV_SECTIONS) {
+        for (const item of section.items) {
+          if (item.children?.length && isNavItemActive(item, pathname) && !next[item.title]) {
+            next[item.title] = true;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [pathname]);
 
   const toggleSubmenu = (title: string) => {
     setOpenSubmenus((prev) => ({
@@ -185,7 +218,7 @@ export function AdminSidebar({
                 {visibleItems.map((item) => {
                   const hasChildren = item.children && item.children.length > 0;
                   const isSubmenuOpen = openSubmenus[item.title];
-                  const isActive = pathname === item.href || (hasChildren && pathname.startsWith(item.href + '/'));
+                  const isActive = isNavItemActive(item, pathname);
 
                   if (hasChildren) {
                     const visibleChildren = item.children!.filter(isItemVisible);

@@ -27,7 +27,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         title: 'Dashboard Eksekutif',
         href: '/admin/executive',
         icon: 'Activity',
-        permission: ['executive.dashboard.view', 'reports.view'],
+        permission: ['executive.dashboard.view', 'dashboard.executive'],
       },
       {
         title: 'Antrean Persetujuan',
@@ -51,10 +51,11 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
           'master.class.manage',
         ],
         children: [
+          { title: 'Ringkasan Master Data', href: '/admin/master', icon: 'Database', permission: ['master.academic_year.manage', 'master.student.read', 'master.teacher.manage', 'master.class.manage'] },
           { title: 'Tahun Ajaran & Semester', href: '/admin/master/academic-years', icon: 'Calendar', permission: 'master.academic_year.manage' },
           { title: 'Data Siswa', href: '/admin/master/students', icon: 'Users', permission: 'master.student.read' },
           { title: 'Data Guru', href: '/admin/master/teachers', icon: 'GraduationCap', permission: 'master.teacher.manage' },
-          { title: 'Data Wali Murid', href: '/admin/master/guardians', icon: 'UserCheck', permission: 'master.guardian.manage' },
+          { title: 'Data Wali Murid', href: '/admin/master/guardians', icon: 'UserCheck', permission: ['master.student.read', 'master.student.write'] },
           { title: 'Rombel & Kelas', href: '/admin/master/classes', icon: 'Layers', permission: 'master.class.manage' },
           { title: 'Mata Pelajaran', href: '/admin/master/subjects', icon: 'BookOpen', permission: 'master.subject.manage' },
         ],
@@ -65,6 +66,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         icon: 'CalendarDays',
         permission: ['academic.schedule.manage', 'academic.journal.write', 'academic.attendance.write'],
         children: [
+          { title: 'Ringkasan KBM & Jadwal', href: '/admin/academic', icon: 'CalendarDays', permission: ['academic.schedule.manage', 'academic.journal.write', 'academic.attendance.write'] },
           { title: 'Jadwal Pelajaran', href: '/admin/academic/schedules', icon: 'Clock', permission: 'academic.schedule.manage' },
           { title: 'Jurnal Mengajar Guru', href: '/admin/academic/journals', icon: 'BookMarked', permission: 'academic.journal.write' },
           { title: 'Presensi KBM Harian', href: '/admin/academic/attendance', icon: 'UserCheck', permission: 'academic.attendance.write' },
@@ -78,9 +80,10 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         title: 'Nilai & E-Rapor',
         href: '/admin/academic/grades',
         icon: 'Award',
-        permission: ['academic.grade.write', 'academic.report.generate'],
+        permission: ['academic.grade.read', 'academic.grade.write', 'academic.report.generate', 'student.point.write', 'academic.journal.write'],
         children: [
-          { title: 'Buku Nilai Mata Pelajaran', href: '/admin/academic/grades', icon: 'FileSpreadsheet', permission: 'academic.grade.write' },
+          { title: 'Buku Nilai Mata Pelajaran', href: '/admin/academic/grades', icon: 'FileSpreadsheet', permission: ['academic.grade.read', 'academic.grade.write'] },
+          { title: 'Catatan Karakter Siswa', href: '/admin/academic/character-notes', icon: 'FileText', permission: ['student.point.write', 'academic.journal.write'] },
           { title: 'Progress Report Bulanan', href: '/admin/academic/progress-reports', icon: 'FileText', permission: 'academic.report.generate' },
           { title: 'Cetak E-Rapor Semester', href: '/admin/academic/report-cards', icon: 'Printer', permission: 'academic.report.generate' },
         ],
@@ -89,11 +92,12 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         title: 'Ujian Komputer (CBT)',
         href: '/admin/cbt',
         icon: 'MonitorCheck',
-        permission: ['cbt.bank.write', 'cbt.exam.manage', 'cbt.exam.read'],
+        permission: ['cbt.bank.write', 'cbt.exam.manage', 'cbt.proctor.action'],
         children: [
+          { title: 'Ringkasan Ujian CBT', href: '/admin/cbt', icon: 'MonitorCheck', permission: ['cbt.bank.write', 'cbt.exam.manage', 'cbt.proctor.action'] },
           { title: 'Bank Soal Ujian', href: '/admin/cbt/questions', icon: 'FileQuestion', permission: 'cbt.bank.write' },
           { title: 'Jadwal & Paket Ujian', href: '/admin/cbt/exams', icon: 'CalendarCheck', permission: 'cbt.exam.manage' },
-          { title: 'Live Monitor Lab CBT', href: '/admin/cbt/monitor', icon: 'Activity', permission: 'cbt.exam.read' },
+          { title: 'Live Monitor Lab CBT', href: '/admin/cbt/monitor', icon: 'Activity', permission: ['cbt.exam.manage', 'cbt.proctor.action'] },
         ],
       },
     ],
@@ -107,8 +111,9 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         icon: 'UserPlus',
         permission: ['ppdb.wave.manage', 'ppdb.applicant.read', 'ppdb.applicant.verify'],
         children: [
+          { title: 'Ringkasan PPDB', href: '/admin/ppdb', icon: 'UserPlus', permission: ['ppdb.wave.manage', 'ppdb.applicant.read', 'ppdb.applicant.verify'] },
           { title: 'Gelombang & Jalur', href: '/admin/ppdb/waves', icon: 'Settings', permission: 'ppdb.wave.manage' },
-          { title: 'Verifikasi Berkas Calon Siswa', href: '/admin/ppdb/applicants', icon: 'CheckSquare', permission: 'ppdb.applicant.verify' },
+          { title: 'Verifikasi Berkas Calon Siswa', href: '/admin/ppdb/applicants', icon: 'CheckSquare', permission: ['ppdb.applicant.read', 'ppdb.applicant.verify'] },
           { title: 'Seleksi & Perankingan', href: '/admin/ppdb/selection', icon: 'TrendingUp', permission: 'ppdb.selection.run' },
         ],
       },
@@ -118,7 +123,8 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         icon: 'ShieldAlert',
         permission: ['student.point.read', 'student.point.write'],
         children: [
-          { title: 'Poin Kedisiplinan & Prestasi', href: '/admin/student-affairs/points', icon: 'Award', permission: 'student.point.write' },
+          { title: 'Ringkasan Kesiswaan', href: '/admin/student-affairs', icon: 'ShieldAlert', permission: ['student.point.read', 'student.point.write'] },
+          { title: 'Poin Kedisiplinan & Prestasi', href: '/admin/student-affairs/points', icon: 'Award', permission: ['student.point.read', 'student.point.write'] },
           { title: 'Ekstrakurikuler', href: '/admin/student-affairs/extracurriculars', icon: 'Compass', permission: 'student.point.write' },
           { title: 'Lomba & Prestasi Siswa', href: '/admin/student-affairs/competitions', icon: 'Trophy', permission: 'student.point.write' },
         ],
@@ -167,6 +173,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
           'finance.report.view',
         ],
         children: [
+          { title: 'Ringkasan Keuangan', href: '/admin/finance', icon: 'CreditCard', permission: ['finance.fee.manage', 'finance.invoice.manage', 'finance.payment.verify', 'finance.report.view'] },
           { title: 'Jenis Biaya & Tarif', href: '/admin/finance/fee-types', icon: 'Coins', permission: 'finance.fee.manage' },
           { title: 'Tagihan Siswa', href: '/admin/finance/invoices', icon: 'FileText', permission: 'finance.invoice.manage' },
           { title: 'Verifikasi Pembayaran', href: '/admin/finance/payments', icon: 'CheckSquare', permission: 'finance.payment.verify' },
@@ -184,7 +191,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         title: 'Pusat Laporan Terpadu',
         href: '/admin/reports',
         icon: 'BarChart3',
-        permission: ['reports.view', 'audit.read', 'master.student.read'],
+        permission: 'reports.view',
       },
       {
         title: 'CMS Portal Sekolah',
@@ -203,6 +210,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         icon: 'Sliders',
         permission: ['auth.role.manage', 'auth.user.read', 'audit.read'],
         children: [
+          { title: 'Ringkasan Pengaturan', href: '/admin/settings', icon: 'Sliders', permission: ['auth.role.manage', 'auth.user.read', 'audit.read'] },
           { title: 'Akun Pengguna', href: '/admin/settings/users', icon: 'Users', permission: 'auth.user.read' },
           { title: 'Matriks Role & Izin', href: '/admin/settings/roles', icon: 'Key', permission: 'auth.role.manage' },
           { title: 'Audit Log Keamanan', href: '/admin/settings/audit-logs', icon: 'FileClock', permission: 'audit.read' },

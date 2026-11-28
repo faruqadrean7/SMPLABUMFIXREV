@@ -1,9 +1,36 @@
-const PORTAL_BASE = process.env.NEXT_PUBLIC_PORTAL_URL || '';
 import { NavItem, QuickLinkItem, ContactInfo } from '../types';
 
 /**
- * Daftar menu navigasi utama header website publik
- * Sumber: legacy/prototype/public/index.html (L29-L36)
+ * Daftar menu navigasi utama header website publik (grouped 6 item top-level untuk desktop 1024px–1280px)
+ */
+export const PUBLIC_HEADER_NAV_ITEMS: NavItem[] = [
+  { label: 'Beranda', href: '/' },
+  {
+    label: 'Profil',
+    href: '/profil',
+    children: [
+      { label: 'Profil & Sejarah', href: '/profil' },
+      { label: 'Pendidik & Staf', href: '/pendidik' },
+      { label: 'Galeri Aktivitas', href: '/galeri' },
+    ],
+  },
+  { label: 'Akademik', href: '/akademik' },
+  {
+    label: 'Informasi',
+    href: '/berita',
+    children: [
+      { label: 'Berita & Pengumuman', href: '/berita' },
+      { label: 'Agenda Sekolah', href: '/agenda' },
+      { label: 'Buletin & Majalah', href: '/buletin' },
+      { label: 'Pusat Unduhan', href: '/unduhan' },
+    ],
+  },
+  { label: 'Kontak', href: '/kontak' },
+  { label: 'Lapor & Pengaduan', href: '/lapor' },
+];
+
+/**
+ * Daftar lengkap seluruh rute navigasi website publik
  */
 export const PUBLIC_NAV_ITEMS: NavItem[] = [
   { label: 'Beranda', href: '/' },
@@ -19,13 +46,6 @@ export const PUBLIC_NAV_ITEMS: NavItem[] = [
   { label: 'Lapor & Pengaduan', href: '/lapor' },
 ];
 
-/**
- * Informasi kontak resmi sekolah yang terverifikasi dari berkas legacy
- * Sumber:
- * - legacy/prototype/public/index.html (L420-L436)
- * - legacy/prototype/public/kontak.html (L74, L120-L128)
- * - legacy/prototype/data/seed.js (L28-L30)
- */
 export const SCHOOL_CONTACT_INFO: ContactInfo = {
   schoolName: 'SMP Laboratorium',
   affiliation: 'P2LP Universitas Negeri Malang',
@@ -62,12 +82,12 @@ export const FOOTER_QUICK_LINKS: QuickLinkItem[] = [
 ];
 
 /**
- * Tautan akses portal akademik untuk footer kolom 3 (Internal Route Apps/Web)
+ * Tautan akses portal akademik untuk footer kolom 3 (rute kanonis /portal/*)
  */
 export const FOOTER_PORTAL_LINKS: QuickLinkItem[] = [
   { label: 'Masuk Portal Akademik', href: '/masuk' },
-  { label: 'Portal Siswa', href: `${PORTAL_BASE}/siswa` },
-  { label: 'Portal Guru & Staf', href: `${PORTAL_BASE}/guru` },
-  { label: 'Portal Orang Tua', href: `${PORTAL_BASE}/ortu` },
+  { label: 'Portal Siswa', href: '/portal/siswa' },
+  { label: 'Portal Guru & Staf', href: '/portal/guru' },
+  { label: 'Portal Orang Tua', href: '/portal/ortu' },
   { label: 'Informasi PPDB Online', href: '/ppdb' },
 ];

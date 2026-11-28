@@ -4,58 +4,109 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Phone, Clock, Building, MapPin, ChevronRight } from 'lucide-react';
-import { PUBLIC_NAV_ITEMS, SCHOOL_CONTACT_INFO } from '@/features/public-site/content/navigation';
+import { Menu, X, Phone, Clock, Building, MapPin, ChevronRight, ChevronDown } from 'lucide-react';
+import { PUBLIC_HEADER_NAV_ITEMS, SCHOOL_CONTACT_INFO } from '@/features/public-site/content/navigation';
+import { NavItem } from '@/features/public-site/types';
 import { PublicAuthNav } from './PublicAuthNav';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+
+interface CmsMenuApiItem {
+  title?: string;
+  url?: string;
+  is_active?: boolean;
+  children?: CmsMenuApiItem[];
+}
+
+function normalizePublicHref(url: string): string {
+  if (url === '/guru' || url === '/guru/') return '/pendidik';
+  return url;
+}
+
+function mapCmsMenuItems(apiItems: CmsMenuApiItem[]): NavItem[] {
+  const valid = apiItems
+    .filter((item) => item && item.is_active !== false && typeof item.title === 'string' && typeof item.url === 'string')
+    .map((item) => ({
+      label: item.title!.trim(),
+      href: normalizePublicHref(item.url!.trim()),
+      children: Array.isArray(item.children)
+        ? item.children
+            .filter((c) => c && c.is_active !== false && typeof c.title === 'string' && typeof c.url === 'string')
+            .map((c) => ({
+              label: c.title!.trim(),
+              href: normalizePublicHref(c.url!.trim()),
+            }))
+        : undefined,
+    }));
+
+  // Kembalikan struktur ringkas maksimal 6 item top-level jika CMS masih memetakan daftar datar panjang
+  return valid.length > 0 && valid.length <= 6 ? valid : PUBLIC_HEADER_NAV_ITEMS;
+}
 
 export function PublicHeader() {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [openDropdownHref, setOpenDropdownHref] = useState<string | null>(null);
+  const [navItems, setNavItems] = useState<NavItem[]>(PUBLIC_HEADER_NAV_ITEMS);
 
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
 
-  // Buka menu mobile
+  useEffect(() => {
+    if (typeof fetch !== 'function' || process.env.NODE_ENV === 'test') return;
+    let cancelled = false;
+
+    fetch(`${API_BASE_URL}/public/navigation-menu`, { headers: { Accept: 'application/json' } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload) return;
+        const items = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : null;
+        if (items) {
+          setNavItems(mapCmsMenuItems(items));
+        }
+      })
+      .catch(() => {
+        // Fallback statis PUBLIC_NAV_ITEMS dipertahankan
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const openMobileMenu = () => {
     setIsMobileMenuOpen(true);
   };
 
-  // Tutup menu mobile dan kembalikan fokus ke tombol pemicu
   const closeMobileMenu = useCallback((restoreFocus: boolean = true) => {
     setIsMobileMenuOpen(false);
     if (restoreFocus) {
-      // Defer focus restoration slightly to prevent scroll jump
       requestAnimationFrame(() => {
         menuTriggerRef.current?.focus();
       });
     }
   }, []);
 
-  // Pengelolaan interaksi keyboard (Escape, Focus trap dasar) & Scroll Lock
   useEffect(() => {
     if (!isMobileMenuOpen) {
       document.body.style.overflow = '';
       return;
     }
 
-    // Kunci scroll saat drawer modal terbuka
     document.body.style.overflow = 'hidden';
 
-    // Pindahkan fokus ke tombol tutup di dalam drawer
     const timer = setTimeout(() => {
       closeButtonRef.current?.focus();
     }, 50);
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Tutup via tombol Escape
       if (e.key === 'Escape') {
         e.preventDefault();
         closeMobileMenu(true);
         return;
       }
 
-      // Sederhana: Focus trap pada elemen interaktif di dalam drawer
       if (e.key === 'Tab' && drawerRef.current) {
         const focusableElements = drawerRef.current.querySelectorAll<HTMLElement>(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -88,19 +139,21 @@ export function PublicHeader() {
     };
   }, [isMobileMenuOpen, closeMobileMenu]);
 
-  // Tutup menu saat berpindah rute
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setOpenDropdownHref(null);
   }, [pathname]);
+
+  const mobileFlatItems = navItems.flatMap((item) =>
+    item.children && item.children.length > 0 ? item.children : [item]
+  );
 
   return (
     <>
-      {/* Header Sticky Utama */}
       <header className="sticky top-0 z-40 transition-all duration-200 bg-white shadow-xs border-b border-gray-100">
-        {/* Top Utility Bar (Informasi Kampus & Kontak Resmi Sesuai Mockup) */}
+        {/* Top Utility Bar */}
         <div className="hidden lg:block bg-[#062940] border-b border-white/10 text-xs text-white/90 py-3 px-4 sm:px-8 lg:px-12 xl:px-16">
           <div className="w-full flex items-center justify-between">
-            {/* Sisi Kiri: Institusi & Alamat */}
             <div className="flex items-center gap-7">
               <div className="flex items-center gap-2 text-white/95 font-medium">
                 <Building className="w-4 h-4 text-white/85" aria-hidden="true" />
@@ -112,7 +165,6 @@ export function PublicHeader() {
               </div>
             </div>
 
-            {/* Sisi Kanan: Telepon & Jam Kantor */}
             <div className="flex items-center gap-7">
               <a
                 href={SCHOOL_CONTACT_INFO.phone.tel}
@@ -130,23 +182,13 @@ export function PublicHeader() {
           </div>
         </div>
 
-        {/* Bar Navigasi Utama */}
-        <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 py-3 flex items-center justify-between bg-white">
-          {/* Dua Logo Institusi Berdampingan (UM & SMP Lab UM) */}
+        {/* Bar Navigasi Utama (6 item top-level ringkas + 2 CTA) */}
+        <div className="w-full px-4 sm:px-8 lg:px-10 xl:px-16 py-3 flex items-center justify-between bg-white gap-4">
           <Link
             href="/"
-            className="flex items-center gap-3 group focus:outline-none focus:ring-2 focus:ring-[#C89332] focus:ring-offset-2 rounded-lg p-0.5"
+            className="flex items-center gap-3 group focus:outline-none focus:ring-2 focus:ring-[#C89332] focus:ring-offset-2 rounded-lg p-0.5 shrink-0"
           >
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {/* <Image
-                src="/images/logo-um.png"
-                alt="Logo Universitas Negeri Malang"
-                width={40}
-                height={40}
-                priority
-                unoptimized
-                className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 object-contain flex-shrink-0 drop-shadow-xs transition-transform group-hover:scale-105"
-              /> */}
               <Image
                 src="/images/logo.png"
                 alt="Logo SMP Laboratorium"
@@ -158,31 +200,82 @@ export function PublicHeader() {
               />
             </div>
             <div className="flex flex-col">
-              <span className="font-pub-heading text-sm sm:text-base lg:text-[1.25rem] font-bold text-[#0A3D62] leading-tight tracking-tight">
+              <span className="font-pub-heading text-sm sm:text-base lg:text-[1.15rem] xl:text-[1.25rem] font-bold text-[#0A3D62] leading-tight tracking-tight whitespace-nowrap">
                 SMP Laboratorium
               </span>
-              <span className="text-[9px] sm:text-[11px] lg:text-xs text-[#4A6B82] font-medium tracking-tight">
+              <span className="text-[9px] sm:text-[11px] lg:text-xs text-[#4A6B82] font-medium tracking-tight whitespace-nowrap">
                 P2LP Universitas Negeri Malang
               </span>
             </div>
           </Link>
 
-          {/* Navigasi Desktop Bersih Sesuai Mockup (Tanpa Garis Bawah, Hanya Teks Bold / Warna) */}
-          <nav className="hidden lg:flex items-center gap-4 xl:gap-6 2xl:gap-7" aria-label="Navigasi Utama">
-            {PUBLIC_NAV_ITEMS.map((item) => {
+          <nav className="hidden lg:flex items-center gap-4 xl:gap-6" aria-label="Navigasi Utama">
+            {navItems.map((item) => {
+              const hasChildren = Boolean(item.children && item.children.length > 0);
+              const isChildActive = Boolean(
+                item.children?.some((c) => pathname === c.href || pathname.startsWith(`${c.href}/`))
+              );
               const isActive =
                 item.href === '/'
                   ? pathname === '/'
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`) || isChildActive;
+              const isDropdownOpen = openDropdownHref === item.href;
+
+              if (hasChildren) {
+                return (
+                  <div
+                    key={item.label}
+                    className="relative"
+                    onMouseEnter={() => setOpenDropdownHref(item.href)}
+                    onMouseLeave={() => setOpenDropdownHref(null)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setOpenDropdownHref(isDropdownOpen ? null : item.href)}
+                      aria-expanded={isDropdownOpen}
+                      aria-haspopup="true"
+                      className={`inline-flex items-center gap-1 py-1 text-sm whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-[#C89332] rounded cursor-pointer ${
+                        isActive ? 'text-[#0A3D62] font-bold' : 'text-gray-600 hover:text-[#0A3D62] font-medium'
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-gray-400" aria-hidden="true" />
+                    </button>
+
+                    {isDropdownOpen && (
+                      <div className="absolute left-0 top-full pt-1.5 z-50 w-52">
+                        <div className="rounded-xl bg-white border border-gray-100 shadow-lg py-1.5">
+                          {item.children!.map((child) => {
+                            const activeSub = pathname === child.href || pathname.startsWith(`${child.href}/`);
+                            return (
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                onClick={() => setOpenDropdownHref(null)}
+                                className={`block px-3.5 py-2 text-xs whitespace-nowrap transition-colors ${
+                                  activeSub
+                                    ? 'bg-blue-50 text-[#0A3D62] font-bold'
+                                    : 'text-gray-700 hover:bg-gray-50 hover:text-[#0A3D62] font-medium'
+                                }`}
+                              >
+                                {child.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`py-1 text-sm whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-[#C89332] rounded ${isActive
-                    ? 'text-[#0A3D62] font-bold'
-                    : 'text-gray-600 hover:text-[#0A3D62] font-medium'
-                    }`}
+                  className={`py-1 text-sm whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-[#C89332] rounded ${
+                    isActive ? 'text-[#0A3D62] font-bold' : 'text-gray-600 hover:text-[#0A3D62] font-medium'
+                  }`}
                   aria-current={isActive ? 'page' : undefined}
                 >
                   {item.label}
@@ -191,20 +284,19 @@ export function PublicHeader() {
             })}
           </nav>
 
-          {/* Quick Actions Desktop (PPDB Online Emas & Masuk Portal Outline Sesuai Mockup) */}
-          <div className="hidden lg:flex items-center gap-3">
+          {/* Quick Actions Desktop */}
+          <div className="hidden lg:flex items-center gap-2.5 shrink-0">
             <Link
               href="/ppdb"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-pub-gold hover:bg-pub-gold-hover text-pub-navy-deep font-semibold text-sm px-4 py-2 rounded-[10px] shadow-sm hover:shadow transition-all inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-pub-gold focus:ring-offset-2 focus:ring-offset-pub-navy"
+              className="bg-pub-gold hover:bg-pub-gold-hover text-pub-navy-deep font-semibold text-sm px-4 py-2 rounded-[10px] shadow-sm hover:shadow transition-all inline-flex items-center justify-center whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-pub-gold focus:ring-offset-2 focus:ring-offset-pub-navy"
             >
               PPDB Online
             </Link>
             <PublicAuthNav variant="desktop" />
           </div>
 
-          {/* Tombol Pemicu Drawer Mobile (Hamburger) */}
           <button
             ref={menuTriggerRef}
             id="mobileMenuBtn"
@@ -220,7 +312,6 @@ export function PublicHeader() {
         </div>
       </header>
 
-      {/* Drawer Modal Mobile (Hanya dirender ke DOM saat terbuka agar tidak ada kebocoran fokus / screen reader saat tertutup) */}
       {isMobileMenuOpen && (
         <>
           <div
@@ -238,7 +329,6 @@ export function PublicHeader() {
             aria-label="Menu navigasi mobile"
             className="fixed top-0 right-0 bottom-0 w-[min(340px,85vw)] bg-white z-50 p-6 flex flex-col shadow-2xl lg:hidden animate-in slide-in-from-right duration-200 border-l border-gray-100 overflow-y-auto"
           >
-            {/* Header Drawer */}
             <div className="flex items-center justify-between pb-5 border-b border-gray-100 shrink-0">
               <Link
                 href="/"
@@ -274,9 +364,8 @@ export function PublicHeader() {
               </button>
             </div>
 
-            {/* Daftar Navigasi Utama */}
             <nav className="py-5 flex flex-col gap-1.5 shrink-0" aria-label="Menu Mobile">
-              {PUBLIC_NAV_ITEMS.map((item) => {
+              {mobileFlatItems.map((item) => {
                 const isActive =
                   item.href === '/'
                     ? pathname === '/'
@@ -287,16 +376,18 @@ export function PublicHeader() {
                     key={item.href}
                     href={item.href}
                     onClick={() => closeMobileMenu(false)}
-                    className={`group flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#C89332] ${isActive
-                      ? 'bg-[#062940] text-white font-semibold shadow-xs'
-                      : 'text-gray-700 hover:text-[#0A3D62] hover:bg-gray-50 font-medium'
-                      }`}
+                    className={`group flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#C89332] ${
+                      isActive
+                        ? 'bg-[#062940] text-white font-semibold shadow-xs'
+                        : 'text-gray-700 hover:text-[#0A3D62] hover:bg-gray-50 font-medium'
+                    }`}
                     aria-current={isActive ? 'page' : undefined}
                   >
                     <span>{item.label}</span>
                     <ChevronRight
-                      className={`w-4 h-4 transition-transform group-hover:translate-x-0.5 ${isActive ? 'text-[#C89332]' : 'text-gray-400 group-hover:text-[#0A3D62]'
-                        }`}
+                      className={`w-4 h-4 transition-transform group-hover:translate-x-0.5 ${
+                        isActive ? 'text-[#C89332]' : 'text-gray-400 group-hover:text-[#0A3D62]'
+                      }`}
                       aria-hidden="true"
                     />
                   </Link>
@@ -304,7 +395,6 @@ export function PublicHeader() {
               })}
             </nav>
 
-            {/* CTA Bawah Drawer Mobile */}
             <div className="mt-auto pt-6 border-t border-white/10 flex flex-col gap-3">
               <Link
                 href="/ppdb"

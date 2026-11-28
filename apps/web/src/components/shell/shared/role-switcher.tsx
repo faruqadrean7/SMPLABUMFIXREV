@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { getPortalRoleOptions } from '@/lib/rbac/evaluator';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Layers, Check, ChevronDown } from 'lucide-react';
 export function RoleSwitcher() {
   const { user, setActiveRole } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
   if (!user || !user.roles || user.roles.length === 0) {
@@ -49,19 +50,31 @@ export function RoleSwitcher() {
             <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               Pilih Portal Akses
             </div>
-            {portals.map((item) => (
-              <button
-                key={item.portal}
-                onClick={() => {
-                  setIsOpen(false);
-                  setActiveRole(item.portal);
-                  router.push(item.href);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs rounded-sm text-left text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <span className="font-medium">{item.label}</span>
-              </button>
-            ))}
+            {portals.map((item) => {
+              const isCurrent =
+                item.href === '/admin'
+                  ? pathname.startsWith('/admin')
+                  : pathname.startsWith(item.href);
+
+              return (
+                <button
+                  key={item.portal}
+                  onClick={() => {
+                    setIsOpen(false);
+                    setActiveRole(item.portal);
+                    router.push(item.href);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-sm text-left transition-colors ${
+                    isCurrent
+                      ? 'bg-blue-50 text-brand-blue font-semibold'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="font-medium">{item.label}</span>
+                  {isCurrent && <Check className="h-3.5 w-3.5 text-brand-blue shrink-0" />}
+                </button>
+              );
+            })}
           </div>
         </>
       )}

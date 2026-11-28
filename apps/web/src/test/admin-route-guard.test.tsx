@@ -73,7 +73,7 @@ describe('POST-AUDIT-03: Admin Route Guard & Direct URL Access Matrix', () => {
 
     it('memetakan rute Kesiswaan (/admin/student-affairs/points) ke permission poin siswa', () => {
       const perm = getAdminRoutePermission('/admin/student-affairs/points');
-      expect(perm).toBe('student.point.write');
+      expect(perm).toEqual(['student.point.read', 'student.point.write']);
     });
 
     it('memetakan rute Humas (/admin/public-relations) ke permission buku tamu & aduan', () => {
