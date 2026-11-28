@@ -28,6 +28,7 @@ export interface FileAttachment {
   mime_type: string;
   size_bytes: number;
   url?: string;
+  download_url?: string;
 }
 
 export type MaterialCategory = 'modul_ajar' | 'atp' | 'p5' | 'slide_tayang';
@@ -46,7 +47,10 @@ export interface LearningMaterial {
   created_at: string;
   updated_at: string;
   class?: AcademicClass;
+  className?: string;
+  class_name?: string;
   subject?: AcademicSubject;
+  subjectName?: string;
   teacher?: TeacherProfile;
   file?: FileAttachment;
 }
@@ -71,7 +75,10 @@ export interface Assignment {
   total_students?: number;
   reviewed_count?: number;
   class?: AcademicClass;
+  className?: string;
+  class_name?: string;
   subject?: AcademicSubject;
+  subjectName?: string;
   teacher?: TeacherProfile;
   file?: FileAttachment;
   my_submission?: AssignmentSubmission;
@@ -141,7 +148,10 @@ export interface TeachingJournal {
     note?: string;
   }[];
   class?: AcademicClass;
+  className?: string;
+  class_name?: string;
   subject?: AcademicSubject;
+  subjectName?: string;
   created_at: string;
 }
 

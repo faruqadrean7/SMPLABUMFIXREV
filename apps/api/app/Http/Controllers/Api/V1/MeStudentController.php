@@ -506,6 +506,7 @@ class MeStudentController extends Controller
         }
 
         $submission = $service->submitAssignment($id, $request->validated(), $request);
+        $submission->loadMissing('file');
 
         return $this->successResponse([
             'success' => true,

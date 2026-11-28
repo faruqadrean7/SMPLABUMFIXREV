@@ -154,7 +154,7 @@ class TeacherGapRemediationFeatureTest extends TestCase
 
     public function test_homeroom_teacher_can_decide_leave_request_and_syncs_attendance(): void
     {
-        $today = now()->toDateString();
+        $today = Carbon::now()->next(Carbon::MONDAY)->toDateString();
         $leave = LeaveRequest::create([
             'student_id' => $this->student7A->id,
             'leave_type' => 'sakit',

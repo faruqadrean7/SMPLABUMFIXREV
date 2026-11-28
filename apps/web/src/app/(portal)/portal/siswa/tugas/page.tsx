@@ -35,9 +35,11 @@ export default function StudentTugasPage() {
 
   // Submit modal state
   const [selectedTask, setSelectedTask] = useState<StudentTaskItem | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [driveLink, setDriveLink] = useState<string>('');
   const [studentNote, setStudentNote] = useState<string>('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSuccessSubmit, setIsSuccessSubmit] = useState(false);
   // Confetti celebrates ONLY a confirmed server submit — never the offline/failure fallback,
   // so a student is not misled into thinking failed work reached the server.
@@ -76,22 +78,26 @@ export default function StudentTugasPage() {
 
   const handleOpenSubmit = (task: StudentTaskItem) => {
     setSelectedTask(task);
+    setSelectedFile(null);
     setUploadedFileName('');
     setDriveLink('');
     setStudentNote('');
+    setSubmitError(null);
     setIsSuccessSubmit(false);
   };
 
   const handleConfirmSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTask) return;
+    setSubmitError(null);
 
     try {
       await submitTaskMutation.mutateAsync({
         taskId: selectedTask.id,
         notes: studentNote || 'Tugas dikumpulkan melalui Portal Siswa',
         drive_link: driveLink || undefined,
-        file_name: uploadedFileName || 'Dokumen_Tugas_Siswa.pdf',
+        file_name: uploadedFileName || selectedFile?.name || undefined,
+        file: selectedFile,
       });
       setIsSuccessSubmit(true);
       setShowConfetti(true);
@@ -99,19 +105,16 @@ export default function StudentTugasPage() {
       setTimeout(() => {
         setSelectedTask(null);
       }, 1200);
-    } catch {
-      // Local fallback — no confetti: the submit did not reach the server.
-      selectedTask.status = 'dikumpulkan';
-      selectedTask.submission = {
-        file_name: uploadedFileName || 'Dokumen_Tugas_Siswa.pdf',
-        submitted_at: 'Baru saja',
-        drive_link: driveLink || undefined,
-      };
-      setIsSuccessSubmit(true);
+    } catch (err: any) {
+      // P0-16: Jangan memalsukan status 'dikumpulkan' saat server menolak atau jaringan gagal
+      const msg =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Gagal mengumpulkan tugas ke server. Silakan coba lagi.';
+      setSubmitError(msg);
       setShowConfetti(false);
-      setTimeout(() => {
-        setSelectedTask(null);
-      }, 1200);
+      toast.error(msg, 'Pengumpulan Gagal');
     }
   };
 
@@ -420,6 +423,11 @@ export default function StudentTugasPage() {
               </div>
             ) : (
               <form onSubmit={handleConfirmSubmit} className="space-y-4">
+                {submitError && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+                    {submitError}
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
                     1. Unggah Berkas Dokumen Tugas:
@@ -433,8 +441,9 @@ export default function StudentTugasPage() {
                     <input
                       type="file"
                       onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) setUploadedFileName(file.name);
+                        const file = e.target.files?.[0] ?? null;
+                        setSelectedFile(file);
+                        setUploadedFileName(file ? file.name : '');
                       }}
                       className="mt-2 text-xs text-slate-600 cursor-pointer"
                     />

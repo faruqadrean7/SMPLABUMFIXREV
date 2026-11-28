@@ -469,26 +469,32 @@ export const portalApi = {
    */
   async submitStudentTask(
     taskId: string,
-    payload: { file_name?: string; drive_link?: string; notes?: string }
+    payload: { file?: File | null; file_name?: string; drive_link?: string; notes?: string }
   ): Promise<{ success: boolean; message: string }> {
-    return executeWithMockFallback(
-      async () => {
-        try {
-          const res = await apiClient.post<{ success: boolean; message: string }>(
-            `/me/tasks/${taskId}/submit`,
-            payload
-          );
-          return unwrapItem<{ success: boolean; message: string }>(res.data, { success: true, message: 'Tugas berhasil dikumpulkan.' });
-        } catch {
-          const res = await apiClient.post<{ success: boolean; message: string }>(
-            `/assignments/${taskId}/submissions`,
-            payload
-          );
-          return unwrapItem<{ success: boolean; message: string }>(res.data, { success: true, message: 'Tugas berhasil dikumpulkan.' });
-        }
-      },
-      async () => ({ success: true, message: 'Tugas berhasil dikumpulkan.' })
+    const body =
+      payload.file instanceof File
+        ? (() => {
+            const fd = new FormData();
+            fd.append('file', payload.file);
+            if (payload.notes) fd.append('notes', payload.notes);
+            if (payload.drive_link) fd.append('drive_link', payload.drive_link);
+            if (payload.file_name) fd.append('file_name', payload.file_name);
+            return fd;
+          })()
+        : payload;
+
+    const config =
+      body instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+
+    const res = await apiClient.post<{ success: boolean; message: string }>(
+      `/me/tasks/${taskId}/submit`,
+      body,
+      config
     );
+    return unwrapItem<{ success: boolean; message: string }>(res.data, {
+      success: true,
+      message: 'Tugas berhasil dikumpulkan.',
+    });
   },
 
   /**
