@@ -7,6 +7,7 @@ use App\Models\GradeLevel;
 use App\Models\Major;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ class ClassService
      */
     public function listClasses(Request $request): LengthAwarePaginator
     {
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $academicYearId = $request->query('academic_year_id');
         $gradeLevelId = $request->query('grade_level_id');
         $majorId = $request->query('major_id');

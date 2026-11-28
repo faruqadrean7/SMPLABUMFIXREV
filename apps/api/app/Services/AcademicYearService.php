@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AcademicYear;
 use App\Models\AuditLog;
 use App\Models\Semester;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ class AcademicYearService
      */
     public function listAcademicYears(Request $request): LengthAwarePaginator
     {
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $q = trim((string) $request->query('q', ''));
 
         $query = AcademicYear::withCount(['semesters', 'classes'])

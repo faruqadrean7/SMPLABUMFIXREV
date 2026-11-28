@@ -11,6 +11,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -62,7 +63,7 @@ class CharacterNoteService
             $query->whereIn('student_id', $studentIds);
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 20);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 20);
 
         return $query->paginate($perPage);
     }

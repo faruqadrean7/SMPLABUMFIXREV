@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\Bulletin;
 use App\Models\MediaItem;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,7 @@ class GalleryService
      */
     public function listAlbums(Request $request): LengthAwarePaginator
     {
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPage = PaginationHelper::clamp($request->query('per_page'), 15);
         $search = $request->query('search');
         $schoolId = $request->query('school_id');
 
@@ -228,7 +229,7 @@ class GalleryService
      */
     public function listBulletins(Request $request): LengthAwarePaginator
     {
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPage = PaginationHelper::clamp($request->query('per_page'), 15);
         $search = $request->query('search');
         $schoolId = $request->query('school_id');
 

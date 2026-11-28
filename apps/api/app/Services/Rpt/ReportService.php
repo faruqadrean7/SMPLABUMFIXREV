@@ -10,6 +10,7 @@ use App\Models\StudentPoint;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\AuditLogService;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -147,7 +148,7 @@ class ReportService
             return ['summary' => $summary, 'rows' => $rows];
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 20));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 20));
 
         return [
             'type' => 'attendance',
@@ -210,7 +211,7 @@ class ReportService
             return ['summary' => $summary, 'rows' => $rows];
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 20));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 20));
 
         return [
             'type' => 'grades',
@@ -274,7 +275,7 @@ class ReportService
             return ['summary' => $summary, 'rows' => $rows];
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 20));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 20));
 
         return [
             'type' => 'ppdb',
@@ -339,7 +340,7 @@ class ReportService
             return ['summary' => $summary, 'rows' => $rows];
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 20));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 20));
 
         return [
             'type' => 'student_points',
@@ -402,7 +403,7 @@ class ReportService
             return ['summary' => $summary, 'rows' => $rows];
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 20));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 20));
 
         return [
             'type' => 'tickets',
@@ -465,7 +466,7 @@ class ReportService
             return ['summary' => $summary, 'rows' => $rows];
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 20));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 20));
 
         return [
             'type' => 'loans',

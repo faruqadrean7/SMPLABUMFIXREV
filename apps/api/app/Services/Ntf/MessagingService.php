@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\NotificationLog;
 use App\Models\NotificationTemplate;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -47,7 +48,7 @@ class MessagingService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getTemplate(string $id, ?Request $request = null): NotificationTemplate
@@ -256,7 +257,7 @@ class MessagingService
             $query->where('recipient', 'like', '%'.$filters['recipient'].'%');
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getLog(string $id, ?Request $request = null): NotificationLog

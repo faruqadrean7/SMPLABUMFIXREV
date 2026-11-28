@@ -8,6 +8,7 @@ use App\Models\ComplaintEvent;
 use App\Models\File;
 use App\Models\Notification;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -271,7 +272,7 @@ class ComplaintService
             $query->whereNull('assigned_to');
         }
 
-        $perPage = min((int) ($filters['per_page'] ?? 15), 100);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 15);
 
         // Urutkan menurut tenggat terdekat: aduan berisiko tinggi tidak tertimbun
         // di bawah aduan fasilitas yang lebih baru.

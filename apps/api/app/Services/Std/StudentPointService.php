@@ -10,6 +10,7 @@ use App\Models\Role;
 use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -39,7 +40,7 @@ class StudentPointService
             $query->whereRaw('LOWER(name) LIKE ?', [$kw]);
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getPointType(string $id): PointType
@@ -211,7 +212,7 @@ class StudentPointService
             $query->where('point_date', '<=', $filters['end_date']);
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getStudentPoint(string $id, Request $request): StudentPoint

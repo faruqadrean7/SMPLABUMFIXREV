@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Models\StudentPoint;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -64,7 +65,7 @@ class CompetitionAndAchievementService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getCompetition(string $id, ?User $user = null): Competition
@@ -358,7 +359,7 @@ class CompetitionAndAchievementService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     public function getAchievement(string $id, ?User $user = null): Achievement

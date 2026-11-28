@@ -15,6 +15,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -237,7 +238,7 @@ class GradeService
             $query->whereHas('component', fn ($q) => $q->where('subject_id', $subjectId));
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 30);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 30);
 
         return $query->paginate($perPage);
     }

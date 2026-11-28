@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Schedule;
 use App\Models\TimeSlot;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -250,7 +251,7 @@ class AcademicScheduleService
             return $query->get();
         }
 
-        $perPage = min((int) ($filters['per_page'] ?? 20), 100);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 20);
 
         return $query->paginate($perPage);
     }

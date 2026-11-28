@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Post;
 use App\Models\PostCategory;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -155,7 +156,7 @@ class PostService
      */
     public function listAdminPosts(Request $request): LengthAwarePaginator
     {
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $status = $request->query('status');
         $categoryId = $request->query('category_id');
         $visibility = $request->query('visibility');
@@ -344,7 +345,7 @@ class PostService
      */
     public function listPublicPosts(Request $request): LengthAwarePaginator
     {
-        $limit = min($request->integer('limit', 10), 50);
+        $limit = PaginationHelper::clamp($request->query('limit'), 10, 1, 50);
         $categorySlug = $request->query('category_slug');
         $categoryId = $request->query('category_id');
         $q = trim((string) $request->query('q', $request->query('search', '')));

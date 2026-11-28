@@ -15,6 +15,7 @@ use App\Models\SiteSetting;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -474,7 +475,7 @@ class AcademicAttendanceService
             $query->whereDate('start_date', '<=', $filters['end_date']);
         }
 
-        $perPage = min((int) ($filters['per_page'] ?? 20), 100);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 20);
 
         return $query->orderBy('created_at', 'desc')->paginate($perPage);
     }
@@ -555,7 +556,7 @@ class AcademicAttendanceService
             $query->whereDate('att_date', '<=', $filters['end_date']);
         }
 
-        $perPage = min((int) ($filters['per_page'] ?? 20), 100);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 20);
 
         return $query->orderBy('att_date', 'desc')->paginate($perPage);
     }

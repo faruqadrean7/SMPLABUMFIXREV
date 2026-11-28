@@ -8,6 +8,7 @@ use App\Models\ExamParticipant;
 use App\Models\ExamRoom;
 use App\Models\User;
 use App\Services\Concerns\GuardsExamOwnership;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -229,7 +230,7 @@ class ExamTokenRoomService
             });
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 20));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 20, 1, 200));
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Models\File;
 use App\Models\SiteSetting;
 use App\Models\StaffAttendance;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -218,7 +219,7 @@ class StaffAttendanceService
             $query->where('status', $filters['status']);
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 15);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 15);
 
         return $query->paginate($perPage);
     }

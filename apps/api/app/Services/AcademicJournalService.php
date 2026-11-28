@@ -8,6 +8,7 @@ use App\Models\Schedule;
 use App\Models\SiteSetting;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -67,7 +68,7 @@ class AcademicJournalService
             $query->whereDate('session_date', '<=', $filters['end_date']);
         }
 
-        $perPage = min((int) ($filters['per_page'] ?? 20), 100);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 20);
 
         return $query->orderBy('session_date', 'desc')
             ->orderBy('created_at', 'desc')

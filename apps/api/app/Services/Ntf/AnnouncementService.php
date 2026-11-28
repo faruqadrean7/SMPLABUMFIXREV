@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -122,7 +123,7 @@ class AnnouncementService
             ->orderBy('publish_at', 'desc')
             ->orderBy('created_at', 'desc');
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     /**

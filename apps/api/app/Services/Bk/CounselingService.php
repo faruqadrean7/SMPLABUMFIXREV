@@ -8,6 +8,7 @@ use App\Models\CounselingReferral;
 use App\Models\CounselingSession;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -51,7 +52,7 @@ class CounselingService
             });
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 15));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
 
         // Masking ringkasan kasus pada tampilan daftar demi prinsip minimisasi data & privasi
         $isPrincipalOnly = $this->isPrincipalOnly($user);
@@ -292,7 +293,7 @@ class CounselingService
             $query->where('status', $filters['status']);
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 15));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
 
         if ($this->isCounselorOrAdmin($user) || $this->isPrincipal($user)) {
             $this->logAudit(

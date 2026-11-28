@@ -1,7 +1,7 @@
 # Rencana Eksekusi Bertahap — Persiapan Tier 2B (`TIER2B_EXECUTION_PLAN`)
 
-> **Status:** Batch 2B-S **TERINTEGRASI (`4347113`)** · Batch 2B-1 **SELESAI LOKAL (`feat/tier2b-1-concurrency-role-grade-queue`, menunggu review & persetujuan merge/push)** · Batch 2B-2 s/d 2B-7 **BELUM DIEKSEKUSI**  
-> **Basis Repository:** Branch `develop` · `HEAD = origin/develop = 4347113`  
+> **Status:** Batch 2B-S, Batch 2B-1, & Batch 2B-2 **TERINTEGRASI (`develop`)** · Batch 2B-3 **SELESAI (`feat/tier2b-3-pg-schema-indexes-ilike`)** · Batch 2B-4 s/d 2B-7 **BELUM DIEKSEKUSI**  
+> **Basis Repository:** Branch `develop`
 > **Aturan Keras:**
 > - **0 perubahan** pada commit lama (`31bfc29..69b3832`); dilarang `reset`, `amend`, `force push`, atau push ke `main`.
 > - **100% mempertahankan** seluruh pekerjaan Complaint pada `69b3832` (`feat(lapor)`).

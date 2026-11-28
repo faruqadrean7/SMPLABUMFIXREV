@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\LibraryBook;
 use App\Models\Loan;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -46,7 +47,7 @@ class LibraryService
             });
         }
 
-        $paginator = $query->paginate((int) ($filters['per_page'] ?? 15));
+        $paginator = $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
 
         $paginator->getCollection()->transform(function (LibraryBook $book) {
             $book->append('available_stock');
@@ -189,7 +190,7 @@ class LibraryService
             $query->where('status', $filters['status']);
         }
 
-        return $query->paginate((int) ($filters['per_page'] ?? 15));
+        return $query->paginate(PaginationHelper::clamp($filters['per_page'] ?? null, 15));
     }
 
     /**

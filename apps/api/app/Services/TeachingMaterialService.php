@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\File;
 use App\Models\TeachingMaterial;
 use App\Models\User;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -46,7 +47,7 @@ class TeachingMaterialService
             $query->where('uploaded_by', $filters['uploaded_by']);
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 15);
+        $perPage = PaginationHelper::clamp($filters['per_page'] ?? null, 15);
 
         return $query->paginate($perPage);
     }

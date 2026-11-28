@@ -7,6 +7,7 @@ use App\Models\Student;
 use App\Models\StudentStatusHistory;
 use App\Models\User;
 use App\Services\Concerns\ProvisionsLoginAccount;
+use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -26,7 +27,7 @@ class StudentService
     public function listStudents(Request $request): LengthAwarePaginator
     {
         $user = $request->user();
-        $limit = min($request->integer('limit', 20), 100);
+        $limit = PaginationHelper::clamp($request->query('limit'), 20);
         $status = $request->query('status');
         $classId = $request->query('class_id');
         $q = trim((string) $request->query('q', ''));
