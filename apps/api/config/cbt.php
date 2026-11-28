@@ -22,4 +22,14 @@ return [
     */
     'lock_threshold' => (int) env('CBT_LOCK_THRESHOLD', 3),
     'disqualify_threshold' => (int) env('CBT_DISQUALIFY_THRESHOLD', 5),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Question Import Execution Mode
+    |--------------------------------------------------------------------------
+    |
+    | Set true untuk dispatch asynchronous via queue worker (memerlukan polling UI).
+    |
+    */
+    'import_async' => (bool) env('CBT_IMPORT_ASYNC', false),
 ];

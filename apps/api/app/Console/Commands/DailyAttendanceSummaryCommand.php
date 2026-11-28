@@ -4,8 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Attendance;
 use App\Models\AuditLog;
-use App\Models\EarlyWarning;
-use App\Models\Student;
+use App\Services\Bk\EarlyWarningService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -32,39 +31,10 @@ class DailyAttendanceSummaryCommand extends Command
 
         $this->info("Rekap Presensi Tanggal {$summary['date']}: {$summary['total_recorded']} tercatat (Hadir: {$summary['hadir']}, Izin: {$summary['izin']}, Sakit: {$summary['sakit']}, Alpa: {$summary['alpa']}, Terlambat: {$summary['terlambat']})");
 
-        // Evaluasi Ambang Deteksi Dini BK (Siswa dengan >= 3 alpa dalam 30 hari terakhir)
-        $thirtyDaysAgo = Carbon::today()->subDays(30);
-        $flaggedStudents = Student::where('status', 'active')
-            ->whereHas('attendances', function ($q) use ($thirtyDaysAgo) {
-                $q->whereDate('att_date', '>=', $thirtyDaysAgo)->where('status', 'alpa');
-            }, '>=', 3)
-            ->get();
-
-        $warningCount = 0;
-        foreach ($flaggedStudents as $student) {
-            $alpaCount = $student->attendances()
-                ->whereDate('att_date', '>=', $thirtyDaysAgo)
-                ->where('status', 'alpa')
-                ->count();
-
-            EarlyWarning::updateOrCreate(
-                [
-                    'student_id' => $student->id,
-                    'rule_code' => 'ATT_LOW',
-                    'status' => 'aktif',
-                ],
-                [
-                    'severity' => $alpaCount >= 5 ? 'tinggi' : 'sedang',
-                    'data' => [
-                        'rule' => 'Akumulasi alpa presensi mencapai atau melampaui batas ambang',
-                        'alpa_count' => $alpaCount,
-                        'period_days' => 30,
-                        'detected_at' => Carbon::now()->toIso8601String(),
-                    ],
-                ]
-            );
-            $warningCount++;
-        }
+        // P1-27: Delegasikan evaluasi deteksi dini BK secara terpusat ke EarlyWarningService
+        // (status siswa aktif 'active'/'aktif', agregasi harian tunggal AttendanceAggregator, aturan ATTENDANCE_LOW)
+        $ewResult = app(EarlyWarningService::class)->evaluateRules(['min_absent_days' => 3]);
+        $warningCount = (int) (($ewResult['created_alerts'] ?? 0) + ($ewResult['updated_alerts'] ?? 0));
 
         AuditLog::create([
             'action' => 'DAILY_ATTENDANCE_SUMMARY_PROCESSED',

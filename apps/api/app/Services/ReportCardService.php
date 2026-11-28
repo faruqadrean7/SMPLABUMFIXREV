@@ -130,14 +130,14 @@ class ReportCardService
 
         $students = collect();
         if (! empty($data['student_id'])) {
-            $student = Student::with('classes')->findOrFail($data['student_id']);
+            $student = Student::with('activeClasses')->findOrFail($data['student_id']);
             $students->push($student);
         } elseif (! empty($data['class_id'])) {
             $studentIds = ClassStudent::where('class_id', $data['class_id'])
                 ->whereNull('left_at')
                 ->pluck('student_id');
 
-            $students = Student::with('classes')
+            $students = Student::with('activeClasses')
                 ->whereIn('id', $studentIds)
                 ->get();
         }
@@ -161,12 +161,67 @@ class ReportCardService
         }
 
         $results = [];
+        $allStudentIds = $students->pluck('id')->all();
 
-        DB::transaction(function () use ($students, $semester, $statusToSet, $data, &$results, $request, $currentUser) {
+        $templatesMap = ReportDescriptionTemplate::all()
+            ->keyBy(fn ($t) => $t->subject_id.':'.$t->level);
+
+        $gradesByStudent = Grade::with(['component.subject'])
+            ->whereIn('student_id', $allStudentIds)
+            ->where(function ($q) use ($semester) {
+                $q->whereHas('period', fn ($p) => $p->where('semester_id', $semester->id))
+                    ->orWhere(function ($sub) use ($semester) {
+                        $sub->whereNull('period_id')
+                            ->whereHas('component', fn ($c) => $c->where('semester_id', $semester->id));
+                    });
+            })
+            ->get()
+            ->groupBy('student_id');
+
+        $attQueryAll = Attendance::whereIn('student_id', $allStudentIds);
+        if ($semester->start_date && $semester->end_date) {
+            $attQueryAll->whereBetween('att_date', [$semester->start_date, $semester->end_date]);
+        }
+        $attendancesByStudent = $attQueryAll->get()->groupBy('student_id');
+
+        $extracurricularsByStudent = ExtracurricularMember::with('extracurricular')
+            ->whereIn('student_id', $allStudentIds)
+            ->get()
+            ->groupBy('student_id');
+
+        $charNotesByStudent = CharacterNote::whereIn('student_id', $allStudentIds)
+            ->whereHas('period', fn ($p) => $p->where('semester_id', $semester->id))
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->groupBy('student_id')
+            ->map(fn ($notes) => $notes->first());
+
+        $attendanceAggregator = app(AttendanceAggregator::class);
+
+        DB::transaction(function () use (
+            $students,
+            $allStudentIds,
+            $semester,
+            $statusToSet,
+            $data,
+            &$results,
+            $request,
+            $currentUser,
+            $templatesMap,
+            $gradesByStudent,
+            $attendancesByStudent,
+            $extracurricularsByStudent,
+            $charNotesByStudent,
+            $attendanceAggregator
+        ) {
+            $existingReports = ReportCard::whereIn('student_id', $allStudentIds)
+                ->where('semester_id', $semester->id)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('student_id');
+
             foreach ($students as $student) {
-                $existingReport = ReportCard::where('student_id', $student->id)
-                    ->where('semester_id', $semester->id)
-                    ->first();
+                $existingReport = $existingReports->get($student->id);
 
                 if ($existingReport && in_array($existingReport->status, ['terkunci', 'disetujui', 'terbit'])) {
                     if ($students->count() === 1) {
@@ -177,7 +232,14 @@ class ReportCardService
                     continue;
                 }
 
-                $snapshot = $this->compileSemesterSnapshot($student, $semester, $data['homeroom_note'] ?? null);
+                $snapshot = $this->compileSemesterSnapshot($student, $semester, $data['homeroom_note'] ?? null, [
+                    'templates_map' => $templatesMap,
+                    'grades' => $gradesByStudent->get($student->id, collect()),
+                    'attendances' => $attendancesByStudent->get($student->id, collect()),
+                    'extracurriculars' => $extracurricularsByStudent->get($student->id, collect()),
+                    'latest_char_note' => $charNotesByStudent->get($student->id),
+                    'attendance_aggregator' => $attendanceAggregator,
+                ]);
 
                 $report = $existingReport ?? new ReportCard;
                 $isNew = ! $report->exists;
@@ -203,7 +265,15 @@ class ReportCardService
                     $request
                 );
 
-                $results[] = $report->fresh(['student', 'semester.academicYear', 'approver']);
+                $report->setRelation('student', $student);
+                $report->setRelation('semester', $semester);
+                if ($report->approved_by) {
+                    $report->loadMissing('approver');
+                } else {
+                    $report->setRelation('approver', null);
+                }
+
+                $results[] = $report;
             }
         });
 
@@ -213,11 +283,15 @@ class ReportCardService
     /**
      * BE-GRD-04: Kompilasi data snapshot semesteran resmi.
      */
-    public function compileSemesterSnapshot(Student $student, Semester $semester, ?string $manualNote = null): array
+    public function compileSemesterSnapshot(Student $student, Semester $semester, ?string $manualNote = null, array $preloaded = []): array
     {
-        $activeClass = $student->classes()
-            ->whereNull('class_students.left_at')
-            ->first();
+        if ($student->relationLoaded('activeClasses')) {
+            $activeClass = $student->activeClasses->first();
+        } elseif ($student->relationLoaded('classes')) {
+            $activeClass = $student->classes->first(fn ($c) => $c->pivot?->left_at === null);
+        } else {
+            $activeClass = $student->activeClasses()->first();
+        }
 
         // 1. Identitas Siswa & Rombel
         $studentData = [
@@ -241,7 +315,7 @@ class ReportCardService
 
         // 3. Nilai Akhir & Deskripsi Capaian per Mapel
         // P0-14: Cegah kebocoran nilai lintas semester (hanya fallback ke component.semester_id bila period_id NULL)
-        $grades = Grade::with(['component.subject'])
+        $grades = $preloaded['grades'] ?? Grade::with(['component.subject'])
             ->where('student_id', $student->id)
             ->where(function ($q) use ($semester) {
                 $q->whereHas('period', fn ($p) => $p->where('semester_id', $semester->id))
@@ -253,6 +327,16 @@ class ReportCardService
             ->get();
 
         $groupedGrades = $grades->groupBy(fn ($g) => $g->component?->subject_id ?? 'no_subject');
+        $templatesMap = $preloaded['templates_map'] ?? null;
+        if ($templatesMap === null) {
+            $subjectIds = $groupedGrades->keys()->filter(fn ($k) => $k !== 'no_subject')->values()->all();
+            $templatesMap = empty($subjectIds)
+                ? collect()
+                : ReportDescriptionTemplate::whereIn('subject_id', $subjectIds)
+                    ->get()
+                    ->keyBy(fn ($t) => $t->subject_id.':'.$t->level);
+        }
+
         $subjectsSummary = [];
 
         foreach ($groupedGrades as $subjectId => $subjGrades) {
@@ -283,10 +367,8 @@ class ReportCardService
             // Ambang KKTP default = 75.0
             $level = $finalScore >= 75.0 ? 'tuntas' : 'belum';
 
-            // Ambil template deskripsi capaian
-            $template = ReportDescriptionTemplate::where('subject_id', $subject->id)
-                ->where('level', $level)
-                ->first();
+            // Ambil template deskripsi capaian dari peta preloaded
+            $template = $templatesMap->get($subject->id.':'.$level);
 
             $descriptionText = $template?->template_text;
             if (! $descriptionText) {
@@ -307,17 +389,22 @@ class ReportCardService
         }
 
         // 4. Rekap Absensi Semester (P0-26: agregasi harian tunggal gerbang + kelas, termasuk terlambat)
-        $attQuery = Attendance::where('student_id', $student->id);
-        if ($semester->start_date && $semester->end_date) {
-            $attQuery->whereBetween('att_date', [$semester->start_date, $semester->end_date]);
+        if (array_key_exists('attendances', $preloaded)) {
+            $attendances = $preloaded['attendances'];
+        } else {
+            $attQuery = Attendance::where('student_id', $student->id);
+            if ($semester->start_date && $semester->end_date) {
+                $attQuery->whereBetween('att_date', [$semester->start_date, $semester->end_date]);
+            }
+            $attendances = $attQuery->get();
         }
-        $attendances = $attQuery->get();
-        $attendanceSnapshot = app(AttendanceAggregator::class)->summarizeDaily($attendances, 2);
+        $attendanceSnapshot = ($preloaded['attendance_aggregator'] ?? app(AttendanceAggregator::class))->summarizeDaily($attendances, 2);
 
         // 5. Ekstrakurikuler Siswa
-        $extracurriculars = ExtracurricularMember::with('extracurricular')
+        $extracurricularModels = $preloaded['extracurriculars'] ?? ExtracurricularMember::with('extracurricular')
             ->where('student_id', $student->id)
-            ->get()
+            ->get();
+        $extracurriculars = $extracurricularModels
             ->map(fn ($em) => [
                 'name' => $em->extracurricular?->name ?? 'Ekstrakurikuler',
                 'predicate' => $em->final_grade ?? 'A',
@@ -328,10 +415,12 @@ class ReportCardService
             ->all();
 
         // 6. Catatan Wali Kelas
-        $latestCharNote = CharacterNote::where('student_id', $student->id)
-            ->whereHas('period', fn ($p) => $p->where('semester_id', $semester->id))
-            ->orderBy('created_at', 'desc')
-            ->first();
+        $latestCharNote = array_key_exists('latest_char_note', $preloaded)
+            ? $preloaded['latest_char_note']
+            : CharacterNote::where('student_id', $student->id)
+                ->whereHas('period', fn ($p) => $p->where('semester_id', $semester->id))
+                ->orderBy('created_at', 'desc')
+                ->first();
 
         $homeroomNote = $manualNote ?: ($latestCharNote?->homeroom_note ?: 'Tingkatkan terus prestasi belajar dan pertahankan akhlak mulia.');
 

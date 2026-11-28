@@ -441,9 +441,13 @@ class DocxQuestionParser
             }
         } elseif ($qType === 'bs') {
             // Auto build options Benar / Salah jika belum ada opsi eksplisit
+            $normalizedKey = strtoupper(trim((string) ($key ?? '')));
+            $isBenarKey = in_array($normalizedKey, ['A', 'BENAR', 'TRUE', 'T'], true);
+            $isSalahKey = in_array($normalizedKey, ['B', 'S', 'SALAH', 'FALSE', 'F'], true);
+
             $options = [
-                ['label' => 'A', 'body' => ['text' => 'Benar'], 'is_correct' => (strtoupper($key ?? '') === 'A' || strtolower($key ?? '') === 'benar' || strtoupper($key ?? '') === 'B'), 'match_key' => null],
-                ['label' => 'B', 'body' => ['text' => 'Salah'], 'is_correct' => (strtoupper($key ?? '') === 'B' || strtolower($key ?? '') === 'salah' || strtoupper($key ?? '') === 'S'), 'match_key' => null],
+                ['label' => 'A', 'body' => ['text' => 'Benar'], 'is_correct' => $isBenarKey, 'match_key' => null],
+                ['label' => 'B', 'body' => ['text' => 'Salah'], 'is_correct' => $isSalahKey, 'match_key' => null],
             ];
         }
 
@@ -469,38 +473,11 @@ class DocxQuestionParser
         string $level,
         ?string $explanation
     ): array {
-        $error = null;
-
-        // Validasi AC7: PG, PG Kompleks, BS, Menjodohkan
-        if ($type === 'pg') {
-            $correctCount = count(array_filter($options, fn ($o) => ! empty($o['is_correct'])));
-            if ($correctCount !== 1) {
-                $error = "Butir soal #{$number} bertipe Pilihan Ganda (PG) wajib memiliki tepat 1 kunci jawaban yang benar (ditemukan: {$correctCount}).";
-            }
-        } elseif ($type === 'pg_kompleks') {
-            $correctCount = count(array_filter($options, fn ($o) => ! empty($o['is_correct'])));
-            if ($correctCount < 1) {
-                $error = "Butir soal #{$number} bertipe Pilihan Ganda Kompleks wajib memiliki minimal 1 kunci jawaban yang benar.";
-            }
-        } elseif ($type === 'bs') {
-            $correctCount = count(array_filter($options, fn ($o) => ! empty($o['is_correct'])));
-            if ($correctCount !== 1) {
-                $error = "Butir soal #{$number} bertipe Benar/Salah (B/S) wajib memiliki tepat 1 kunci jawaban yang benar (ditemukan: {$correctCount}).";
-            }
-        } elseif ($type === 'menjodohkan') {
-            $hasMatch = count(array_filter($options, fn ($o) => ! empty($o['match_key'])));
-            if ($hasMatch === 0) {
-                $error = "Butir soal #{$number} bertipe Menjodohkan wajib memiliki pasangan jawaban (contoh: A. Pernyataan => Pasangan).";
-            }
-        } elseif ($type === 'isian') {
-            if (empty($key) && empty($options)) {
-                $error = "Butir soal #{$number} bertipe Isian Singkat wajib menyertakan kunci jawaban.";
-            } elseif ($key && empty($options)) {
-                // Buat opsi kunci untuk isian jika belum ada
-                $options = [
-                    ['label' => 'KUNCI', 'body' => ['text' => $key], 'is_correct' => true, 'match_key' => null],
-                ];
-            }
+        if ($type === 'isian' && $key && empty($options)) {
+            // Buat opsi kunci untuk isian jika belum ada
+            $options = [
+                ['label' => 'KUNCI', 'body' => ['text' => $key], 'is_correct' => true, 'match_key' => null],
+            ];
         }
 
         $question = [
@@ -513,10 +490,57 @@ class DocxQuestionParser
             'options' => $options,
         ];
 
+        $error = $this->validateQuestionItem($number, $question, $key);
+
         return [
             'question' => $question,
             'error' => $error,
         ];
+    }
+
+    /**
+     * Validasi aturan bisnis seluruh 6 tipe butir soal CBT (dipakai saat parsing awal maupun koreksi draf).
+     */
+    public function validateQuestionItem(int $number, array $question, ?string $key = null): ?string
+    {
+        $type = $question['question_type'] ?? 'pg';
+        $options = $question['options'] ?? [];
+
+        if ($type === 'pg') {
+            $correctCount = count(array_filter($options, fn ($o) => ! empty($o['is_correct'])));
+            if ($correctCount !== 1) {
+                return "Butir soal #{$number} bertipe Pilihan Ganda (PG) wajib memiliki tepat 1 kunci jawaban yang benar (ditemukan: {$correctCount}).";
+            }
+        } elseif ($type === 'pg_kompleks') {
+            $correctCount = count(array_filter($options, fn ($o) => ! empty($o['is_correct'])));
+            if ($correctCount < 1) {
+                return "Butir soal #{$number} bertipe Pilihan Ganda Kompleks wajib memiliki minimal 1 kunci jawaban yang benar.";
+            }
+        } elseif ($type === 'bs') {
+            $correctCount = count(array_filter($options, fn ($o) => ! empty($o['is_correct'])));
+            if ($correctCount !== 1) {
+                return "Butir soal #{$number} bertipe Benar/Salah (B/S) wajib memiliki tepat 1 kunci jawaban yang benar (ditemukan: {$correctCount}).";
+            }
+        } elseif ($type === 'menjodohkan') {
+            $hasMatch = count(array_filter($options, fn ($o) => ! empty($o['match_key'])));
+            if ($hasMatch === 0) {
+                return "Butir soal #{$number} bertipe Menjodohkan wajib memiliki pasangan jawaban (contoh: A. Pernyataan => Pasangan).";
+            }
+        } elseif ($type === 'isian') {
+            $hasCorrectOpt = count(array_filter($options, fn ($o) => ! empty($o['body']['text'] ?? $o['text'] ?? '')));
+            if (empty($key) && $hasCorrectOpt === 0) {
+                return "Butir soal #{$number} bertipe Isian Singkat wajib menyertakan kunci jawaban.";
+            }
+        } elseif ($type === 'uraian') {
+            $stem = trim((string) ($question['body']['content'] ?? ($question['body']['text'] ?? '')));
+            if ($stem === '') {
+                return "Butir soal #{$number} bertipe Uraian wajib memiliki teks pertanyaan.";
+            }
+        } else {
+            return "Butir soal #{$number} memiliki tipe soal tidak dikenali ({$type}).";
+        }
+
+        return null;
     }
 
     /**

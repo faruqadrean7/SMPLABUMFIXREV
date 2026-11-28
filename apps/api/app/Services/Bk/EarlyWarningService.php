@@ -16,6 +16,7 @@ use App\Support\PaginationHelper;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -201,38 +202,95 @@ class EarlyWarningService
         $createdCount = 0;
         $updatedCount = 0;
 
-        DB::transaction(function () use (
-            $students,
-            $attThreshold,
-            $minAbsentDays,
-            $gradeDropThreshold,
-            $violationPointsThreshold,
-            &$createdCount,
-            &$updatedCount
-        ) {
-            foreach ($students as $student) {
-                // 1. Evaluasi Kehadiran (30 hari terakhir)
-                $attAlert = $this->evaluateAttendance($student, $attThreshold, $minAbsentDays);
-                if ($attAlert) {
-                    $res = $this->upsertWarning($student->id, 'ATTENDANCE_LOW', $attAlert['severity'], $attAlert['data']);
-                    $res['is_new'] ? $createdCount++ : $updatedCount++;
-                }
+        if ($students->isNotEmpty()) {
+            $studentIds = $students->pluck('id')->all();
+            $oneMonthAgo = Carbon::now()->subDays(30)->toDateString();
 
-                // 2. Evaluasi Penurunan Nilai Akademik
-                $gradeAlert = $this->evaluateGradeDrop($student, $gradeDropThreshold);
-                if ($gradeAlert) {
-                    $res = $this->upsertWarning($student->id, 'GRADE_DROP', $gradeAlert['severity'], $gradeAlert['data']);
-                    $res['is_new'] ? $createdCount++ : $updatedCount++;
-                }
+            $attendancesByStudent = Attendance::whereIn('student_id', $studentIds)
+                ->where('att_date', '>=', $oneMonthAgo)
+                ->get()
+                ->groupBy('student_id');
 
-                // 3. Evaluasi Poin Pelanggaran Disiplin
-                $pointAlert = $this->evaluateViolationPoints($student, $violationPointsThreshold);
-                if ($pointAlert) {
-                    $res = $this->upsertWarning($student->id, 'VIOLATION_POINTS', $pointAlert['severity'], $pointAlert['data']);
-                    $res['is_new'] ? $createdCount++ : $updatedCount++;
+            $gradesByStudent = Grade::whereIn('student_id', $studentIds)
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->groupBy('student_id');
+
+            $pointsByStudent = StudentPoint::whereIn('student_id', $studentIds)
+                ->whereHas('pointType', function ($pq) {
+                    $pq->where('kind', 'pelanggaran');
+                })
+                ->with('pointType')
+                ->get()
+                ->groupBy('student_id');
+
+            $aggregator = app(AttendanceAggregator::class);
+
+            DB::transaction(function () use (
+                $students,
+                $studentIds,
+                $attThreshold,
+                $minAbsentDays,
+                $gradeDropThreshold,
+                $violationPointsThreshold,
+                $attendancesByStudent,
+                $gradesByStudent,
+                $pointsByStudent,
+                $aggregator,
+                &$createdCount,
+                &$updatedCount
+            ) {
+                $existingWarnings = EarlyWarning::whereIn('student_id', $studentIds)
+                    ->whereIn('rule_code', ['ATTENDANCE_LOW', 'GRADE_DROP', 'VIOLATION_POINTS'])
+                    ->whereIn('status', ['open', 'in_progress'])
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy(fn ($w) => $w->student_id.':'.$w->rule_code);
+
+                foreach ($students as $student) {
+                    // 1. Evaluasi Kehadiran (30 hari terakhir)
+                    $attAlert = $this->evaluateAttendance(
+                        $student,
+                        $attThreshold,
+                        $minAbsentDays,
+                        $attendancesByStudent->get($student->id, collect()),
+                        $aggregator
+                    );
+                    if ($attAlert) {
+                        $key = $student->id.':ATTENDANCE_LOW';
+                        $res = $this->upsertWarning($student->id, 'ATTENDANCE_LOW', $attAlert['severity'], $attAlert['data'], $existingWarnings->get($key), true);
+                        $existingWarnings->put($key, $res['warning']);
+                        $res['is_new'] ? $createdCount++ : $updatedCount++;
+                    }
+
+                    // 2. Evaluasi Penurunan Nilai Akademik
+                    $gradeAlert = $this->evaluateGradeDrop(
+                        $student,
+                        $gradeDropThreshold,
+                        $gradesByStudent->get($student->id, collect())->take(6)
+                    );
+                    if ($gradeAlert) {
+                        $key = $student->id.':GRADE_DROP';
+                        $res = $this->upsertWarning($student->id, 'GRADE_DROP', $gradeAlert['severity'], $gradeAlert['data'], $existingWarnings->get($key), true);
+                        $existingWarnings->put($key, $res['warning']);
+                        $res['is_new'] ? $createdCount++ : $updatedCount++;
+                    }
+
+                    // 3. Evaluasi Poin Pelanggaran Disiplin
+                    $pointAlert = $this->evaluateViolationPoints(
+                        $student,
+                        $violationPointsThreshold,
+                        $pointsByStudent->get($student->id, collect())
+                    );
+                    if ($pointAlert) {
+                        $key = $student->id.':VIOLATION_POINTS';
+                        $res = $this->upsertWarning($student->id, 'VIOLATION_POINTS', $pointAlert['severity'], $pointAlert['data'], $existingWarnings->get($key), true);
+                        $existingWarnings->put($key, $res['warning']);
+                        $res['is_new'] ? $createdCount++ : $updatedCount++;
+                    }
                 }
-            }
-        });
+            });
+        }
 
         $this->logAudit(
             $user?->id,
@@ -312,16 +370,25 @@ class EarlyWarningService
     /**
      * Logika evaluasi kehadiran siswa.
      */
-    protected function evaluateAttendance(Student $student, float $attThreshold, int $minAbsentDays): ?array
-    {
-        $oneMonthAgo = Carbon::now()->subDays(30);
+    protected function evaluateAttendance(
+        Student $student,
+        float $attThreshold,
+        int $minAbsentDays,
+        ?Collection $preloadedAttendances = null,
+        ?AttendanceAggregator $aggregator = null
+    ): ?array {
+        if ($preloadedAttendances !== null) {
+            $attendances = $preloadedAttendances;
+        } else {
+            $oneMonthAgo = Carbon::now()->subDays(30);
 
-        $attendances = Attendance::where('student_id', $student->id)
-            ->where('att_date', '>=', $oneMonthAgo->toDateString())
-            ->get();
+            $attendances = Attendance::where('student_id', $student->id)
+                ->where('att_date', '>=', $oneMonthAgo->toDateString())
+                ->get();
+        }
 
         // P0-26: Gunakan AttendanceAggregator harian tunggal agar 1 hari (1 gerbang + N sesi kelas) dihitung tepat 1 hari
-        $summary = app(AttendanceAggregator::class)->summarizeDaily($attendances, 1);
+        $summary = ($aggregator ?? app(AttendanceAggregator::class))->summarizeDaily($attendances, 1);
         $totalDays = $summary['total_recorded'];
         if ($totalDays === 0) {
             return null;
@@ -357,10 +424,10 @@ class EarlyWarningService
     /**
      * Logika evaluasi penurunan nilai akademik (grade drop).
      */
-    protected function evaluateGradeDrop(Student $student, float $gradeDropThreshold): ?array
+    protected function evaluateGradeDrop(Student $student, float $gradeDropThreshold, ?Collection $preloadedGrades = null): ?array
     {
         // Ambil riwayat nilai siswa terurut dari yang terbaru
-        $grades = Grade::where('student_id', $student->id)
+        $grades = $preloadedGrades ?? Grade::where('student_id', $student->id)
             ->orderBy('created_at', 'desc')
             ->take(6)
             ->get();
@@ -401,17 +468,18 @@ class EarlyWarningService
     /**
      * Logika evaluasi poin pelanggaran disiplin siswa.
      */
-    protected function evaluateViolationPoints(Student $student, int $pointsThreshold): ?array
+    protected function evaluateViolationPoints(Student $student, int $pointsThreshold, ?Collection $preloadedPoints = null): ?array
     {
-        $totalViolationPoints = StudentPoint::where('student_id', $student->id)
+        $pointsCollection = $preloadedPoints ?? StudentPoint::where('student_id', $student->id)
             ->whereHas('pointType', function ($pq) {
                 $pq->where('kind', 'pelanggaran');
             })
             ->with('pointType')
-            ->get()
-            ->sum(function ($sp) {
-                return (int) ($sp->pointType?->points ?? 0);
-            });
+            ->get();
+
+        $totalViolationPoints = $pointsCollection->sum(function ($sp) {
+            return (int) ($sp->pointType?->points ?? 0);
+        });
 
         if ($totalViolationPoints >= $pointsThreshold) {
             $severity = $totalViolationPoints >= ($pointsThreshold * 2) ? 'tinggi' : 'sedang';
@@ -432,13 +500,21 @@ class EarlyWarningService
     /**
      * Simpan atau perbarui peringatan secara idempoten (cegah duplikasi status 'open').
      */
-    protected function upsertWarning(string $studentId, string $ruleCode, string $severity, array $data): array
-    {
-        $existing = EarlyWarning::where('student_id', $studentId)
-            ->where('rule_code', $ruleCode)
-            ->whereIn('status', ['open', 'in_progress'])
-            ->lockForUpdate()
-            ->first();
+    protected function upsertWarning(
+        string $studentId,
+        string $ruleCode,
+        string $severity,
+        array $data,
+        ?EarlyWarning $preloadedExisting = null,
+        bool $preloadedLoaded = false
+    ): array {
+        $existing = $preloadedLoaded
+            ? $preloadedExisting
+            : EarlyWarning::where('student_id', $studentId)
+                ->where('rule_code', $ruleCode)
+                ->whereIn('status', ['open', 'in_progress'])
+                ->lockForUpdate()
+                ->first();
 
         if ($existing) {
             $existing->severity = $severity;

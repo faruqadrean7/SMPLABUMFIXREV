@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\QuestionBankService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
@@ -60,9 +61,13 @@ class QuestionImportService
             'status' => 'queued',
         ]);
 
-        // 5. Dispatch job parsing ke queue / sync
-        ParseQuestionImportJob::dispatchSync($importJob->id);
-        $importJob->refresh();
+        // 5. Dispatch job parsing ke queue / sync sesuai konfigurasi polling UI
+        if (config('cbt.import_async', false)) {
+            ParseQuestionImportJob::dispatch($importJob->id);
+        } else {
+            ParseQuestionImportJob::dispatchSync($importJob->id);
+            $importJob->refresh();
+        }
 
         return $importJob;
     }
@@ -90,29 +95,16 @@ class QuestionImportService
             throw new HttpException(422, 'Draf impor yang sudah dikommit tidak dapat diedit kembali.');
         }
 
-        // Validasi ulang aturan bisnis pada draf terkoreksi (AC7)
+        // Validasi ulang aturan bisnis pada draf terkoreksi untuk semua 6 tipe soal (AC7)
         $revalidatedErrors = [];
         foreach ($questions as $idx => &$q) {
             $num = $idx + 1;
-            $type = $q['question_type'] ?? 'pg';
-            $options = $q['options'] ?? [];
-
-            if ($type === 'pg') {
-                $correctCount = count(array_filter($options, fn ($o) => ! empty($o['is_correct'])));
-                if ($correctCount !== 1) {
-                    $revalidatedErrors[] = [
-                        'item_number' => $num,
-                        'error' => "Butir soal #{$num} bertipe Pilihan Ganda (PG) wajib memiliki tepat 1 kunci jawaban yang benar (ditemukan: {$correctCount}).",
-                    ];
-                }
-            } elseif ($type === 'bs') {
-                $correctCount = count(array_filter($options, fn ($o) => ! empty($o['is_correct'])));
-                if ($correctCount !== 1) {
-                    $revalidatedErrors[] = [
-                        'item_number' => $num,
-                        'error' => "Butir soal #{$num} bertipe Benar/Salah (B/S) wajib memiliki tepat 1 kunci jawaban yang benar (ditemukan: {$correctCount}).",
-                    ];
-                }
+            $error = $this->parser->validateQuestionItem($num, $q);
+            if ($error !== null) {
+                $revalidatedErrors[] = [
+                    'item_number' => $num,
+                    'error' => $error,
+                ];
             }
         }
 
@@ -133,49 +125,53 @@ class QuestionImportService
      */
     public function commitImport(string $id, ?string $idempotencyKey, User $user, Request $request): array
     {
-        $job = QuestionImportJob::with('bank')->findOrFail($id);
-        $this->verifyBankAccess($job->bank, $user);
+        return DB::transaction(function () use ($id, $idempotencyKey, $user, $request) {
+            $job = QuestionImportJob::with('bank')
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $this->verifyBankAccess($job->bank, $user);
 
-        // AC5: Idempotensi - jika sudah dikommit dengan kunci yang sama, kembalikan hasil sebelumnya
-        if ($idempotencyKey && $job->idempotency_key === $idempotencyKey && $job->status === 'committed') {
-            return [
-                'bank_id' => $job->bank_id,
-                'imported_count' => $job->imported_count,
-                'message' => 'Impor soal telah dikomit sebelumnya (idempoten).',
-            ];
-        }
+            // AC5: Idempotensi - jika sudah dikommit dengan kunci yang sama atau job sudah committed, kembalikan hasil sebelumnya
+            if ($idempotencyKey && $job->idempotency_key === $idempotencyKey && $job->status === 'committed') {
+                return [
+                    'bank_id' => $job->bank_id,
+                    'imported_count' => $job->imported_count,
+                    'message' => 'Impor soal telah dikomit sebelumnya (idempoten).',
+                ];
+            }
 
-        if ($job->status === 'committed') {
-            return [
-                'bank_id' => $job->bank_id,
-                'imported_count' => $job->imported_count,
-                'message' => 'Impor soal telah berhasil dikomit.',
-            ];
-        }
+            if ($job->status === 'committed') {
+                return [
+                    'bank_id' => $job->bank_id,
+                    'imported_count' => $job->imported_count,
+                    'message' => 'Impor soal telah berhasil dikomit.',
+                ];
+            }
 
-        if ($job->status !== 'parsed') {
-            throw new HttpException(422, "Berkas draf belum siap dikomit (status saat ini: {$job->status}).");
-        }
+            if ($job->status !== 'parsed') {
+                throw new HttpException(422, "Berkas draf belum siap dikomit (status saat ini: {$job->status}).");
+            }
 
-        if (! empty($job->parse_errors) && count($job->parse_errors) > 0) {
-            throw new HttpException(422, 'Masih terdapat butir soal yang memiliki kesalahan format/kunci. Harap koreksi draf terlebih dahulu.');
-        }
+            if (! empty($job->parse_errors) && count($job->parse_errors) > 0) {
+                throw new HttpException(422, 'Masih terdapat butir soal yang memiliki kesalahan format/kunci. Harap koreksi draf terlebih dahulu.');
+            }
 
-        $payload = $job->parsed_payload;
-        if (empty($payload['questions'])) {
-            throw new HttpException(422, 'Tidak ada butir soal yang valid untuk diimpor.');
-        }
+            $payload = $job->parsed_payload;
+            if (empty($payload['questions'])) {
+                throw new HttpException(422, 'Tidak ada butir soal yang valid untuk diimpor.');
+            }
 
-        // Panggil service impor massal resmi yang sudah ada
-        $result = $this->questionBankService->importQuestions($payload, $request);
+            // Panggil service impor massal resmi yang sudah ada
+            $result = $this->questionBankService->importQuestions($payload, $request);
 
-        $job->update([
-            'status' => 'committed',
-            'imported_count' => $result['imported_count'],
-            'idempotency_key' => $idempotencyKey,
-        ]);
+            $job->update([
+                'status' => 'committed',
+                'imported_count' => $result['imported_count'],
+                'idempotency_key' => $idempotencyKey,
+            ]);
 
-        return $result;
+            return $result;
+        });
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Services\AuditLogService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class InvoiceGeneratorService
@@ -23,6 +24,27 @@ class InvoiceGeneratorService
      * P0-25: Gunakan advisory transaction lock PostgreSQL & query O(1) berurut agar aman dari race condition.
      */
     public function generateInvoiceNumber(): string
+    {
+        [$prefix, $seq] = $this->reserveNextInvoiceSequence();
+
+        do {
+            $candidate = $prefix.str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+            $exists = DB::table('invoices')->where('invoice_number', $candidate)->exists();
+            if (! $exists) {
+                return $candidate;
+            }
+            $seq++;
+        } while ($exists);
+
+        return $candidate;
+    }
+
+    /**
+     * Ambil prefix bulan berjalan dan nomor urut berikutnya dengan advisory lock transaksi.
+     *
+     * @return array{0: string, 1: int}
+     */
+    protected function reserveNextInvoiceSequence(): array
     {
         $year = date('Y');
         $month = date('m');
@@ -55,17 +77,7 @@ class InvoiceGeneratorService
             }
         }
 
-        $seq = $maxSeq + 1;
-        do {
-            $candidate = $prefix.str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
-            $exists = DB::table('invoices')->where('invoice_number', $candidate)->exists();
-            if (! $exists) {
-                return $candidate;
-            }
-            $seq++;
-        } while ($exists);
-
-        return $candidate;
+        return [$prefix, $maxSeq + 1];
     }
 
     /**
@@ -126,24 +138,41 @@ class InvoiceGeneratorService
                 DB::selectOne('SELECT pg_advisory_xact_lock(?)', [crc32("finance_bulk:{$feeType->id}:{$period}")]);
             }
 
-            foreach ($students as $student) {
-                // Aturan Idempotensi: Cek apakah siswa sudah memiliki tagihan aktif dengan fee_type dan periode yang sama
-                $alreadyExists = Invoice::where('student_id', $student->id)
+            $actor->loadMissing('roles');
+
+            $studentIds = $students->pluck('id')->all();
+            $existingStudentIds = empty($studentIds)
+                ? []
+                : Invoice::whereIn('student_id', $studentIds)
                     ->where('period', $period)
                     ->where('status', '!=', 'dibatalkan')
                     ->whereHas('items', function ($q) use ($feeType) {
                         $q->where('fee_type_id', $feeType->id);
                     })
-                    ->exists();
+                    ->pluck('student_id')
+                    ->map(fn ($id) => (string) $id)
+                    ->flip()
+                    ->all();
 
-                if ($alreadyExists) {
+            [$invoicePrefix, $nextSeq] = $this->reserveNextInvoiceSequence();
+            $now = now();
+            $itemRows = [];
+            $notifRows = [];
+            $itemDescription = $feeType->name.' - Periode '.$period;
+            $formattedAmount = number_format($amount, 0, ',', '.');
+
+            foreach ($students as $student) {
+                // Aturan Idempotensi: Cek apakah siswa sudah memiliki tagihan aktif dengan fee_type dan periode yang sama
+                if (isset($existingStudentIds[(string) $student->id])) {
                     $skippedCount++;
 
                     continue;
                 }
 
-                // Buat invoice baru
-                $invoiceNumber = $this->generateInvoiceNumber();
+                // Buat invoice baru menggunakan nomor berurutan yang sudah direservasi
+                $invoiceNumber = $invoicePrefix.str_pad((string) $nextSeq, 4, '0', STR_PAD_LEFT);
+                $nextSeq++;
+
                 $invoice = Invoice::create([
                     'school_id' => $student->school_id,
                     'invoice_number' => $invoiceNumber,
@@ -157,14 +186,16 @@ class InvoiceGeneratorService
                     'notes' => $notes,
                 ]);
 
-                // Buat item invoice
-                InvoiceItem::create([
+                $itemRows[] = [
+                    'id' => (string) Str::uuid(),
                     'invoice_id' => $invoice->id,
                     'fee_type_id' => $feeType->id,
-                    'description' => $feeType->name.' - Periode '.$period,
+                    'description' => $itemDescription,
                     'amount' => $amount,
                     'discount' => 0,
-                ]);
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
 
                 // Audit log per invoice
                 $this->auditLogService->record(
@@ -182,42 +213,54 @@ class InvoiceGeneratorService
                     actor: $actor
                 );
 
-                // Kirim notifikasi ke siswa jika memiliki akun user
+                // Siapkan notifikasi massal ke siswa jika memiliki akun user
                 if ($student->user) {
-                    Notification::create([
+                    $notifRows[] = [
+                        'id' => (string) Str::uuid(),
                         'user_id' => $student->user->id,
                         'notif_type' => 'finance_invoice',
                         'title' => 'Tagihan Baru: '.$feeType->name,
-                        'body' => 'Tagihan sebesar Rp '.number_format($amount, 0, ',', '.')." periode {$period} telah diterbitkan dengan jatuh tempo {$dueDate}.",
-                        'data' => [
+                        'body' => "Tagihan sebesar Rp {$formattedAmount} periode {$period} telah diterbitkan dengan jatuh tempo {$dueDate}.",
+                        'data' => json_encode([
                             'invoice_id' => $invoice->id,
                             'invoice_number' => $invoice->invoice_number,
                             'total_amount' => $amount,
                             'due_date' => $dueDate,
-                        ],
-                    ]);
+                        ]),
+                        'created_at' => $now,
+                    ];
                 }
 
-                // Kirim notifikasi ke wali murid
+                // Siapkan notifikasi massal ke wali murid
                 foreach ($student->guardians as $guardian) {
                     if ($guardian->user) {
-                        Notification::create([
+                        $notifRows[] = [
+                            'id' => (string) Str::uuid(),
                             'user_id' => $guardian->user->id,
                             'notif_type' => 'finance_invoice',
                             'title' => 'Tagihan Baru: '.$feeType->name.' ('.$student->full_name.')',
-                            'body' => "Tagihan biaya {$feeType->name} untuk putra/putri Anda {$student->full_name} sebesar Rp ".number_format($amount, 0, ',', '.')." telah diterbitkan. Jatuh tempo: {$dueDate}.",
-                            'data' => [
+                            'body' => "Tagihan biaya {$feeType->name} untuk putra/putri Anda {$student->full_name} sebesar Rp {$formattedAmount} telah diterbitkan. Jatuh tempo: {$dueDate}.",
+                            'data' => json_encode([
                                 'invoice_id' => $invoice->id,
                                 'invoice_number' => $invoice->invoice_number,
                                 'student_id' => $student->id,
                                 'total_amount' => $amount,
                                 'due_date' => $dueDate,
-                            ],
-                        ]);
+                            ]),
+                            'created_at' => $now,
+                        ];
                     }
                 }
 
                 $createdInvoices[] = $invoice;
+            }
+
+            foreach (array_chunk($itemRows, 500) as $chunk) {
+                InvoiceItem::insert($chunk);
+            }
+
+            foreach (array_chunk($notifRows, 500) as $chunk) {
+                Notification::insert($chunk);
             }
         });
 

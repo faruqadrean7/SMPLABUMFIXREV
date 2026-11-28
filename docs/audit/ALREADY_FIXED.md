@@ -79,7 +79,7 @@ Tidak ada satu pun dari 76 ID temuan besar yang 100% `ALREADY_FIXED` secara utuh
 
 ---
 
-## Item yang Telah Diperbaiki pada Batch 2B-S (`4347113`), Batch 2B-1 (`729737d`), Batch 2B-2 (`e226587`), & Batch 2B-3 (`d4a3185`)
+## Item yang Telah Diperbaiki pada Batch 2B-S (`4347113`), Batch 2B-1 (`729737d`), Batch 2B-2 (`e226587`), Batch 2B-3 (`d4a3185`), & Batch 2B-4
 
 | ID | Commit | Ringkasan Perbaikan | Status |
 |---|---|---|---|
@@ -94,3 +94,7 @@ Tidak ada satu pun dari 76 ID temuan besar yang 100% `ALREADY_FIXED` secara utuh
 | **P1-42** | `d4a3185` | Migrasi `000053` mengonversi 18 constraint `UNIQUE` pada 13 tabel `softDeletes()` menjadi partial unique `WHERE deleted_at IS NULL` + menyelaraskan `Rule::unique(...)->whereNull('deleted_at')` pada 18 FormRequest Master/User/PPDB (FK `schools(id)` tetap ditunda ke fase multi-tenant). | `FIXED` |
 | **P1-43** | `d4a3185` | Macro driver-aware `whereIlike`/`orWhereIlike`/`whereNotIlike` di `AppServiceProvider`, perbaikan `LOWER(COALESCE(code, ""))` di `FacilityService`, migrasi `000054` menambah 6 indeks `gin_trgm_ops`, dan migrasi seluruh query `LOWER(...) LIKE` di 22 file service/controller. | `FIXED` |
 | **P1-44** | `d4a3185` | Sinkronkan `ends_at = deadline_at` pada jalur update `ExamSyncService::pushResults`, tambah CLI pre-flight read-only `db:preflight-tier2b3`, dan migrasi `000055` menambah 16 FK `ON DELETE SET NULL` (`NOT VALID` + validasi kondisional) pada `program_*`, `grade_histories`, & `schools.logo_file_id`. | `FIXED` |
+| **P1-12** | `feat/tier2b-4` | Bungkus `ExamSessionService::saveAnswer()` dalam `DB::transaction()` + `lockForUpdate()`, ekstrak helper terminal tunggal `finalizeSession()` untuk timeout/finish/disqualify/`force_submit`, & selaraskan `blur_count`/`violation_count` di `logViolation()` dan `recordHeartbeat()`. | `FIXED` |
+| **P1-13** | `feat/tier2b-4` | Perbaiki bug `[BS] KUNCI: B` pada `DocxQuestionParser` (opsi A `Benar` tidak lagi cocok ke `'B'`), ekstraksi validator 6-tipe bersama `validateQuestionItem()` di `updateDraft()`, bungkus `commitImport()` dengan `DB::transaction()` + `lockForUpdate()`, & tambah toggle `cbt.import_async` (`CBT_IMPORT_ASYNC`, default `false` karena UI impor belum polling). | `FIXED` |
+| **P0-31** | `feat/tier2b-4` | Eliminasi N+1 batch di `EarlyWarningService::evaluateRules()`, `ReportCardService::generateReportCards()`/`compileSemesterSnapshot()`, `InvoiceGeneratorService::generateBulk()`, `ExamGradingService` (`grader` & `$session->answers`), `OrphanFileService::purgeOrphans()`, serta tambah `->onOneServer()` di seluruh 12 schedule `routes/console.php` (tanpa mengubah kontrak `69b3832`). | `FIXED` |
+| **P1-27** | `feat/tier2b-4` | Delegasikan evaluasi EW pada `DailyAttendanceSummaryCommand` ke `EarlyWarningService` (status `active`/`aktif` + `AttendanceAggregator`, hapus duplikasi `ATT_LOW`) & skip akhir pekan (`isWeekend()`) saat auto-fill presensi izin di `AcademicAttendanceService` dan `ApprovalService`. | `FIXED` |

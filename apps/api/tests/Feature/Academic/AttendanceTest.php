@@ -394,14 +394,14 @@ class AttendanceTest extends TestCase
 
     public function test_be_acd_03_homeroom_teacher_can_approve_leave_request_and_syncs_attendance(): void
     {
-        $today = Carbon::now()->format('Y-m-d');
+        $weekday = Carbon::now()->next(Carbon::MONDAY)->format('Y-m-d');
 
         $leave = LeaveRequest::create([
             'student_id' => $this->student1->id,
             'requested_by' => $this->guardianUser->id,
             'leave_type' => 'sakit',
-            'start_date' => $today,
-            'end_date' => $today,
+            'start_date' => $weekday,
+            'end_date' => $weekday,
             'reason' => 'Sakit demam',
             'status' => 'menunggu',
         ]);
@@ -422,11 +422,11 @@ class AttendanceTest extends TestCase
             'status' => 'disetujui',
         ]);
 
-        // Verifies automatic attendance synchronization
+        // Verifies automatic attendance synchronization on school weekdays
         $this->assertTrue(Attendance::where('student_id', $this->student1->id)
             ->where('status', 'sakit')
             ->where('source', 'gerbang')
-            ->whereDate('att_date', $today)
+            ->whereDate('att_date', $weekday)
             ->exists());
     }
 
