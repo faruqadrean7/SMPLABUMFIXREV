@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\CharacterNote;
 use App\Models\ClassStudent;
 use App\Models\ExtracurricularMember;
+use App\Models\File;
 use App\Models\Grade;
 use App\Models\GradePeriod;
 use App\Models\Guardian;
@@ -15,14 +16,17 @@ use App\Models\ReportDescriptionTemplate;
 use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Services\Academic\AttendanceAggregator;
+use App\Services\Academic\ReportPdfRenderer;
 use App\Support\PaginationHelper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -58,9 +62,18 @@ class ReportCardService
                 'level' => $data['level'],
             ],
             [
+                'kktp_threshold' => $data['kktp_threshold'] ?? null,
+                'min_score' => $data['min_score'] ?? null,
+                'max_score' => $data['max_score'] ?? null,
                 'template_text' => $data['template_text'],
             ]
         );
+
+        if (isset($data['kktp_threshold']) && is_numeric($data['kktp_threshold'])) {
+            Subject::where('id', $data['subject_id'])->update([
+                'kktp' => (float) $data['kktp_threshold'],
+            ]);
+        }
 
         $this->logAudit(
             $request->user()?->id,
@@ -163,8 +176,7 @@ class ReportCardService
         $results = [];
         $allStudentIds = $students->pluck('id')->all();
 
-        $templatesMap = ReportDescriptionTemplate::all()
-            ->keyBy(fn ($t) => $t->subject_id.':'.$t->level);
+        $templatesBySubject = ReportDescriptionTemplate::all()->groupBy('subject_id');
 
         $gradesByStudent = Grade::with(['component.subject'])
             ->whereIn('student_id', $allStudentIds)
@@ -211,7 +223,7 @@ class ReportCardService
             &$results,
             $request,
             $currentUser,
-            $templatesMap,
+            $templatesBySubject,
             $gradesByStudent,
             $attendancesByStudent,
             $extracurricularsByStudent,
@@ -237,7 +249,7 @@ class ReportCardService
                 }
 
                 $snapshot = $this->compileSemesterSnapshot($student, $semester, $data['homeroom_note'] ?? null, [
-                    'templates_map' => $templatesMap,
+                    'templates_by_subject' => $templatesBySubject,
                     'grades' => $gradesByStudent->get($student->id, collect()),
                     'attendances' => $attendancesByStudent->get($student->id, collect()),
                     'extracurriculars' => $extracurricularsByStudent->get($student->id, collect()),
@@ -252,6 +264,7 @@ class ReportCardService
                 $report->semester_id = $semester->id;
                 $report->data_snapshot = $snapshot;
                 $report->status = $statusToSet;
+                $report->file_id = null;
 
                 if (! $report->verify_token) {
                     $report->verify_token = hash('sha256', Str::uuid()->toString().microtime(true));
@@ -331,17 +344,23 @@ class ReportCardService
             ->get();
 
         $groupedGrades = $grades->groupBy(fn ($g) => $g->component?->subject_id ?? 'no_subject');
-        $templatesMap = $preloaded['templates_map'] ?? null;
-        if ($templatesMap === null) {
+        $templatesBySubject = $preloaded['templates_by_subject'] ?? null;
+        if ($templatesBySubject === null) {
             $subjectIds = $groupedGrades->keys()->filter(fn ($k) => $k !== 'no_subject')->values()->all();
-            $templatesMap = empty($subjectIds)
+            $templatesBySubject = empty($subjectIds)
                 ? collect()
                 : ReportDescriptionTemplate::whereIn('subject_id', $subjectIds)
                     ->get()
-                    ->keyBy(fn ($t) => $t->subject_id.':'.$t->level);
+                    ->groupBy('subject_id');
         }
 
         $subjectsSummary = [];
+        $predicateLabels = [
+            'sangat_baik' => 'Sangat Baik',
+            'baik' => 'Baik',
+            'cukup' => 'Cukup',
+            'perlu_bimbingan' => 'Perlu Bimbingan',
+        ];
 
         foreach ($groupedGrades as $subjectId => $subjGrades) {
             $first = $subjGrades->first();
@@ -355,30 +374,72 @@ class ReportCardService
             $byComponent = $subjGrades->groupBy('component_id');
             $totalWeighted = 0.0;
             $totalWeight = 0.0;
+            $componentStats = [];
 
             foreach ($byComponent as $compGrades) {
                 $firstCompGrade = $compGrades->first();
-                $weight = (float) ($firstCompGrade->component?->weight ?? 1.0);
+                $comp = $firstCompGrade->component;
+                $weight = (float) ($comp?->weight ?? 1.0);
                 $componentAvg = (float) $compGrades->avg('value');
                 $totalWeighted += ($componentAvg * $weight);
                 $totalWeight += $weight;
+                $componentStats[] = [
+                    'name' => $comp?->name ?? $comp?->code ?? 'Kompetensi Dasar',
+                    'avg' => $componentAvg,
+                ];
             }
+
+            usort($componentStats, fn ($a, $b) => $b['avg'] <=> $a['avg']);
+            $tpTertinggi = $componentStats[0]['name'] ?? $subject->name;
+            $tpTerendah = ! empty($componentStats)
+                ? $componentStats[count($componentStats) - 1]['name']
+                : $subject->name;
 
             $finalScore = $totalWeight > 0
                 ? round($totalWeighted / $totalWeight, 2)
                 : round((float) $subjGrades->avg('value'), 2);
 
-            // Ambang KKTP default = 75.0
-            $level = $finalScore >= 75.0 ? 'tuntas' : 'belum';
+            $subjectTemplates = $templatesBySubject->get($subject->id, collect());
+            $kktpTemplateVal = $subjectTemplates->first(fn ($t) => $t->kktp_threshold !== null)?->kktp_threshold;
+            $kktp = (float) ($subject->kktp ?? $kktpTemplateVal ?? 75.0);
 
-            // Ambil template deskripsi capaian dari peta preloaded
-            $template = $templatesMap->get($subject->id.':'.$level);
+            // P1-15: Klasifikasi 4 rentang Kurikulum Merdeka + tetap pertahankan 'level' biner tuntas/belum
+            $predicateLevel = match (true) {
+                $finalScore >= 90.0 => 'sangat_baik',
+                $finalScore >= 80.0 => 'baik',
+                $finalScore >= $kktp => 'cukup',
+                default => 'perlu_bimbingan',
+            };
+            $predicateLabel = $predicateLabels[$predicateLevel];
+            $binaryLevel = $finalScore >= $kktp ? 'tuntas' : 'belum';
+
+            // Cari template berdasarkan rentang skor -> level 4 tingkat -> level biner tuntas/belum
+            $template = $subjectTemplates->first(function ($t) use ($finalScore) {
+                return $t->min_score !== null && $t->max_score !== null
+                    && $finalScore >= (float) $t->min_score
+                    && $finalScore <= (float) $t->max_score;
+            })
+                ?? $subjectTemplates->firstWhere('level', $predicateLevel)
+                ?? $subjectTemplates->firstWhere('level', $binaryLevel);
 
             $descriptionText = $template?->template_text;
             if (! $descriptionText) {
-                $descriptionText = $level === 'tuntas'
-                    ? "Menunjukkan penguasaan capaian pembelajaran yang sangat baik pada mata pelajaran {$subject->name}."
-                    : "Perlu bimbingan dan pendampingan lebih lanjut dalam mencapai ketuntasan tujuan pembelajaran {$subject->name}.";
+                $descriptionText = match ($predicateLevel) {
+                    'sangat_baik' => "Ananda {$student->full_name} menunjukkan penguasaan yang sangat baik pada {$subject->name}, khususnya dalam {$tpTertinggi}.",
+                    'baik' => "Ananda {$student->full_name} menunjukkan penguasaan yang baik pada {$subject->name} dalam {$tpTertinggi}, serta terus kembangkan pemahaman pada {$tpTerendah}.",
+                    'cukup' => "Ananda {$student->full_name} cukup menguasai kompetensi {$subject->name} pada {$tpTertinggi}, namun perlu peningkatan pada {$tpTerendah}.",
+                    default => "Ananda {$student->full_name} perlu bimbingan dan pendampingan lebih lanjut dalam {$subject->name}, terutama pada {$tpTerendah}.",
+                };
+            } else {
+                $descriptionText = strtr($descriptionText, [
+                    '{nama_siswa}' => $student->full_name,
+                    '{mata_pelajaran}' => $subject->name,
+                    '{nilai_akhir}' => (string) $finalScore,
+                    '{kktp}' => (string) $kktp,
+                    '{predikat}' => $predicateLabel,
+                    '{tp_tertinggi}' => $tpTertinggi,
+                    '{tp_terendah}' => $tpTerendah,
+                ]);
             }
 
             $subjectsSummary[] = [
@@ -387,7 +448,12 @@ class ReportCardService
                 'subject_name' => $subject->name,
                 'subject_group' => $subject->subject_group ?? 'Kelompok A',
                 'final_score' => $finalScore,
-                'level' => $level,
+                'kktp' => $kktp,
+                'level' => $binaryLevel,
+                'predicate_level' => $predicateLevel,
+                'predicate_label' => $predicateLabel,
+                'highest_topic' => $tpTertinggi,
+                'lowest_topic' => $tpTerendah,
                 'competency_description' => $descriptionText,
             ];
         }
@@ -432,8 +498,11 @@ class ReportCardService
 
         $homeroomNote = $manualNote ?: ($latestCharNote?->homeroom_note ?: 'Tingkatkan terus prestasi belajar dan pertahankan akhlak mulia.');
 
+        $siteProfile = app(SiteSettingService::class)->getSiteProfile();
+        $schoolName = $siteProfile['identity']['name'] ?? 'SMP Laboratorium UM';
+
         return [
-            'school_name' => 'Portal Sekolah Satu Pintu SISTLABUM',
+            'school_name' => $schoolName,
             'student' => $studentData,
             'semester' => $semesterData,
             'subjects' => $subjectsSummary,
@@ -591,6 +660,7 @@ class ReportCardService
 
         return DB::transaction(function () use ($report, $oldStatus, $newStatus, $data, $currentUser, $request) {
             $report->status = $newStatus;
+            $report->file_id = null;
             if (in_array($newStatus, ['disetujui', 'terbit'])) {
                 $report->approved_by = $currentUser->id;
             } else {
@@ -681,6 +751,7 @@ class ReportCardService
             foreach ($reports as $report) {
                 $oldStatus = $report->status;
                 $report->status = $newStatus;
+                $report->file_id = null;
 
                 if (in_array($newStatus, ['disetujui', 'terbit'])) {
                     $report->approved_by = $currentUser->id;
@@ -997,10 +1068,38 @@ class ReportCardService
      */
     public function downloadPdf(string $id, Request $request): Response
     {
-        $report = ReportCard::with(['student.classes', 'semester.academicYear', 'approver'])->findOrFail($id);
+        $report = ReportCard::with(['student.classes', 'semester.academicYear', 'approver', 'file'])->findOrFail($id);
         $this->authorizeAccess($report, $request);
 
-        $pdfBinary = $this->buildPdfContent($report);
+        $isImmutable = in_array($report->status, ['disetujui', 'terbit'], true);
+        $pdfBinary = null;
+
+        if ($isImmutable && $report->file && Storage::disk('local')->exists($report->file->object_key)) {
+            $pdfBinary = Storage::disk('local')->get($report->file->object_key);
+        }
+
+        if (! is_string($pdfBinary) || $pdfBinary === '') {
+            $pdfBinary = $this->buildPdfContent($report);
+
+            if ($isImmutable) {
+                $objectKey = "reports/report_cards/{$report->id}_{$report->status}.pdf";
+                Storage::disk('local')->put($objectKey, $pdfBinary);
+
+                $file = File::create([
+                    'school_id' => $report->student?->school_id,
+                    'owner_id' => $report->student_id,
+                    'owner_type' => Student::class,
+                    'bucket' => 'local',
+                    'object_key' => $objectKey,
+                    'mime_type' => 'application/pdf',
+                    'size_bytes' => strlen($pdfBinary),
+                    'visibility' => 'privat',
+                    'checksum' => hash('sha256', $pdfBinary),
+                ]);
+
+                $report->forceFill(['file_id' => $file->id])->saveQuietly();
+            }
+        }
 
         return response($pdfBinary, 200, [
             'Content-Type' => 'application/pdf',
@@ -1010,122 +1109,11 @@ class ReportCardService
     }
 
     /**
-     * Buat konten PDF resmi E-Rapor Semester %PDF-1.4.
+     * Buat konten PDF resmi E-Rapor Semester menggunakan DomPDF & Blade A4.
      */
     protected function buildPdfContent(ReportCard $report): string
     {
-        $snapshot = $report->data_snapshot ?? [];
-        $student = $snapshot['student'] ?? [];
-        $sem = $snapshot['semester'] ?? [];
-        $subjects = $snapshot['subjects'] ?? [];
-        $att = $snapshot['attendance'] ?? [];
-        $ekskul = $snapshot['extracurriculars'] ?? [];
-        $homeroomNote = $snapshot['homeroom_note'] ?? '-';
-
-        $verifyUrl = url('/api/v1/public/verify/'.$report->verify_token);
-
-        $lines = [
-            'PORTAL SEKOLAH SATU PINTU SISTLABUM',
-            '========================================================================',
-            'LAPORAN HASIL BELAJAR (E-RAPOR SEMESTER)',
-            '',
-            'Nama Siswa    : '.($student['full_name'] ?? '-'),
-            'NIS / NISN    : '.($student['nis'] ?? '-').' / '.($student['nisn'] ?? '-'),
-            'Kelas         : '.($student['class_name'] ?? '-'),
-            'Semester      : '.($sem['name'] ?? '-').' ('.($sem['academic_year'] ?? '-').')',
-            '========================================================================',
-            'CAPAIAN KOMPETENSI MATA PELAJARAN:',
-        ];
-
-        foreach ($subjects as $s) {
-            $lines[] = sprintf(' - [%s] %-25s : Nilai %s (%s)',
-                $s['subject_code'] ?? 'MAPEL',
-                substr($s['subject_name'] ?? 'Mapel', 0, 25),
-                $s['final_score'] ?? 0,
-                strtoupper($s['level'] ?? 'tuntas')
-            );
-            $desc = $s['competency_description'] ?? '-';
-            $wrappedDesc = wordwrap($desc, 68, "\n");
-            foreach (explode("\n", $wrappedDesc) as $dl) {
-                $lines[] = '   Deskripsi: '.$dl;
-            }
-        }
-
-        $lines[] = '------------------------------------------------------------------------';
-        $lines[] = sprintf('KETIDAKHADIRAN: Sakit: %d hari | Izin: %d hari | Tanpa Keterangan: %d hari',
-            $att['sakit'] ?? 0,
-            $att['izin'] ?? 0,
-            $att['alpa'] ?? 0
-        );
-
-        if (! empty($ekskul)) {
-            $lines[] = 'EKSTRAKURIKULER:';
-            foreach ($ekskul as $e) {
-                $lines[] = sprintf(' - %s: Predikat %s', $e['name'], $e['predicate'] ?? 'A');
-            }
-        }
-
-        $lines[] = 'CATATAN WALI KELAS:';
-        $wrappedNote = wordwrap($homeroomNote, 70, "\n");
-        foreach (explode("\n", $wrappedNote) as $nl) {
-            $lines[] = '   '.$nl;
-        }
-        $lines[] = '========================================================================';
-        $lines[] = 'STATUS DOKUMEN    : '.strtoupper($report->status);
-        $lines[] = 'KEPALA SEKOLAH    : '.($report->approver?->username ?? 'Kepala Sekolah');
-        $lines[] = 'TOKEN VERIFIKASI  : '.$report->verify_token;
-        $lines[] = 'URL VERIFIKASI QR : '.$verifyUrl;
-        $lines[] = '========================================================================';
-
-        $pagesLines = array_chunk($lines, 50);
-        if (empty($pagesLines)) {
-            $pagesLines = [[]];
-        }
-        $numPages = count($pagesLines);
-
-        $objects = [];
-        $objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-        $kids = [];
-        for ($k = 0; $k < $numPages; $k++) {
-            $kids[] = (4 + 2 * $k).' 0 R';
-        }
-        $objects[2] = '<< /Type /Pages /Kids ['.implode(' ', $kids).'] /Count '.$numPages.' >>';
-        $objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>';
-
-        for ($k = 0; $k < $numPages; $k++) {
-            $pageObjId = 4 + 2 * $k;
-            $contentObjId = 5 + 2 * $k;
-
-            $textStream = "BT\n/F1 9 Tf\n50 790 Td\n13 TL\n";
-            foreach ($pagesLines[$k] as $line) {
-                $sanitized = str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $line);
-                $textStream .= "({$sanitized}) '\n";
-            }
-            $textStream .= "ET\n";
-            $streamLen = strlen($textStream);
-
-            $objects[$pageObjId] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents '.$contentObjId.' 0 R /Resources << /Font << /F1 3 0 R >> >> >>';
-            $objects[$contentObjId] = "<< /Length {$streamLen} >>\nstream\n{$textStream}endstream";
-        }
-
-        $pdf = "%PDF-1.4\n";
-        $offsets = [0 => 0];
-        $totalObjs = count($objects);
-        for ($i = 1; $i <= $totalObjs; $i++) {
-            $offsets[$i] = strlen($pdf);
-            $pdf .= "{$i} 0 obj\n{$objects[$i]}\nendobj\n";
-        }
-
-        $xrefOffset = strlen($pdf);
-        $pdf .= "xref\n0 ".($totalObjs + 1)."\n";
-        $pdf .= "0000000000 65535 f \n";
-        for ($i = 1; $i <= $totalObjs; $i++) {
-            $pdf .= sprintf("%010d 00000 n \n", $offsets[$i]);
-        }
-        $pdf .= "trailer\n<< /Size ".($totalObjs + 1)." /Root 1 0 R >>\n";
-        $pdf .= "startxref\n".$xrefOffset."\n%%EOF\n";
-
-        return $pdf;
+        return app(ReportPdfRenderer::class)->renderReportCard($report);
     }
 
     /**

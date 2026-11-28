@@ -39,7 +39,8 @@ export function ReportTemplateDialog({ isOpen, onClose }: ReportTemplateDialogPr
 
   // Form states
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
-  const [selectedLevel, setSelectedLevel] = useState<ReportDescriptionLevel>('tuntas');
+  const [selectedLevel, setSelectedLevel] = useState<ReportDescriptionLevel>('sangat_baik');
+  const [kktpThreshold, setKktpThreshold] = useState<string>('75');
   const [templateText, setTemplateText] = useState<string>('');
   const [filterSubjectId, setFilterSubjectId] = useState<string>('');
 
@@ -85,9 +86,11 @@ export function ReportTemplateDialog({ isOpen, onClose }: ReportTemplateDialogPr
     setError(null);
     setSuccessMessage(null);
     try {
+      const parsedKktp = Number(kktpThreshold);
       await academicApi.storeReportDescriptionTemplate({
         subject_id: selectedSubjectId,
         level: selectedLevel,
+        kktp_threshold: !Number.isNaN(parsedKktp) && parsedKktp >= 0 && parsedKktp <= 100 ? parsedKktp : 75,
         template_text: templateText.trim(),
       });
       setSuccessMessage('Template deskripsi capaian berhasil disimpan.');
@@ -198,16 +201,32 @@ export function ReportTemplateDialog({ isOpen, onClose }: ReportTemplateDialogPr
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Tingkat Capaian (KKTP Threshold: 75.0)
+                  Tingkat Capaian Kurikulum Merdeka &amp; KKTP
                 </label>
-                <select
-                  value={selectedLevel}
-                  onChange={(e) => setSelectedLevel(e.target.value as ReportDescriptionLevel)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                >
-                  <option value="tuntas">Tuntas (Nilai &ge; 75.0)</option>
-                  <option value="belum">Perlu Bimbingan / Belum Tuntas (Nilai &lt; 75.0)</option>
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedLevel}
+                    onChange={(e) => setSelectedLevel(e.target.value as ReportDescriptionLevel)}
+                    className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                  >
+                    <option value="sangat_baik">Sangat Baik (≥ 90)</option>
+                    <option value="baik">Baik (80 – 89)</option>
+                    <option value="cukup">Cukup (KKTP – 79)</option>
+                    <option value="perlu_bimbingan">Perlu Bimbingan (&lt; KKTP)</option>
+                    <option value="tuntas">Tuntas (Kompatibilitas Lama ≥ KKTP)</option>
+                    <option value="belum">Belum Tuntas (Kompatibilitas Lama &lt; KKTP)</option>
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={kktpThreshold}
+                    onChange={(e) => setKktpThreshold(e.target.value)}
+                    aria-label="Ambang KKTP"
+                    title="Ambang KKTP Mapel"
+                    className="w-20 rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-xs text-gray-900 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -218,14 +237,24 @@ export function ReportTemplateDialog({ isOpen, onClose }: ReportTemplateDialogPr
               <textarea
                 value={templateText}
                 onChange={(e) => setTemplateText(e.target.value)}
-                placeholder="Contoh: Menunjukkan penguasaan yang sangat baik dalam memahami konsep aljabar dan penyelesaian persamaan linier..."
+                placeholder="Contoh: Ananda {nama_siswa} menunjukkan penguasaan {predikat} dalam {tp_tertinggi} dan perlu penguatan pada {tp_terendah}."
                 rows={3}
                 className="w-full rounded-lg border border-gray-300 bg-white p-2.5 text-xs text-gray-900 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                 required
               />
-              <p className="mt-1 text-[11px] text-gray-500">
-                Teks ini akan otomatis disisipkan ke e-rapor semester siswa berdasarkan nilai akhir yang diperoleh.
-              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
+                <span>Placeholder:</span>
+                {['{nama_siswa}', '{tp_tertinggi}', '{tp_terendah}', '{kktp}', '{predikat}', '{nilai_akhir}'].map((ph) => (
+                  <button
+                    key={ph}
+                    type="button"
+                    onClick={() => setTemplateText((prev) => (prev ? `${prev} ${ph}` : ph))}
+                    className="rounded bg-purple-50 px-1.5 py-0.5 font-mono text-[10px] text-purple-800 border border-purple-200 hover:bg-purple-100"
+                  >
+                    {ph}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex justify-end">
@@ -283,12 +312,22 @@ export function ReportTemplateDialog({ isOpen, onClose }: ReportTemplateDialogPr
                         </span>
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-semibold border ${
-                            tpl.level === 'tuntas'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                              : 'bg-rose-50 text-rose-700 border-rose-300'
+                            tpl.level === 'belum' || tpl.level === 'perlu_bimbingan'
+                              ? 'bg-rose-50 text-rose-700 border-rose-300'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-300'
                           }`}
                         >
-                          {tpl.level === 'tuntas' ? 'Tuntas (&ge;75)' : 'Perlu Bimbingan (<75)'}
+                          {tpl.level === 'sangat_baik'
+                            ? 'Sangat Baik (≥90)'
+                            : tpl.level === 'baik'
+                              ? 'Baik (80–89)'
+                              : tpl.level === 'cukup'
+                                ? `Cukup (≥${tpl.kktp_threshold ?? 75})`
+                                : tpl.level === 'perlu_bimbingan'
+                                  ? `Perlu Bimbingan (<${tpl.kktp_threshold ?? 75})`
+                                  : tpl.level === 'tuntas'
+                                    ? `Tuntas (≥${tpl.kktp_threshold ?? 75})`
+                                    : `Perlu Bimbingan (<${tpl.kktp_threshold ?? 75})`}
                         </span>
                       </div>
                       <p className="text-xs text-gray-700 leading-relaxed">

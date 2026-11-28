@@ -17,7 +17,15 @@ class Subject extends Model
         'code',
         'name',
         'subject_group',
+        'kktp',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'kktp' => 'float',
+        ];
+    }
 
     public function teachingAssignments(): HasMany
     {

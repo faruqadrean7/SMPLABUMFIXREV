@@ -661,7 +661,7 @@ class ReportCardTest extends TestCase
         $response->assertStatus(200);
         $this->assertEquals('application/pdf', $response->headers->get('Content-Type'));
         $content = $response->getContent();
-        $this->assertStringStartsWith('%PDF-1.4', $content);
+        $this->assertStringStartsWith('%PDF-1.', $content);
         $this->assertStringContainsString('LAPORAN HASIL BELAJAR', $content);
         $this->assertStringContainsString('sem-pdf-token-valid-776655', $content);
     }
