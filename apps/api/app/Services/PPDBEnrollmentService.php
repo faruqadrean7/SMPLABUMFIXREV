@@ -76,10 +76,22 @@ class PPDBEnrollmentService
         }
 
         return DB::transaction(function () use ($applicant, $data, $currentUser, $request) {
+            $lockedApplicant = Applicant::with('reRegistration')
+                ->lockForUpdate()
+                ->findOrFail($applicant->id);
+
+            if ($lockedApplicant->status === 'enrolled' || $lockedApplicant->reRegistration?->status === 'diverifikasi') {
+                return [
+                    're_registration' => $lockedApplicant->reRegistration,
+                    'applicant' => $lockedApplicant->load(['wave', 'track']),
+                    'message' => 'Calon siswa sudah terdaftar dan diverifikasi sebagai siswa.',
+                ];
+            }
+
             $notes = $data['notes'] ?? null;
 
             $reReg = PPDBReRegistration::updateOrCreate(
-                ['applicant_id' => $applicant->id],
+                ['applicant_id' => $lockedApplicant->id],
                 [
                     'confirmed_at' => Carbon::now(),
                     'status' => 'dikonfirmasi',
@@ -88,9 +100,9 @@ class PPDBEnrollmentService
             );
 
             ApplicantStatusHistory::create([
-                'applicant_id' => $applicant->id,
-                'from_status' => $applicant->status,
-                'to_status' => $applicant->status,
+                'applicant_id' => $lockedApplicant->id,
+                'from_status' => $lockedApplicant->status,
+                'to_status' => $lockedApplicant->status,
                 'note' => 'Konfirmasi daftar ulang dilakukan oleh calon siswa',
                 'actor_id' => $currentUser->id,
             ]);
@@ -107,7 +119,7 @@ class PPDBEnrollmentService
 
             return [
                 're_registration' => $reReg->fresh(),
-                'applicant' => $applicant->fresh(['reRegistration', 'wave', 'track']),
+                'applicant' => $lockedApplicant->fresh(['reRegistration', 'wave', 'track']),
             ];
         });
     }
@@ -160,9 +172,9 @@ class PPDBEnrollmentService
                 throw new HttpException(422, 'Calon siswa belum melakukan konfirmasi daftar ulang');
             }
 
-            // A. Roles Setup
-            $roleStudent = Role::firstOrCreate(['code' => 'student'], ['name' => 'Siswa', 'is_system' => true]);
-            $roleGuardian = Role::firstOrCreate(['code' => 'guardian'], ['name' => 'Orang Tua / Wali Murid', 'is_system' => true]);
+            // A. Roles Setup (T2B-CONC-02: aman terhadap race condition transaksi PostgreSQL)
+            $roleStudent = Role::ensureSystemRole('student', 'Siswa');
+            $roleGuardian = Role::ensureSystemRole('guardian', 'Orang Tua / Wali Murid');
 
             // B. Resolve or Create Student User Account
             $studentUserId = null;

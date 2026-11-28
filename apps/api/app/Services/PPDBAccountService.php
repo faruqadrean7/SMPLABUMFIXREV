@@ -38,14 +38,8 @@ class PPDBAccountService
 
         // 2. Transaksi pembuatan User dengan status pending
         $user = DB::transaction(function () use ($data, $email) {
-            // Ambil atau buat role guest
-            $roleGuest = Role::firstOrCreate(
-                ['code' => 'guest'],
-                [
-                    'name' => 'Tamu / Calon Siswa',
-                    'is_system' => true,
-                ]
-            );
+            // Ambil atau buat role guest (T2B-CONC-02: aman terhadap race condition transaksi PostgreSQL)
+            $roleGuest = Role::ensureSystemRole('guest', 'Tamu / Calon Siswa');
 
             // Buat username unik
             $emailPrefix = explode('@', $email)[0];

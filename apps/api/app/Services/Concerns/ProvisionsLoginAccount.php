@@ -27,7 +27,7 @@ trait ProvisionsLoginAccount
         string $usernameFallback,
     ): User {
         $password = ! empty($data['password']) ? $data['password'] : 'Password123!';
-        $role = Role::firstOrCreate(['code' => $roleCode], ['name' => $roleName, 'is_system' => true]);
+        $role = Role::ensureSystemRole($roleCode, $roleName);
 
         if ($person->user) {
             $user = $person->user;

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Grade;
 use App\Models\GradeHistory;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Satu-satunya pintu penulisan nilai ke buku nilai.
@@ -84,66 +85,88 @@ class GradeRecorder
         ?string $examId = null,
         ?string $note = null,
     ): Grade {
-        $existing = Grade::where('student_id', $studentId)
-            ->where('component_id', $componentId)
-            ->where('period_id', $periodId)
-            ->first();
-
-        $manual = $manualValue !== null ? (float) $manualValue : ($existing?->manual_value !== null ? (float) $existing->manual_value : null);
-
-        // Nilai otomatis memakai yang tertinggi antar sumber otomatis.
-        $autoSebelum = $existing?->auto_value !== null ? (float) $existing->auto_value : null;
-        $autoSource = $existing?->auto_source;
-
-        if ($autoValue !== null) {
-            $auto = $autoSebelum === null ? (float) $autoValue : max($autoSebelum, (float) $autoValue);
-            if ($autoSebelum === null || (float) $autoValue >= $autoSebelum) {
-                $autoSource = $changeSource;
+        return DB::transaction(function () use (
+            $studentId,
+            $componentId,
+            $periodId,
+            $manualValue,
+            $autoValue,
+            $changeSource,
+            $changedBy,
+            $examId,
+            $note
+        ): Grade {
+            if (DB::getDriverName() === 'pgsql') {
+                // T2B-CONC-03: Serialize concurrent writes on the exact grade cell
+                // (both initial INSERT and UPDATE) to prevent SQLSTATE[23505] and lost updates.
+                DB::selectOne(
+                    'SELECT pg_advisory_xact_lock(hashtextextended(?, 0))',
+                    ["grade_cell:{$studentId}:{$componentId}:{$periodId}"]
+                );
             }
-        } else {
-            $auto = $autoSebelum;
-        }
 
-        [$effective, $effectiveSource] = $this->resolveEffective($manual, $auto, $autoSource);
+            $existing = Grade::where('student_id', $studentId)
+                ->where('component_id', $componentId)
+                ->where('period_id', $periodId)
+                ->lockForUpdate()
+                ->first();
 
-        $grade = $existing ?? new Grade([
-            'student_id' => $studentId,
-            'component_id' => $componentId,
-            'period_id' => $periodId,
-        ]);
+            $manual = $manualValue !== null ? (float) $manualValue : ($existing?->manual_value !== null ? (float) $existing->manual_value : null);
 
-        $oldValue = $existing?->value;
-        $oldSource = $existing?->source;
+            // Nilai otomatis memakai yang tertinggi antar sumber otomatis.
+            $autoSebelum = $existing?->auto_value !== null ? (float) $existing->auto_value : null;
+            $autoSource = $existing?->auto_source;
 
-        $grade->value = $effective;
-        $grade->manual_value = $manual;
-        $grade->auto_value = $auto;
-        $grade->auto_source = $autoSource;
-        $grade->source = $effectiveSource;
-        $grade->entered_by = $changedBy ?? $grade->entered_by;
+            if ($autoValue !== null) {
+                $auto = $autoSebelum === null ? (float) $autoValue : max($autoSebelum, (float) $autoValue);
+                if ($autoSebelum === null || (float) $autoValue >= $autoSebelum) {
+                    $autoSource = $changeSource;
+                }
+            } else {
+                $auto = $autoSebelum;
+            }
 
-        if ($examId !== null) {
-            $grade->exam_id = $examId;
-        }
+            [$effective, $effectiveSource] = $this->resolveEffective($manual, $auto, $autoSource);
 
-        $grade->save();
+            $grade = $existing ?? new Grade([
+                'student_id' => $studentId,
+                'component_id' => $componentId,
+                'period_id' => $periodId,
+            ]);
 
-        GradeHistory::create([
-            'grade_id' => $grade->id,
-            'student_id' => $studentId,
-            'component_id' => $componentId,
-            'period_id' => $periodId,
-            'old_value' => $oldValue,
-            'new_value' => $effective,
-            'old_source' => $oldSource,
-            'new_source' => $effectiveSource,
-            'change_source' => $changeSource,
-            'changed_by' => $changedBy,
-            'note' => $note,
-            'created_at' => now(),
-        ]);
+            $oldValue = $existing?->value;
+            $oldSource = $existing?->source;
 
-        return $grade;
+            $grade->value = $effective;
+            $grade->manual_value = $manual;
+            $grade->auto_value = $auto;
+            $grade->auto_source = $autoSource;
+            $grade->source = $effectiveSource;
+            $grade->entered_by = $changedBy ?? $grade->entered_by;
+
+            if ($examId !== null) {
+                $grade->exam_id = $examId;
+            }
+
+            $grade->save();
+
+            GradeHistory::create([
+                'grade_id' => $grade->id,
+                'student_id' => $studentId,
+                'component_id' => $componentId,
+                'period_id' => $periodId,
+                'old_value' => $oldValue,
+                'new_value' => $effective,
+                'old_source' => $oldSource,
+                'new_source' => $effectiveSource,
+                'change_source' => $changeSource,
+                'changed_by' => $changedBy,
+                'note' => $note,
+                'created_at' => now(),
+            ]);
+
+            return $grade;
+        });
     }
 
     /**

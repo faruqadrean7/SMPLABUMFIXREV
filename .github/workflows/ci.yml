@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - 'fix/**'
+      - 'chore/**'
+      - develop
+      - main
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (PostgreSQL & Concurrency)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sistlabum_testing
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d sistlabum_testing"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pgsql, mbstring, xml, bcmath, gd, intl, zip, pcntl
+          tools: composer:v2
+          coverage: none
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        working-directory: apps/api
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('apps/api/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-
+
+      - name: Backend — install
+        working-directory: apps/api
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Backend — siapkan env
+        working-directory: apps/api
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+
+      - name: Backend — migrasi database uji
+        working-directory: apps/api
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: sistlabum_testing
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: php artisan migrate --force
+
+      - name: Backend — test (gerbang wajib)
+        working-directory: apps/api
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: sistlabum_testing
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: |
+          php artisan test \
+            tests/Feature/HealthCheckTest.php \
+            tests/Feature/Auth/LoginTest.php \
+            tests/Feature/Auth/RoleEnsureSystemRoleTest.php \
+            tests/Feature/Academic/GradeRecorderTransactionTest.php \
+            tests/Feature/Sys/QueueAfterCommitTest.php \
+            tests/Feature/Integration
+
+      - name: Backend — PostgreSQL concurrency tests (gerbang wajib)
+        working-directory: apps/api
+        shell: bash
+        env:
+          DB_CONNECTION: pgsql
+          PG_CONCURRENCY_HOST: 127.0.0.1
+          PG_CONCURRENCY_PORT: 5432
+          PG_CONCURRENCY_USERNAME: postgres
+          PG_CONCURRENCY_PASSWORD: postgres
+          PG_CONCURRENCY_REQUIRED: "true"
+        run: |
+          set -euo pipefail
+
+          command -v psql >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+
+          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ ]] || [[ ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]]; then
+            echo "GITHUB_RUN_ID dan GITHUB_RUN_ATTEMPT wajib numerik untuk isolasi database concurrency." >&2
+            exit 1
+          fi
+
+          DB_NAME="sistlabum_conc_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ ! "${DB_NAME}" =~ ^sistlabum_conc_[0-9]+_[0-9]+$ ]]; then
+            echo "Nama database concurrency tidak valid: ${DB_NAME}" >&2
+            exit 1
+          fi
+
+          export PG_CONCURRENCY_DATABASE="${DB_NAME}"
+          export DB_HOST="${PG_CONCURRENCY_HOST}"
+          export DB_PORT="${PG_CONCURRENCY_PORT}"
+          export DB_USERNAME="${PG_CONCURRENCY_USERNAME}"
+          export DB_PASSWORD="${PG_CONCURRENCY_PASSWORD}"
+          export DB_DATABASE="${PG_CONCURRENCY_DATABASE}"
+          export PGPASSWORD="${PG_CONCURRENCY_PASSWORD}"
+
+          CREATED_CONCURRENCY_DB="false"
+          cleanup() {
+            if [[ "${CREATED_CONCURRENCY_DB}" == "true" ]]; then
+              psql -h "${PG_CONCURRENCY_HOST}" -p "${PG_CONCURRENCY_PORT}" -U "${PG_CONCURRENCY_USERNAME}" -d postgres \
+                -v ON_ERROR_STOP=0 -v target_db="${PG_CONCURRENCY_DATABASE}" <<'SQL' >/dev/null 2>&1 || true
+          SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'target_db' AND pid <> pg_backend_pid();
+          DROP DATABASE :"target_db";
+          SQL
+            fi
+          }
+
+          psql -h "${PG_CONCURRENCY_HOST}" -p "${PG_CONCURRENCY_PORT}" -U "${PG_CONCURRENCY_USERNAME}" -d postgres \
+            -v ON_ERROR_STOP=1 -v target_db="${PG_CONCURRENCY_DATABASE}" <<'SQL'
+          CREATE DATABASE :"target_db";
+          SQL
+          CREATED_CONCURRENCY_DB="true"
+          trap cleanup EXIT
+
+          php artisan migrate --force
+          php artisan test tests/Feature/Ntf/PostgreSqlConcurrencyTest.php
+          php artisan test --testsuite=Concurrency
+
+  frontend:
+    name: Frontend (Typecheck, Lint & Build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Frontend — install
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+
+      - name: Frontend — typecheck & lint
+        working-directory: apps/web
+        run: |
+          npm run typecheck
+          npm run lint
+
+      - name: Frontend — build
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_BASE_URL: /api/v1
+          NEXT_PUBLIC_APP_NAME: SISTLABUM
+          ADMIN_LOGIN_PATH: /admin-masuk
+        run: npm run build

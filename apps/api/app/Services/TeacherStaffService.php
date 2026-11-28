@@ -108,7 +108,7 @@ class TeacherStaffService
                     'must_change_password' => false,
                 ]);
 
-                $role = Role::firstOrCreate(['code' => 'teacher'], ['name' => 'Guru Mata Pelajaran', 'is_system' => true]);
+                $role = Role::ensureSystemRole('teacher', 'Guru Mata Pelajaran');
                 $user->roles()->syncWithoutDetaching([$role->id]);
                 $userId = $user->id;
             }
@@ -207,7 +207,7 @@ class TeacherStaffService
                     'must_change_password' => false,
                 ]);
 
-                $role = Role::firstOrCreate(['code' => 'teacher'], ['name' => 'Guru Mata Pelajaran', 'is_system' => true]);
+                $role = Role::ensureSystemRole('teacher', 'Guru Mata Pelajaran');
                 $user->roles()->syncWithoutDetaching([$role->id]);
                 $teacher->user_id = $user->id;
             } elseif (! empty($teacher->user_id)) {

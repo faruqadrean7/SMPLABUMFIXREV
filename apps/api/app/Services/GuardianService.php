@@ -116,7 +116,7 @@ class GuardianService
                     'must_change_password' => false,
                 ]);
 
-                $role = Role::firstOrCreate(['code' => 'guardian'], ['name' => 'Orang Tua / Wali Murid', 'is_system' => true]);
+                $role = Role::ensureSystemRole('guardian', 'Orang Tua / Wali Murid');
                 $user->roles()->syncWithoutDetaching([$role->id]);
                 $userId = $user->id;
             }
@@ -154,7 +154,7 @@ class GuardianService
             $schoolId = $guardian->school_id ?? $request->user()?->school_id;
 
             $password = ! empty($data['password']) ? $data['password'] : 'Password123!';
-            $role = Role::firstOrCreate(['code' => 'guardian'], ['name' => 'Orang Tua / Wali Murid', 'is_system' => true]);
+            $role = Role::ensureSystemRole('guardian', 'Orang Tua / Wali Murid');
 
             if ($guardian->user) {
                 // Reset password akun yang sudah ada
