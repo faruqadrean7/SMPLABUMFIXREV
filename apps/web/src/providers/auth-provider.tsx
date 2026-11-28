@@ -21,7 +21,7 @@ async function syncAdminSessionCookie(accessToken: string, roles: string[]): Pro
   if (!hasAdminRole) return;
 
   try {
-    await fetch('/api/admin-session', {
+    const res = await fetch('/api/admin-session', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -29,8 +29,14 @@ async function syncAdminSessionCookie(accessToken: string, roles: string[]): Pro
       },
       credentials: 'same-origin',
     });
-  } catch {
-    // Abaikan kegagalan sinkronisasi di lingkungan test/offline
+
+    // Jangan telan diam-diam: tanpa cookie ini, seluruh shell /admin akan 404
+    // dan pengguna hanya melihat halaman "tidak ditemukan" tanpa penjelasan.
+    if (!res.ok) {
+      console.error('[auth] gagal menerbitkan cookie sesi admin:', res.status);
+    }
+  } catch (err) {
+    console.error('[auth] gagal menghubungi /api/admin-session:', err);
   }
 }
 

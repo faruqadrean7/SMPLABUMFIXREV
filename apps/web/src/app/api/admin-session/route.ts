@@ -6,10 +6,9 @@ import {
   signAdminSessionCookie,
 } from '@/lib/auth/admin-session-cookie';
 
-const INTERNAL_API_BASE_URL =
-  process.env.INTERNAL_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  'http://127.0.0.1:8000/api/v1';
+import { resolveInternalApiBaseUrl } from '@/lib/auth/internal-api-base';
+
+const INTERNAL_API_BASE_URL = resolveInternalApiBaseUrl();
 
 /**
  * P0-08: Terbitkan cookie HttpOnly bertanda tangan HMAC untuk akses shell `/admin`
